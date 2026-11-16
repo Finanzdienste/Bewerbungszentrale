@@ -29,13 +29,14 @@ export async function schliessen() { if (browser) await browser.close(); browser
  */
 export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false, graphql = true } = {}) {
   const b = await browserStarten();
-  const ctx = await b.newContext({ viewport: { width: breite, height: hoehe }, serviceWorkers: 'block', acceptDownloads: true });
+  const ctx = await b.newContext({ viewport: { width: breite, height: hoehe }, serviceWorkers: 'block', acceptDownloads: true, permissions: ['clipboard-read', 'clipboard-write'] });
   const gh = githubAttrappe(ladeOrdner(daten), { graphql });
   const kia = kiAttrappe(ki);
   const fehler = [];
   const vorher = speicher === undefined ? { 'bewerbungszentrale.zugang.v1': JSON.stringify({ token: gh.token }), 'bewerbungszentrale.ki.v1': JSON.stringify({ schluessel: 'sk-ant-test-00000000000000000000000000' }) } : speicher;
   await ctx.addInitScript(({ vorher, teilen }) => {
     if (!sessionStorage.getItem('bz-test-start')) { for (const [k, v] of Object.entries(vorher)) localStorage.setItem(k, v); sessionStorage.setItem('bz-test-start', '1'); }
+    if (!navigator.clipboard) { let z = ''; Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (t) => { z = String(t); }, readText: async () => z } }); } // http://app.test ist kein sicherer Kontext
     if (teilen) { navigator.canShare = () => true; navigator.share = async (d) => { window.__geteilt = { dateien: (d.files || []).map((f) => ({ name: f.name, groesse: f.size, typ: f.type })), text: d.text, title: d.title }; }; }
   }, { vorher, teilen });
   await ctx.route('**/*', async (route) => {

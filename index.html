@@ -2204,10 +2204,18 @@ async function waModal(id, art = 'whatsapp') {
     }
     return;
   }
-  $('#wa-hilfe', m).innerHTML = alsMail ? 'Tipp auf „Teilen …“ und wähle <b>Gmail</b>. Die Mappe hängt an, Text und Betreff sind drin. Den Empfänger oben kopieren und ins Feld „An“ einfügen.' : 'Tipp auf „Teilen …“ und wähle <b>WhatsApp</b>, dann deinen Kontakt. PDF und Text gehen zusammen raus. Falls der Text fehlt: „Text kopieren“ und einfügen.';
+  $('#wa-hilfe', m).innerHTML = alsMail ? 'Tipp auf „Teilen …“ und wähle <b>Gmail</b>. Die Mappe hängt an, Text und Betreff sind drin. Die Empfänger-Adresse wird dabei kopiert: ins Feld „An“ lange tippen → Einfügen.' : 'Tipp auf „Teilen …“ → <b>WhatsApp</b> → Kontakt. WhatsApp nimmt zu einer PDF keinen Text mit, darum wird der Text beim Teilen kopiert: im Chat nach der PDF lange ins Eingabefeld tippen → <b>Einfügen</b> → Senden.';
   $('#wa-share', m).disabled = false;
   $('#wa-share', m).onclick = async () => {
-    try { await navigator.share({files: [datei], text: txt(), title: alsMail ? betreff : mappe.filename}); notiz('Teilen-Menü'); $('#wa-st', m).textContent = 'Geteilt.'; }
+    // Was das Ziel-App nicht übernimmt, liegt danach in der Zwischenablage: bei WhatsApp der Text, bei Gmail der Empfänger
+    const merken = alsMail ? anMail : txt();
+    let kopiert = false;
+    const kopie = merken && navigator.clipboard?.writeText ? navigator.clipboard.writeText(merken).then(() => { kopiert = true; }, () => {}) : Promise.resolve();
+    try {
+      await navigator.share({files: [datei], text: txt(), title: alsMail ? betreff : mappe.filename});
+      await kopie; notiz('Teilen-Menü');
+      $('#wa-st', m).textContent = kopiert ? (alsMail ? 'Geteilt. Die Adresse ist kopiert, in Gmail unter „An“ einfügen.' : 'Geteilt. Der Text ist kopiert, im Chat einfügen und senden.') : 'Geteilt.';
+    }
     catch (e) {
       if (e?.name === 'AbortError') return; // abgebrochen
       ersatz('Teilen ist hier nicht erlaubt.');

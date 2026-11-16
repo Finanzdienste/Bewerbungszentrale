@@ -117,6 +117,8 @@ test('teilen', async () => {
   assert.equal(g.dateien[0].typ, 'application/pdf');
   assert.ok(g.dateien[0].groesse > 5000);
   assert.match(g.text, /drüberschauen/);
+  assert.match(await seite.evaluate(() => navigator.clipboard.readText()), /drüberschauen/, 'Text liegt in der Zwischenablage (WhatsApp nimmt ihn zur PDF nicht mit)');
+  assert.match(await seite.textContent('#wa-st'), /Text ist kopiert/);
   assert.deepEqual(fehler, []);
 });
 
@@ -130,6 +132,7 @@ test('mail-teilen', async () => {
   await seite.waitForFunction(() => window.__geteilt, null, { timeout: 5000 });
   const g = await seite.evaluate(() => window.__geteilt);
   assert.match(g.title, /Energiecontroller/);
+  assert.equal(await seite.evaluate(() => navigator.clipboard.readText()), 'bewerbung@example.org', 'Empfänger liegt in der Zwischenablage');
   assert.equal(g.dateien.length, 1);
   assert.deepEqual(fehler, []);
 });
