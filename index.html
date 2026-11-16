@@ -1976,7 +1976,7 @@ function loadFontkit() { // optional: ohne fontkit nimmt der Generator Standards
   return fontkitP ||= new Promise(res => { const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js'; sc.onload = () => res(window.fontkit || null); sc.onerror = () => { fontkitP = null; res(null); }; document.head.append(sc); });
 }
 const SCHRIFT_URLS = {
-  sans: {r: 'schrift/Inter-Regular.ttf', m: 'schrift/Inter-Medium.ttf', s: 'schrift/Inter-SemiBold.ttf', b: 'schrift/Inter-Bold.ttf', i: 'schrift/Inter-Italic.ttf'},
+  sans: {r: 'schrift/WorkSans-Regular.ttf', m: 'schrift/WorkSans-Medium.ttf', s: 'schrift/WorkSans-SemiBold.ttf', b: 'schrift/WorkSans-Bold.ttf', i: 'schrift/WorkSans-Italic.ttf'}, // ohne Ligaturen, pdf-lib setzt sie falsch
   serif: {r: 'schrift/Serif-Regular.ttf', s: 'schrift/Serif-SemiBold.ttf', b: 'schrift/Serif-Bold.ttf', i: 'schrift/Serif-Italic.ttf'},
 };
 function ladeSchriften() {
@@ -2024,9 +2024,16 @@ function makeDocGen(PDFLib, fontkit) {
     const out = [];
     for (const para of String(text ?? '').split('\n')) {
       if (!para.trim()) { out.push(''); continue; }
-      let line = '';
-      for (const w of para.trim().split(/\s+/)) { const t = line ? line + ' ' + w : w; if (!line || f.widthOfTextAtSize(t, size) <= maxW) line = t; else { out.push(line); line = w; } }
-      out.push(line);
+      let line = ''; const ls = [];
+      for (const w of para.trim().split(/\s+/)) { const t = line ? line + ' ' + w : w; if (!line || f.widthOfTextAtSize(t, size) <= maxW) line = t; else { ls.push(line); line = w; } }
+      ls.push(line);
+      // Steht in der letzten Zeile nur ein Wort, nimmt es das letzte Wort der Zeile davor mit (Typografie: kein „Hurenkind“)
+      const n = ls.length;
+      if (n >= 2 && !ls[n - 1].includes(' ')) {
+        const vor = ls[n - 2].split(' ');
+        if (vor.length >= 3) { const neu = vor.pop() + ' ' + ls[n - 1]; if (f.widthOfTextAtSize(neu, size) <= maxW) { ls[n - 2] = vor.join(' '); ls[n - 1] = neu; } }
+      }
+      out.push(...ls);
     }
     return out;
   };
@@ -2093,7 +2100,7 @@ function makeDocGen(PDFLib, fontkit) {
     for (const l of wrap(clean(betreff, F.s), F.s, 11, MW)) { pg.drawText(l, {x: L, y, size: 11, font: F.s, color: INK}); y -= 15.5; }
     y -= 10;
     const reserve = b.anlagen?.length ? 30 : 0;
-    const {size, lh, ls} = passend(clean(body, F.r), F.r, MW, y - 50 - reserve, [10.2, 10, 9.8, 9.6, 9.4, 9.2], 1.47, 7.5);
+    const {size, lh, ls} = passend(clean(body, F.r), F.r, MW, y - 50 - reserve, [10.6, 10.4, 10.2, 10, 9.8, 9.6, 9.4], 1.52, 8);
     for (const l of ls) {
       if (y < 56) { pg = doc.addPage(A4); y = H - 64; }
       if (l) pg.drawText(l, {x: L, y, size, font: F.r, color: TEXT});
@@ -2124,26 +2131,26 @@ function makeDocGen(PDFLib, fontkit) {
     };
     let pg = doc.addPage(A4); kopf(pg, true);
     let y = H - mm(58); // Anschriftfeld, ohne Rücksendezeile (Versand per Mail)
-    for (const l of b.empfaenger.filter(Boolean)) { pg.drawText(clean(l, F.sr), {x: L, y, size: 10.6, font: F.sr, color: INK}); y -= 14.4; }
+    for (const l of b.empfaenger.filter(Boolean)) { pg.drawText(clean(l, F.r), {x: L, y, size: 10.4, font: F.r, color: INK}); y -= 14.4; }
     y = Math.min(y - 22, H - mm(92));
-    const dt = clean(b.datumOrt, F.sr); pg.drawText(dt, {x: W - R - F.sr.widthOfTextAtSize(dt, 10.4), y, size: 10.4, font: F.sr, color: TEXT});
+    const dt = clean(b.datumOrt, F.r); pg.drawText(dt, {x: W - R - F.r.widthOfTextAtSize(dt, 10.2), y, size: 10.2, font: F.r, color: TEXT});
     y -= 30;
     const {betreff, body} = zerlege(b.anschreiben);
     for (const l of wrap(clean(betreff, F.sb), F.sb, 11.2, MW)) { pg.drawText(l, {x: L, y, size: 11.2, font: F.sb, color: INK}); y -= 15.5; }
     y -= 12;
     const reserve = b.anlagen?.length ? 30 : 0;
-    const {size, lh, ls} = passend(clean(body, F.sr), F.sr, MW, y - mm(16) - reserve, [10.5, 10.3, 10.1, 9.9, 9.7, 9.5], 1.42, 8);
+    const {size, lh, ls} = passend(clean(body, F.r), F.r, MW, y - mm(16) - reserve, [10.8, 10.6, 10.4, 10.2, 10, 9.8, 9.6], 1.5, 8.5);
     for (const l of ls) {
       if (y < mm(22)) { pg = doc.addPage(A4); kopf(pg, false); y = H - 96; }
-      if (l) pg.drawText(l, {x: L, y, size, font: F.sr, color: TEXT});
-      y -= l ? lh : 8;
+      if (l) pg.drawText(l, {x: L, y, size, font: F.r, color: TEXT});
+      y -= l ? lh : 8.5;
     }
     if (b.anlagen?.length) {
-      let al = wrap(clean(T.anlagen + b.anlagen.join(', '), F.sr), F.sr, 9.2, MW);
+      let al = wrap(clean(T.anlagen + b.anlagen.join(', '), F.r), F.r, 9.2, MW);
       y -= 16;
-      if (y - al.length * 12.4 < mm(14)) al = wrap(clean(T.anlagen + (b.anlagen.length > 1 ? T.anlagenKurz : b.anlagen[0]), F.sr), F.sr, 9.2, MW);
+      if (y - al.length * 12.4 < mm(14)) al = wrap(clean(T.anlagen + (b.anlagen.length > 1 ? T.anlagenKurz : b.anlagen[0]), F.r), F.r, 9.2, MW);
       if (y - al.length * 12.4 < mm(14)) { pg = doc.addPage(A4); kopf(pg, false); y = H - 96; }
-      for (const l of al) { pg.drawText(l, {x: L, y, size: 9.2, font: F.sr, color: GRAU}); y -= 12.4; }
+      for (const l of al) { pg.drawText(l, {x: L, y, size: 9.2, font: F.r, color: GRAU}); y -= 12.4; }
     }
   }
 
@@ -2211,29 +2218,29 @@ function makeDocGen(PDFLib, fontkit) {
     y = Math.min(y - 8, o.foto ? ftop - fh - 16 : y) ;
     pg.drawLine({start: {x: L, y}, end: {x: W - R, y}, thickness: 1, color: A});
     y -= 24;
-    if (cv.profil) { for (const l of wrap(clean(cv.profil, F.sr), F.sr, 10.2, CW)) { pg.drawText(l, {x: L, y, size: 10.2, font: F.sr, color: TEXT}); y -= 14.6; } }
+    if (cv.profil) { for (const l of wrap(clean(cv.profil, F.r), F.r, 9.8, CW)) { pg.drawText(l, {x: L, y, size: 9.8, font: F.r, color: TEXT}); y -= 14.6; } }
     const ensure = h => { if (y - h < BOT) { pg = neue(); y = H - 70; return true; } return false; };
     const kopf = t => { y -= 14; ensure(115); pg.drawText(clean(t, F.ss), {x: L, y, size: 12.6, font: F.ss, color: A}); y -= 7; pg.drawLine({start: {x: L, y}, end: {x: W - R, y}, thickness: .5, color: linie}); y -= 17; };
     const eintrag = e => {
       const dat = clean(zeitraum(e), F.r);
       const tl = wrap(clean(e.titel, F.ss), F.ss, 10.6, CWW);
-      const fl = wrap(clean([e.firma, e.ort].filter(Boolean).join(', '), F.sr), F.sr, 10, CWW);
-      const il = e.info ? wrap(clean(e.info, F.si), F.si, 9.2, CWW) : [];
-      const pts = (e.punkte || []).filter(Boolean).map(p => wrap(clean(p, F.sr), F.sr, 9.8, CWW - 11));
+      const fl = wrap(clean([e.firma, e.ort].filter(Boolean).join(', '), F.r), F.r, 9.4, CWW);
+      const il = e.info ? wrap(clean(e.info, F.i), F.i, 8.7, CWW) : [];
+      const pts = (e.punkte || []).filter(Boolean).map(p => wrap(clean(p, F.r), F.r, 9.3, CWW - 11));
       ensure(tl.length * 14 + fl.length * 13 + il.length * 12 + pts.slice(0, 2).reduce((s, l) => s + l.length * 13.4 + 2.6, 0));
       pg.drawText(dat, {x: L, y: y + .5, size: 8.6, font: F.r, color: GRAU});
       for (const l of tl) { pg.drawText(l, {x: CX, y, size: 10.6, font: F.ss, color: INK}); y -= 14; }
-      for (const l of fl) { pg.drawText(l, {x: CX, y, size: 10, font: F.sr, color: GRAU}); y -= 13; }
-      for (const l of il) { pg.drawText(l, {x: CX, y, size: 9.2, font: F.si, color: GRAU}); y -= 12; }
+      for (const l of fl) { pg.drawText(l, {x: CX, y, size: 9.4, font: F.r, color: GRAU}); y -= 13; }
+      for (const l of il) { pg.drawText(l, {x: CX, y, size: 8.7, font: F.i, color: GRAU}); y -= 12; }
       y -= 4;
-      for (const p of pts) { ensure(p.length * 13.4); pg.drawCircle({x: CX + 2.6, y: y + 3.2, size: 1.25, color: TEXT}); for (const l of p) { pg.drawText(l, {x: CX + 11, y, size: 9.8, font: F.sr, color: TEXT}); y -= 13.4; } y -= 2.6; }
+      for (const p of pts) { ensure(p.length * 13.4); pg.drawCircle({x: CX + 2.6, y: y + 3.2, size: 1.25, color: TEXT}); for (const l of p) { pg.drawText(l, {x: CX + 11, y, size: 9.3, font: F.r, color: TEXT}); y -= 13.4; } y -= 2.6; }
       y -= 10;
     };
     const zeileTab = (label, wert) => {
-      const ll = wrap(clean(label, F.r), F.r, 8.6, DC - 10), wl = wrap(clean(wert, F.sr), F.sr, 9.8, CWW);
+      const ll = wrap(clean(label, F.r), F.r, 8.6, DC - 10), wl = wrap(clean(wert, F.r), F.r, 9.3, CWW);
       ensure(Math.max(ll.length * 12, wl.length * 13.4));
       let y1 = y + .5; for (const l of ll) { pg.drawText(l, {x: L, y: y1, size: 8.6, font: F.r, color: GRAU}); y1 -= 12; }
-      let y2 = y; for (const l of wl) { pg.drawText(l, {x: CX, y: y2, size: 9.8, font: F.sr, color: TEXT}); y2 -= 13.4; }
+      let y2 = y; for (const l of wl) { pg.drawText(l, {x: CX, y: y2, size: 9.3, font: F.r, color: TEXT}); y2 -= 13.4; }
       y = Math.min(y1, y2) - 6;
     };
     if (cv.stationen?.length) { kopf(T.erf); cv.stationen.forEach(eintrag); }
@@ -2245,7 +2252,7 @@ function makeDocGen(PDFLib, fontkit) {
       if (cv.sprachen?.length) zeileTab(T.spr, cv.sprachen.map(([s, n]) => `${s} (${n})`).join(', '));
       if (cv.interessen) zeileTab(T.int, cv.interessen);
     }
-    if (o.datumOrt && y - 60 > 40) { y -= 22; pg.drawText(clean(o.datumOrt, F.sr), {x: L, y, size: 10, font: F.sr, color: TEXT}); y -= 16; pg.drawText(clean(cv.name, F.sr), {x: L, y, size: 10, font: F.sr, color: TEXT}); }
+    if (o.datumOrt && y - 60 > 40) { y -= 22; pg.drawText(clean(o.datumOrt, F.r), {x: L, y, size: 9.6, font: F.r, color: TEXT}); y -= 16; pg.drawText(clean(cv.name, F.r), {x: L, y, size: 9.6, font: F.r, color: TEXT}); }
     pages.forEach((p, i) => { const s = clean(`${cv.name}  |  ${T.cv}  |  ${T.seite(i + 1, pages.length)}`, F.r); p.drawText(s, {x: (W - F.r.widthOfTextAtSize(s, 7)) / 2, y: 30, size: 7, font: F.r, color: GRAU}); });
   }
 
