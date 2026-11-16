@@ -263,6 +263,27 @@ test('sammel-mail', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('gmail-probe', async () => {
+  const { seite, gh, gmail, fehler } = await appStarten({ google: true });
+  await seite.goto(`http://app.test/Bewerbungszentrale/#google=${GOOGLE_ID}`);
+  await seite.reload();
+  await zuAkte(seite, 'test-mail');
+  await seite.click('[data-act="gmail-api"]');
+  await seite.waitForSelector('#sm-probe:not([disabled])', { timeout: 5000 });
+  await seite.click('#sm-probe');
+  await seite.waitForFunction(() => /Probe an max@example\.org gesendet/.test(document.querySelector('#sm-st')?.textContent || ''), null, { timeout: 60000 });
+  assert.equal(gmail.length, 1);
+  const m = mimeTeile(gmail[0].mime);
+  assert.match(m.kopf, /^To: max@example\.org\r\n/);
+  assert.equal(m.betreff, '[Probe] Bewerbung als Energiecontroller (m/w/d), Max Muster');
+  assert.match(m.teile[0].inhalt.toString('utf8'), /bewerbung@example\.org/);
+  assert.equal(m.teile[1].inhalt.subarray(0, 5).toString(), '%PDF-');
+  await warte(800);
+  assert.equal(json(gh, 'apps/test-mail.json').status, 'gemerkt', 'Probe ändert die Akte nicht');
+  assert.equal(await seite.locator('#sm-los:not([disabled])').count(), 1, 'danach kann echt gesendet werden');
+  assert.deepEqual(fehler, []);
+});
+
 test('oeffentlich', async () => {
   // Im öffentlichen Repo stehen keine persönlichen Daten
   const verboten = [/Kruse/i, /Walddörfer/i, /alice-dsl/i, /krusetobias/i, /o2mail/i, /PxCY3xsfP6mMNvqdAa2MzF/];

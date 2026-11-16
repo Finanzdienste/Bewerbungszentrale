@@ -1865,19 +1865,34 @@ function sammelMailModal(ids) {
       ${ids?.length === 1 ? `<details class="manuell"><summary>Mailtext ansehen</summary><pre style="white-space:pre-wrap;font:inherit;font-size:var(--t-sm)">${esc(mailtextFuer(liste[0]))}</pre></details>` : ''}
       <span class="ki-status" id="sm-st"><span class="pulse"></span>Google-Anmeldung wird geladen …</span>
     </div>
-    <div class="modal-foot"><button class="btn" type="button" data-mclose>Schließen</button><button class="btn primary" type="button" id="sm-los" disabled>${ic('mail')}Senden</button></div>`);
-  const zu = $$('[data-mclose]', m), los = $('#sm-los', m), st = $('#sm-st', m);
+    <div class="modal-foot"><button class="btn" type="button" data-mclose>Schließen</button>${/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(P().email || '') ? `<button class="btn" type="button" id="sm-probe" disabled>Probe an mich</button>` : ''}<button class="btn primary" type="button" id="sm-los" disabled>${ic('mail')}Senden</button></div>`);
+  const zu = $$('[data-mclose]', m), los = $('#sm-los', m), st = $('#sm-st', m), probe = $('#sm-probe', m);
   zu.forEach(b => b.onclick = closeModal);
   const zeilen = liste.map((a, i) => ({a, li: $(`[data-sm="${i}"]`, m), cb: $(`#sm-${i}`, m), rs: $(`[data-sm="${i}"] [data-sm-st]`, m), fertig: false}));
   const anzahl = () => zeilen.filter(z => z.cb.checked && !z.fertig).length;
   const knopf = () => { const n = anzahl(); los.innerHTML = `${ic('mail')}${n === 1 ? 'Jetzt senden' : `${n} jetzt senden`}`; return n; };
   zeilen.forEach(z => z.cb.onchange = knopf); knopf();
-  GMAIL.vorbereiten().then(() => { st.textContent = ''; los.disabled = !knopf(); }).catch(e => { st.textContent = GMAIL_FEHLER[e?.code] || 'Die Google-Anmeldung konnte nicht geladen werden.'; st.classList.add('err'); });
+  GMAIL.vorbereiten().then(() => { st.textContent = ''; los.disabled = !knopf(); if (probe) probe.disabled = false; }).catch(e => { st.textContent = GMAIL_FEHLER[e?.code] || 'Die Google-Anmeldung konnte nicht geladen werden.'; st.classList.add('err'); });
+  if (probe) probe.onclick = async () => { // dieselbe Mail an die eigene Adresse, ändert nichts an der Akte
+    const z = zeilen.find(x => x.cb.checked && !x.fertig) || zeilen[0]; const a = state.apps[z.a.id]; if (!a) return;
+    const an = P().email.trim();
+    probe.disabled = los.disabled = true; zu.forEach(b => b.disabled = true); st.classList.remove('err');
+    try {
+      await GMAIL.anmelden();
+      st.innerHTML = '<span class="pulse"></span>Probe wird erstellt …';
+      const mappe = await mappeBauen(a, {kompakt: true});
+      await GMAIL.senden({an, betreff: '[Probe] ' + betreffFuer(a), text: `Probe aus der Bewerbungszentrale. So käme die Mail bei ${a.firma || 'der Firma'} an (${(a.kontakt?.email || '').trim()}):\n\n${mailtextFuer(a)}`, anhang: {name: mappe.filename, bytes: mappe.bytes, typ: 'application/pdf'}});
+      st.textContent = `Probe an ${an} gesendet. Schau in dein Postfach, die Bewerbung selbst ist noch nicht raus.`;
+    } catch (e) {
+      st.textContent = e?.code === 'abgebrochen' ? 'Anmeldung abgebrochen.' : `Probe nicht gesendet. ${GMAIL_FEHLER[e?.code] || GMAIL_FEHLER[e?.message] || e?.message || ''}`; st.classList.add('err');
+    }
+    probe.disabled = false; los.disabled = !knopf(); zu.forEach(b => b.disabled = false);
+  };
   los.onclick = async () => {
     const auswahl = zeilen.filter(z => z.cb.checked && !z.fertig); if (!auswahl.length) return;
-    los.disabled = true; zu.forEach(b => b.disabled = true); st.classList.remove('err');
+    los.disabled = true; if (probe) probe.disabled = true; zu.forEach(b => b.disabled = true); st.classList.remove('err');
     try { await GMAIL.anmelden(); } // im Klick, sonst blockiert der Browser das Anmeldefenster
-    catch (e) { st.textContent = e?.code === 'abgebrochen' ? 'Anmeldung abgebrochen.' : 'Ohne die Google-Anmeldung kann die App nicht senden.'; st.classList.add('err'); los.disabled = false; zu.forEach(b => b.disabled = false); return; }
+    catch (e) { st.textContent = e?.code === 'abgebrochen' ? 'Anmeldung abgebrochen.' : 'Ohne die Google-Anmeldung kann die App nicht senden.'; st.classList.add('err'); los.disabled = false; if (probe) probe.disabled = false; zu.forEach(b => b.disabled = false); return; }
     let ok = 0, halt = '';
     for (const z of auswahl) {
       const id = z.a.id, a = state.apps[id];
@@ -1914,7 +1929,7 @@ function sammelMailModal(ids) {
       if (auswahl.length > 1) await new Promise(res => setTimeout(res, 1200));
     }
     st.textContent = `${ok} von ${auswahl.length} gesendet.${halt === 'unklar' ? ' Danach angehalten, damit nichts doppelt rausgeht.' : ''}`;
-    zu.forEach(b => b.disabled = false); los.disabled = !knopf();
+    zu.forEach(b => b.disabled = false); los.disabled = !knopf(); if (probe) probe.disabled = false;
     if (ok) toast(ok === 1 ? 'Bewerbung verschickt' : `${ok} Bewerbungen verschickt`);
     renderSoon(); if (state.openId) { renderDrawerHead(); renderDrawerBody(); }
   };
