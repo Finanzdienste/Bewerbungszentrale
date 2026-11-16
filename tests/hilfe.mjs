@@ -28,7 +28,7 @@ export async function schliessen() { if (browser) await browser.close(); browser
  * speicher: localStorage vor dem Start (z. B. Zugang). ki: (prompt) => Antworttext.
  * google: Google-Anmeldung und Gmail-API nachbilden; gesendete Mails landen in gmail.
  */
-export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false, graphql = true, google = false } = {}) {
+export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false, graphql = true, google = false, gmailFehler = 0 } = {}) {
   const b = await browserStarten();
   const ctx = await b.newContext({ viewport: { width: breite, height: hoehe }, serviceWorkers: 'block', acceptDownloads: true, permissions: ['clipboard-read', 'clipboard-write'] });
   const gh = githubAttrappe(ladeOrdner(daten), { graphql });
@@ -56,8 +56,10 @@ export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), spe
     if (u.hostname === 'api.github.com') return gh.handler(route);
     if (u.hostname === 'api.anthropic.com') return kia.handler(route);
     if (u.hostname === 'gmail.googleapis.com') {
-      const r = route.request();
-      gmail.push({ url: u.href, methode: r.method(), kopf: r.headers(), mime: r.postData() || '' });
+      const r = route.request(), roh = r.postData() || '';
+      const mime = /json/.test(r.headers()['content-type'] || '') ? Buffer.from(JSON.parse(roh).raw.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8') : roh;
+      gmail.push({ url: u.href, methode: r.method(), kopf: r.headers(), mime });
+      if (gmailFehler) return route.fulfill({ status: gmailFehler, contentType: 'application/json', body: JSON.stringify({ error: { code: gmailFehler, message: 'Gmail API has not been used in project 123 before or it is disabled.', status: 'PERMISSION_DENIED' } }) });
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'msg-' + gmail.length, threadId: 'thread-' + gmail.length, labelIds: ['SENT'] }) });
     }
     for (const [re, datei] of CDN) if (re.test(u.href)) return route.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(NM, datei)) });

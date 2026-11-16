@@ -540,9 +540,15 @@
         `--${grenze}`, 'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', zeilen(b64(utf8(String(text || '').replace(/\r?\n/g, '\r\n')))),
         `--${grenze}`, `Content-Type: ${anhang.typ || 'application/pdf'}; name="${ascii}"`, `Content-Disposition: attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`,
         'Content-Transfer-Encoding: base64', '', zeilen(b64(anhang.bytes)), `--${grenze}--`, ''].join('\r\n');
+      // Normale Adresse mit JSON: deren Fehlerantworten kann der Browser lesen (die Upload-Adresse schickt bei Fehlern
+      // keine CORS-Kopfzeilen, dann bleibt nur „Failed to fetch“). Upload nur für sehr große Mails.
+      const gross = mime.length > 3_500_000;
       let r;
       try {
-        r = await fetch('https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media', { method: 'POST', headers: { Authorization: `Bearer ${zugriff.token}`, 'Content-Type': 'message/rfc822' }, body: mime });
+        r = await fetch(gross ? 'https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media' : 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+          method: 'POST', headers: { Authorization: `Bearer ${zugriff.token}`, 'Content-Type': gross ? 'message/rfc822' : 'application/json' },
+          body: gross ? mime : JSON.stringify({ raw: b64(utf8(mime)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') }),
+        });
       } catch (e) { throw fehler('unklar', e?.message); } // kann trotzdem angekommen sein
       if (r.ok) return r.json().catch(() => ({}));
       const j = await r.json().catch(() => null), m = j?.error?.message || `HTTP ${r.status}`;

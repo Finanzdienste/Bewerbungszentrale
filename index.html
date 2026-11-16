@@ -1884,7 +1884,7 @@ function sammelMailModal(ids) {
       await GMAIL.senden({an, betreff: '[Probe] ' + betreffFuer(a), text: `Probe aus der Bewerbungszentrale. So käme die Mail bei ${a.firma || 'der Firma'} an (${(a.kontakt?.email || '').trim()}):\n\n${mailtextFuer(a)}`, anhang: {name: mappe.filename, bytes: mappe.bytes, typ: 'application/pdf'}});
       st.textContent = `Probe an ${an} gesendet. Schau in dein Postfach, die Bewerbung selbst ist noch nicht raus.`;
     } catch (e) {
-      st.textContent = e?.code === 'abgebrochen' ? 'Anmeldung abgebrochen.' : `Probe nicht gesendet. ${GMAIL_FEHLER[e?.code] || GMAIL_FEHLER[e?.message] || e?.message || ''}`; st.classList.add('err');
+      st.innerHTML = e?.code === 'abgebrochen' ? 'Anmeldung abgebrochen.' : `Probe nicht gesendet. ${esc(GMAIL_FEHLER[e?.code] || GMAIL_FEHLER[e?.message] || '')}${e?.message && e.message !== GMAIL_FEHLER[e?.code] ? `<details style="margin-top:4px;font-size:var(--t-xs)"><summary>Meldung von Google</summary><code style="white-space:pre-wrap;word-break:break-word">${esc(e.message)}</code></details>` : ''}`; st.classList.add('err');
     }
     probe.disabled = false; los.disabled = !knopf(); zu.forEach(b => b.disabled = false);
   };
@@ -1911,7 +1911,7 @@ function sammelMailModal(ids) {
           const cur = state.apps[id]; if (cur) { cur.verlauf.push({id: uid(), datum: today(), typ: 'notiz', text: 'Versand per Gmail mit unklarem Ergebnis, bitte in Gmail unter Gesendet prüfen'}); saveApp(id, false); }
           halt = 'unklar';
         } else if (e?.code === 'bad_request') z.rs.textContent = `Nicht gesendet: ${e.message}`;
-        else { z.rs.textContent = `Nicht gesendet. ${GMAIL_FEHLER[e?.code] || GMAIL_FEHLER[e?.message] || e?.message || ''}`; halt = e?.code || 'fehler'; }
+        else { z.rs.textContent = `Nicht gesendet. ${GMAIL_FEHLER[e?.code] || GMAIL_FEHLER[e?.message] || ''} ${e?.message && e.message !== GMAIL_FEHLER[e?.code] ? `(Google: ${e.message})` : ''}`.trim(); halt = e?.code || 'fehler'; }
         continue;
       }
       // ab hier ist die Mail raus: eintragen, aber nie wieder als „nicht gesendet“ melden

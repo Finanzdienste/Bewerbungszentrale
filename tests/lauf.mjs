@@ -245,8 +245,8 @@ test('sammel-mail', async () => {
   assert.ok(ok, 'Akte steht auf beworben');
   assert.equal(gmail.length, 1);
   const g = gmail[0];
-  assert.match(g.url, /^https:\/\/gmail\.googleapis\.com\/upload\/gmail\/v1\/users\/me\/messages\/send\?uploadType=media$/);
-  assert.equal(g.kopf['content-type'], 'message/rfc822');
+  assert.equal(g.url, 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send');
+  assert.equal(g.kopf['content-type'], 'application/json');
   assert.equal(g.kopf.authorization, 'Bearer ya29.test-token');
   const m = mimeTeile(g.mime);
   assert.match(m.kopf, /^To: bewerbung@example\.org\r\n/);
@@ -282,6 +282,20 @@ test('gmail-probe', async () => {
   assert.equal(json(gh, 'apps/test-mail.json').status, 'gemerkt', 'Probe ändert die Akte nicht');
   assert.equal(await seite.locator('#sm-los:not([disabled])').count(), 1, 'danach kann echt gesendet werden');
   assert.deepEqual(fehler, []);
+});
+
+test('gmail-fehler', async () => {
+  const { seite, gh, fehler } = await appStarten({ google: true, gmailFehler: 403 });
+  await seite.goto(`http://app.test/Bewerbungszentrale/#google=${GOOGLE_ID}`);
+  await seite.reload();
+  await zuAkte(seite, 'test-mail');
+  await seite.click('[data-act="gmail-api"]');
+  await seite.waitForSelector('#sm-los:not([disabled])', { timeout: 5000 });
+  await seite.click('#sm-los');
+  await seite.waitForFunction(() => /0 von 1 gesendet/.test(document.querySelector('#sm-st')?.textContent || ''), null, { timeout: 60000 });
+  assert.match(await seite.textContent('#sm-liste'), /Gmail-API eingeschaltet.*Google: Gmail API has not been used/s);
+  assert.equal(json(gh, 'apps/test-mail.json').status, 'gemerkt');
+  assert.deepEqual(fehler.filter((f) => !/403/.test(f)), []);
 });
 
 test('oeffentlich', async () => {
