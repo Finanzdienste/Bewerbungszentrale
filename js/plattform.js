@@ -17,7 +17,11 @@
  *              AQ./AIza…), direkt vom Handy.
  *   downloads  Datei speichern über einen Download-Link.
  *   user       Wer die App öffnet, ist der Besitzer.
- *   mcp        gibt es nicht (Gmail-Versand direkt aus der App entfällt).
+ *   mcp        gibt es nicht. Senden per Gmail geht stattdessen über
+ *              bzPlattform.gmail: Anmeldung mit Google (nur Erlaubnis zum
+ *              Senden, gmail.send), dann die Gmail-API. Gesendet wird nur
+ *              auf Knopfdruck der Person. Die Client-ID der eigenen
+ *              Google-Cloud-App kommt per Link …/#google=<Client-ID>.
  *
  * Zugang: ein Fine-grained Token von GitHub, das nur das Daten-Repo lesen
  * und schreiben darf, nur im localStorage dieses Handys. Kommt per Link
@@ -38,6 +42,8 @@
   const KI_MODELL = { anthropic: 'claude-opus-5-5', gemini: 'gemini-3.8-flash' };
   const KI_MUSTER = /^(?:sk-ant-[A-Za-z0-9_-]{20,250}|AQ\.[A-Za-z0-9_.-]{20,200}|AIza[A-Za-z0-9_-]{30,80})$/;
   const TOKEN_MUSTER = /^[A-Za-z0-9_]{20,255}$/;
+  const GOOGLE = 'bewerbungszentrale.google.v1';
+  const GOOGLE_MUSTER = /^[0-9]{6,20}-[a-z0-9]{10,64}\.apps\.googleusercontent\.com$/;
 
   const lies = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } };
   const schreib = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } };
@@ -46,11 +52,12 @@
   /* ------------------------------------------------ Zugang und Schlüssel */
   function linkAusAdresse() {
     const h = location.hash || '';
-    if (!/[#&](?:zugang|ki)=/.test(h)) return;
+    if (!/[#&](?:zugang|ki|google)=/.test(h)) return;
     const wert = (k) => { const m = new RegExp(`[#&]${k}=([^&\\s]+)`).exec(h); if (!m) return ''; try { return decodeURIComponent(m[1]).trim(); } catch { return ''; } };
     const t = wert('zugang'), k = wert('ki');
     if (TOKEN_MUSTER.test(t)) schreib(ZUGANG, { token: t, stand: new Date().toISOString() });
     if (KI_MUSTER.test(k)) schreib(KI, { schluessel: k, stand: new Date().toISOString() });
+    if (GOOGLE_MUSTER.test(wert('google'))) schreib(GOOGLE, { clientId: wert('google'), stand: new Date().toISOString() });
     try { history.replaceState(null, '', location.pathname + location.search); } catch { /* egal */ }
   }
   linkAusAdresse();
@@ -490,6 +497,64 @@
     return ki;
   }
 
+  /* ------------------------------------------------ Gmail: senden über die Gmail-API, nur auf Knopfdruck */
+  const gmail = (() => {
+    const SCOPE = 'https://www.googleapis.com/auth/gmail.send';
+    let zugriff = null, laden = null;
+    const clientId = () => { const g = lies(GOOGLE); return g && GOOGLE_MUSTER.test(g.clientId || '') ? g.clientId : ''; };
+    const skript = () => laden ||= new Promise((res, rej) => {
+      if (window.google?.accounts?.oauth2) return res();
+      const el = document.createElement('script'); el.src = 'https://accounts.google.com/gsi/client'; el.async = true;
+      el.onload = () => res(); el.onerror = () => { laden = null; rej(fehler('unavailable', 'Die Google-Anmeldung konnte nicht geladen werden.')); };
+      document.head.appendChild(el);
+    });
+    const angemeldet = () => !!zugriff && zugriff.bis > Date.now() + 60_000;
+    function anmelden() { // direkt im Klick aufrufen, sonst blockiert der Browser das Anmeldefenster
+      if (angemeldet()) return Promise.resolve();
+      const o = window.google?.accounts?.oauth2;
+      if (!o || !clientId()) return Promise.reject(fehler('unavailable', 'Die Google-Anmeldung ist nicht bereit.'));
+      return new Promise((res, rej) => {
+        o.initTokenClient({
+          client_id: clientId(), scope: SCOPE,
+          callback: (r) => {
+            if (r?.access_token && (!o.hasGrantedAllScopes || o.hasGrantedAllScopes(r, SCOPE))) { zugriff = { token: r.access_token, bis: Date.now() + (Number(r.expires_in) || 3600) * 1000 }; res(); }
+            else rej(fehler('consent_required', 'Ohne die Erlaubnis zum Senden geht es nicht.'));
+          },
+          error_callback: (e) => rej(fehler(e?.type === 'popup_closed' ? 'abgebrochen' : 'consent_required', e?.message || 'Anmeldung abgebrochen')),
+        }).requestAccessToken();
+      });
+    }
+    const utf8 = (t) => new TextEncoder().encode(t);
+    const b64 = (by) => { let t = ''; for (let i = 0; i < by.length; i += 0x8000) t += String.fromCharCode.apply(null, by.subarray(i, i + 0x8000)); return btoa(t); };
+    const zeilen = (t) => (t.match(/.{1,76}/g) || ['']).join('\r\n');
+    const kopf = (t) => /^[\x20-\x7e]*$/.test(t) ? t : (t.match(/[\s\S]{1,12}/gu) || ['']).map((x) => `=?UTF-8?B?${b64(utf8(x))}?=`).join('\r\n ');
+    async function senden({ an, betreff, text, anhang }) {
+      an = String(an || '').trim();
+      if (!/^[^\s@<>",;:]+@[^\s@<>",;:]+\.[^\s@<>",;:]+$/.test(an)) throw fehler('bad_request', 'Die Empfängeradresse sieht nicht richtig aus.');
+      if (!angemeldet()) throw fehler('needs_reauth', 'Bitte neu bei Google anmelden.');
+      const grenze = 'bz-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      const name = String(anhang.name || 'Bewerbung.pdf'), ascii = name.replace(/[^\x20-\x7e]|["\\]/g, '_');
+      const mime = [`To: ${an}`, `Subject: ${kopf(String(betreff || '').replace(/[\r\n]+/g, ' '))}`, 'MIME-Version: 1.0', `Content-Type: multipart/mixed; boundary="${grenze}"`, '',
+        `--${grenze}`, 'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', zeilen(b64(utf8(String(text || '').replace(/\r?\n/g, '\r\n')))),
+        `--${grenze}`, `Content-Type: ${anhang.typ || 'application/pdf'}; name="${ascii}"`, `Content-Disposition: attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+        'Content-Transfer-Encoding: base64', '', zeilen(b64(anhang.bytes)), `--${grenze}--`, ''].join('\r\n');
+      let r;
+      try {
+        r = await fetch('https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media', { method: 'POST', headers: { Authorization: `Bearer ${zugriff.token}`, 'Content-Type': 'message/rfc822' }, body: mime });
+      } catch (e) { throw fehler('unklar', e?.message); } // kann trotzdem angekommen sein
+      if (r.ok) return r.json().catch(() => ({}));
+      const j = await r.json().catch(() => null), m = j?.error?.message || `HTTP ${r.status}`;
+      if (r.status === 401) { zugriff = null; throw fehler('needs_reauth', m); }
+      throw fehler({ 400: 'bad_request', 403: 'forbidden', 429: 'rate_limited' }[r.status] || 'unklar', m);
+    }
+    return {
+      eingerichtet: () => !!clientId(),
+      einrichten: (id) => { id = String(id || '').trim(); return GOOGLE_MUSTER.test(id) && schreib(GOOGLE, { clientId: id, stand: new Date().toISOString() }); },
+      vorbereiten: async () => { if (!clientId()) return false; await skript(); return true; },
+      angemeldet, anmelden, senden,
+    };
+  })();
+
   /* ------------------------------------------------ window.claude */
   const faehig = {
     db: async () => { await bereit; return db; },
@@ -500,7 +565,7 @@
     mcp: async () => { throw fehler('not_granted', 'In der App gibt es keinen direkten Gmail-Versand.'); },
   };
   window.claude = { use: (name) => (faehig[name] ? faehig[name]() : Promise.reject(fehler('not_granted', name))) };
-  window.bzPlattform = { abgleichen: () => abgleichen(), einrichten: () => einrichtenZeigen(''), offen: () => lokal.size + warteschlange.size, kiDa: () => !!kiSchluessel() };
+  window.bzPlattform = { abgleichen: () => abgleichen(), einrichten: () => einrichtenZeigen(''), offen: () => lokal.size + warteschlange.size, kiDa: () => !!kiSchluessel(), gmail };
 
   zugangHerstellen();
   start();

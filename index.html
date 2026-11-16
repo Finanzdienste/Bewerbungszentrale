@@ -491,6 +491,17 @@ fieldset legend{font-size:var(--t-xs);font-weight:600;color:var(--muted);padding
 .steps{margin:0;padding-left:1.25em;display:flex;flex-direction:column;gap:14px;font-size:var(--t-sm)}
 .steps li{padding-left:4px}
 .manuell{border-top:1px dashed var(--line-strong);padding-top:10px;margin-top:4px;font-size:var(--t-sm)}
+.pruef{border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:var(--t-sm);display:flex;flex-direction:column;gap:6px;background:var(--sheet-2)}
+.pruef.frei{border-color:color-mix(in srgb,var(--good) 45%,var(--line));background:color-mix(in srgb,var(--good) 7%,var(--sheet))}
+.pruef.maengel,.pruef.geaendert{border-color:color-mix(in srgb,var(--warn) 45%,var(--line));background:color-mix(in srgb,var(--warn) 7%,var(--sheet))}
+.pruef .pr-kopf{display:flex;gap:8px;align-items:flex-start;font-weight:500}
+.pruef .pr-kopf svg.i{flex:none;margin-top:2px;width:16px;height:16px}
+.pruef.frei .pr-kopf svg.i{color:var(--good)}
+.pruef.maengel .pr-kopf svg.i,.pruef.geaendert .pr-kopf svg.i{color:var(--warn)}
+.pruef ul{margin:0;padding-left:18px}
+.pruef li{margin:4px 0}
+.pruef q{color:var(--muted)}
+.pruef summary{cursor:pointer;color:var(--muted)}
 .manuell summary{cursor:pointer;color:var(--muted);font-weight:500}
 .copyline{display:grid;grid-template-columns:60px minmax(0,1fr) auto;gap:8px;align-items:center;margin-top:6px}
 .copyline span{font-size:var(--t-xs);color:var(--muted);font-weight:600}
@@ -955,6 +966,7 @@ function renderUebersicht() {
       <div class="kpi"><div class="lbl">Im Prozess</div><div class="val">${st.aktiv.length}</div><div class="hint">${st.all.filter(a => a.status === 'interview').length} im Gespräch</div></div>
       <div class="kpi"><div class="lbl">Antwortquote</div><div class="val">${pct(st.rueck.length, st.sent.length)}<small>%</small></div><div class="hint">${st.rueck.length} von ${st.sent.length} reagierten</div></div>
     </div>
+    ${bereitPanel()}
     ${vorschlagPanel()}
     <section class="panel"><div class="panel-head"><h2>Jetzt dran</h2><span class="sub">Termine, Fristen, Nachfragen · nächste 7 Tage</span></div>
         ${att.length ? `<ul class="todo">${att.slice(0, 8).map(x => `<li data-open="${x.id}" style="--tone:${x.tone}" tabindex="0"><span class="ico">${ic(x.icon)}</span><span style="min-width:0"><div class="t">${esc(x.t)}</div><div class="d">${esc(x.d)}</div></span><span class="when ${x.urgent ? 'urgent' : ''}">${esc(x.when)}</span></li>`).join('')}</ul>${att.length > 8 ? `<p class="f-note"><a href="#termine">Alle ${att.length} Punkte ansehen</a></p>` : ''}`
@@ -984,7 +996,7 @@ function renderUebersicht() {
   wireWeekChart();
 }
 function vorschlagPanel() {
-  const vs = vorschlaege(); const p = P();
+  const vs = vorschlaege().filter(a => !istBereit(a)); const p = P();
   if (!vs.length && !p.suche.aktiv && !state.lauf) return '';
   return `<section class="panel"><div class="panel-head"><h2 style="display:flex;gap:8px;align-items:center">${ic('spark')}Neu gefunden</h2><span class="sub">${esc(laufText())}</span></div>
     ${vs.length ? `<ul class="todo">${vs.slice(0, 8).map(a => { const sc = wertungVon(a).wert; return `<li data-open="${a.id}" tabindex="0" style="--tone:${sc ? ringColor(sc) : 'var(--accent)'}"><span class="ico" style="font-family:var(--f-mono);font-size:12px;font-weight:600">${sc ?? '?'}</span><span style="min-width:0"><div class="t">${esc(a.position)} · ${esc(a.firma)}</div><div class="d">${esc([a.ort, a.arbeitsmodell, a.gehaltMin || a.gehaltMax ? `${kEur(a.gehaltMin) || '?'}–${kEur(a.gehaltMax) || '?'} €` : '', a.analyse?.fazit].filter(Boolean).join(' · '))}</div></span><span class="when">${a.entwurfUrl ? 'Entwurf bereit' : a.bewerbungsweg === 'portal' ? 'über Portal' : 'gefunden ' + fmtDs(a.gefundenAm)}</span></li>`; }).join('')}</ul>${vs.length > 8 ? `<p class="f-note"><a href="#liste">Alle ${vs.length} Vorschläge in der Rangliste</a></p>` : ''}`
@@ -1697,11 +1709,12 @@ function bereitHTML(a) {
   return `<section class="ki-card" style="border-color:color-mix(in srgb,var(--accent) 45%,var(--line))">
     <div class="sec-head"><h3>${ic('spark')}${a.vorschlag ? `Von Claude gefunden${a.gefundenAm ? ` am ${fmtD(a.gefundenAm)}` : ''}` : 'Bewerbung abschicken'}</h3><span style="display:flex;gap:6px;flex-wrap:wrap">${atsHTML(a, true)}${(w => w.wert == null ? '' : `<span class="chip" style="color:${ringColor(w.wert)}" title="${w.art === 'Gesamt' ? `Gesamt aus Reiz ${w.reiz ?? '–'}, Eignung ${w.eignung ?? '–'}, Firma ${w.firma ?? '–'}` : w.art === 'Firma' ? 'Wertung des Unternehmens' + (w.geschaetzt ? ', grob geschätzt' : '') : 'Eignung laut Analyse'}">${w.art} ${w.wert}</span>`)(wertungVon(a))}</span></div>
     ${a.analyse?.fazit ? `<p style="font-size:var(--t-sm)">${esc(a.analyse.fazit)}</p>` : ''}
+    ${pruefungHTML(a)}
     ${ohneAnschreiben
       ? `<div class="ki-row"><button class="btn primary" type="button" data-act="ki-tab">${ic('spark')}Erst Anschreiben erstellen</button></div>`
       : mail
-        ? `<div class="ki-row">${MCP ? `<button class="btn primary" type="button" data-act="gmail-senden">${ic('mail')}Jetzt per Gmail bewerben</button>` : `<button class="btn primary" type="button" data-act="mail-teilen">${ic('mail')}Per Mail-App senden</button>`}<button class="btn" type="button" data-act="ki-tab">${ic('doc')}Anschreiben ansehen</button><button class="btn" type="button" data-act="wa-teilen">${ic('share')}Per WhatsApp teilen</button>${a.vorschlag ? `<button class="btn ghost" type="button" data-act="verwerfen">${ic('x')}Nicht interessant</button>` : ''}</div>
-           <p class="desc">${MCP ? `Geht an <b>${esc(mail)}</b>, mit Anschreiben, Lebenslauf und Zeugnissen als eine PDF. Vor dem Senden siehst du alles noch einmal.` : `„Per Mail-App senden“ gibt die Mappe an deine Gmail-App weiter, mit Mailtext und Betreff. Empfänger: <b>${esc(mail)}</b> (zum Kopieren unten).`}</p>
+        ? `<div class="ki-row">${MCP ? `<button class="btn primary" type="button" data-act="gmail-senden">${ic('mail')}Jetzt per Gmail bewerben</button>` : `<button class="btn primary" type="button" data-act="gmail-api">${ic('mail')}Per Gmail senden</button><button class="btn" type="button" data-act="mail-teilen">${ic('share')}Per Mail-App senden</button>`}<button class="btn" type="button" data-act="ki-tab">${ic('doc')}Anschreiben ansehen</button><button class="btn" type="button" data-act="wa-teilen">${ic('share')}Per WhatsApp teilen</button>${a.vorschlag ? `<button class="btn ghost" type="button" data-act="verwerfen">${ic('x')}Nicht interessant</button>` : ''}</div>
+           <p class="desc">${MCP ? `Geht an <b>${esc(mail)}</b>, mit Anschreiben, Lebenslauf und Zeugnissen als eine PDF. Vor dem Senden siehst du alles noch einmal.` : `„Per Gmail senden“ schickt sie direkt von deinem Google-Konto, nach einer Kontrolle. „Per Mail-App senden“ gibt die Mappe an deine Gmail-App weiter, mit Mailtext und Betreff. Empfänger: <b>${esc(mail)}</b> (zum Kopieren unten).`}</p>
            <span class="ki-status" id="mappeStatus"></span>
            ${manuell}`
         : `<div class="ki-row">${mappeBtn}${link ? `<a class="btn primary" href="${esc(link)}" target="_blank" rel="noopener">${ic('ext')}Zum Bewerbungsportal</a>` : ''}<button class="btn" type="button" data-act="ki-tab">${ic('doc')}Anschreiben ansehen</button><button class="btn" type="button" data-act="wa-teilen">${ic('share')}Per WhatsApp teilen</button></div>
@@ -1710,6 +1723,201 @@ function bereitHTML(a) {
            <div class="ki-row"><button class="btn sm" type="button" data-act="mark-beworben">${ic('check')}Schon beworben</button>${a.vorschlag ? `<button class="btn sm ghost" type="button" data-act="verwerfen">${ic('x')}Nicht interessant</button>` : ''}</div>
            ${portalHTML(a)}`}
   </section>`;
+}
+/* ---------- Gegenlesen durch den Morgenlauf ---------- */
+// Fingerabdruck der Unterlagen wie im Morgenlauf (Python: json.dumps(sort_keys=True, ensure_ascii=False), SHA-1, 12 Zeichen).
+// So sieht die App, ob die gegengelesene Fassung noch die aktuelle ist.
+function pyJson(o) {
+  if (o === null || o === undefined) return 'null';
+  if (Array.isArray(o)) return '[' + o.map(pyJson).join(', ') + ']';
+  if (typeof o === 'object') return '{' + Object.keys(o).sort().map(k => JSON.stringify(k) + ': ' + pyJson(o[k])).join(', ') + '}';
+  return JSON.stringify(o);
+}
+function fassungDaten(a) {
+  const cv = a.cv && typeof a.cv === 'object' ? a.cv : {}; const v = k => cv[k] === undefined ? null : cv[k];
+  return {anschreiben: a.anschreiben || '', betreff: a.betreff || '', mailtext: a.mailtext || '', bewerbungsweg: a.bewerbungsweg || '', cv: {titel: v('titel'), profil: v('profil'), punkte: v('punkte'), kenntnisse: v('kenntnisse')}};
+}
+function sha1Hex(str) { // klein und synchron, für den Fingerabdruck reicht das
+  const by = new TextEncoder().encode(str), n = ((by.length + 8) >> 6 << 4) + 16, w = new Uint32Array(n), x = new Uint32Array(80);
+  for (let i = 0; i < by.length; i++) w[i >> 2] |= by[i] << (24 - (i & 3) * 8);
+  w[by.length >> 2] |= 0x80 << (24 - (by.length & 3) * 8); w[n - 1] = by.length * 8;
+  let h0 = 0x67452301, h1 = 0xEFCDAB89, h2 = 0x98BADCFE, h3 = 0x10325476, h4 = 0xC3D2E1F0;
+  for (let i = 0; i < n; i += 16) {
+    for (let t = 0; t < 80; t++) x[t] = t < 16 ? w[i + t] : ((v => (v << 1) | (v >>> 31))(x[t - 3] ^ x[t - 8] ^ x[t - 14] ^ x[t - 16]));
+    let a = h0, b = h1, c = h2, d = h3, e = h4;
+    for (let t = 0; t < 80; t++) {
+      const f = t < 20 ? (b & c) | (~b & d) : t < 40 || t >= 60 ? b ^ c ^ d : (b & c) | (b & d) | (c & d);
+      const k = t < 20 ? 0x5A827999 : t < 40 ? 0x6ED9EBA1 : t < 60 ? 0x8F1BBCDC : 0xCA62C1D6;
+      const tmp = (((a << 5) | (a >>> 27)) + f + e + k + x[t]) >>> 0;
+      e = d; d = c; c = ((b << 30) | (b >>> 2)) >>> 0; b = a; a = tmp;
+    }
+    h0 = (h0 + a) >>> 0; h1 = (h1 + b) >>> 0; h2 = (h2 + c) >>> 0; h3 = (h3 + d) >>> 0; h4 = (h4 + e) >>> 0;
+  }
+  return [h0, h1, h2, h3, h4].map(v => v.toString(16).padStart(8, '0')).join('');
+}
+const fassungen = new Map();
+function fassungVon(a) {
+  const q = pyJson(fassungDaten(a));
+  if (!fassungen.has(q)) { if (fassungen.size > 500) fassungen.clear(); fassungen.set(q, sha1Hex(q).slice(0, 12)); }
+  return fassungen.get(q);
+}
+function pruefStand(a) { // frei | maengel | geaendert | wird (Morgenlauf überarbeitet) | neu (noch nicht gegengelesen) | null
+  if (a.status !== 'gemerkt' || !a.anschreiben?.trim()) return null;
+  if (a.ueberarbeiten) return 'wird';
+  const p = a.pruefung; if (!p) return 'neu';
+  if (p.fassung && fassungVon(a) !== p.fassung) return 'geaendert';
+  return p.freigabe ? 'frei' : 'maengel';
+}
+const istBereit = a => !a.verworfen && !a.beispiel && pruefStand(a) === 'frei';
+const PR_WO = {anschreiben: 'Anschreiben', betreff: 'Betreff', mailtext: 'Begleitmail', lebenslauf: 'Lebenslauf', bewerbungsweg: 'Bewerbungsweg', sonstiges: 'Sonstiges'};
+function maengelHTML(ms) {
+  return `<ul>${ms.map(m => `<li><span class="chip ${m.schwere === 'hoch' ? 'bad' : m.schwere === 'mittel' ? 'warn' : ''}">${esc(m.schwere)}</span> <b>${esc(PR_WO[m.wo] || m.wo || '')}:</b> ${esc(m.problem)}${m.zitat ? ` <q>${esc(m.zitat)}</q>` : ''}${m.vorschlag ? `<div class="muted">Vorschlag: ${esc(m.vorschlag)}</div>` : ''}</li>`).join('')}</ul>`;
+}
+function pruefungHTML(a) {
+  const s = pruefStand(a); if (!s) return '';
+  const p = a.pruefung || {}; const mg = p.maengel || [];
+  const ernst = mg.filter(m => m.schwere !== 'gering'), klein = mg.filter(m => m.schwere === 'gering');
+  const fragen = (p.fragen || []).length ? `<div><b>Vor dem Abschicken klären:</b><ul>${p.fragen.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>` : '';
+  const vor = a.vorversion ? `<button class="btn sm ghost" type="button" data-act="pr-vorversion">${ic('reply')}Vorige Fassung (${fmtDs(a.vorversion.datum)}) wiederherstellen</button>` : '';
+  const wann = p.datum ? ` am ${fmtDs(p.datum)}` : '';
+  const box = (kl, icon, kopf, rest = '', knoepfe = '') => `<div class="pruef ${kl}" id="pruefung"><div class="pr-kopf">${ic(icon)}<span>${kopf}</span></div>${rest}${knoepfe || vor ? `<div class="ki-row">${knoepfe}${vor}</div>` : ''}</div>`;
+  if (s === 'neu') return box('', 'clock', 'Noch nicht gegengelesen. Das macht der nächste Morgenlauf.', '', '');
+  if (s === 'wird') return box('', 'clock', 'Beim Gegenlesen sind Punkte aufgefallen. Der nächste Morgenlauf schreibt die Bewerbung neu und liest sie dann noch einmal gegen.',
+    a.ueberarbeiten?.maengel?.length ? `<details><summary>Was geändert wird</summary><ul>${a.ueberarbeiten.maengel.map(m => `<li>${esc(m)}</li>`).join('')}</ul></details>` : '');
+  if (s === 'frei') return box('frei', 'check', `Gegengelesen${wann} und freigegeben${p.note != null ? `, Note ${esc(p.note)} von 100` : ''}${p.manuell ? ' (von dir)' : ''}.`,
+    `${p.staerke ? `<div>${esc(p.staerke)}</div>` : ''}${fragen}${klein.length ? `<details><summary>${klein.length === 1 ? 'Ein kleiner Hinweis' : `${klein.length} kleine Hinweise`}</summary>${maengelHTML(klein)}</details>` : ''}`);
+  if (s === 'geaendert') return box('geaendert', 'alert', 'Seit dem Gegenlesen geändert. Der nächste Morgenlauf liest die neue Fassung gegen.',
+    mg.length ? `<details><summary>Ergebnis zur vorigen Fassung</summary>${maengelHTML(mg)}</details>` : '', `<button class="btn sm" type="button" data-act="pr-frei">${ic('check')}So freigeben</button>`);
+  return box('maengel', 'alert', `Gegengelesen${wann}: ${ernst.length === 1 ? 'ein Punkt braucht' : `${ernst.length} Punkte brauchen`} deinen Blick${p.note != null ? ` (Note ${esc(p.note)})` : ''}.`,
+    `${maengelHTML(ernst)}${fragen}${klein.length ? `<details><summary>${klein.length} kleine Hinweise</summary>${maengelHTML(klein)}</details>` : ''}`,
+    `<button class="btn sm ki" type="button" data-act="pr-neu">${ic('spark')}Morgen neu schreiben lassen</button><button class="btn sm" type="button" data-act="pr-frei">${ic('check')}Trotzdem freigeben</button>`);
+}
+function pruefAktion(act) {
+  const id = state.openId; const a = state.apps[id]; if (!a) return;
+  if (act === 'pr-frei') {
+    a.pruefung = {...(a.pruefung || {}), freigabe: true, manuell: true, fassung: fassungVon(a), datum: today()};
+    a.verlauf.push({id: uid(), datum: today(), typ: 'notiz', text: 'Unterlagen selbst freigegeben'});
+  } else if (act === 'pr-neu') {
+    const ms = (a.pruefung?.maengel || []).filter(m => m.schwere !== 'gering');
+    a.ueberarbeiten = {datum: today(), manuell: true, maengel: ms.map(m => `${m.wo}: ${m.problem}${m.zitat ? ` („${m.zitat}“)` : ''} → ${m.vorschlag}`)};
+    a.verlauf.push({id: uid(), datum: today(), typ: 'notiz', text: 'Neu schreiben lassen (nächster Morgenlauf)'});
+  } else if (act === 'pr-vorversion' && a.vorversion) {
+    const v = a.vorversion, jetzt = {...fassungDaten(a), datum: today()};
+    a.anschreiben = v.anschreiben || ''; a.betreff = v.betreff || ''; a.mailtext = v.mailtext || ''; if (v.bewerbungsweg) a.bewerbungsweg = v.bewerbungsweg;
+    a.cv = {...(a.cv || {}), ...(v.cv || {})};
+    a.vorversion = jetzt;
+    a.verlauf.push({id: uid(), datum: today(), typ: 'notiz', text: `Vorige Fassung vom ${fmtD(v.datum)} wiederhergestellt`});
+  } else return;
+  saveApp(id); renderDrawerBody();
+}
+function bereitPanel() {
+  const offen = list().filter(a => a.status === 'gemerkt' && !a.verworfen && !a.beispiel && a.anschreiben?.trim());
+  if (!offen.some(a => a.pruefung || a.ueberarbeiten)) return '';
+  const stand = new Map(offen.map(a => [a.id, pruefStand(a)]));
+  const bereit = offen.filter(istBereit).sort((x, y) => (x.fristBis || '9999').localeCompare(y.fristBis || '9999') || (wertungVon(y).wert ?? 0) - (wertungVon(x).wert ?? 0));
+  const blick = offen.filter(a => ['maengel', 'geaendert'].includes(stand.get(a.id)));
+  const arbeit = offen.filter(a => ['neu', 'wird'].includes(stand.get(a.id))).length;
+  const perMail = bereit.filter(a => a.bewerbungsweg === 'email' && (a.kontakt?.email || '').trim());
+  const zeile = (a, warn) => { const sc = wertungVon(a).wert; const tage = a.fristBis ? dayDiff(new Date(), parseD(a.fristBis)) : null;
+    return `<li data-open="${a.id}" tabindex="0" style="--tone:${warn ? 'var(--warn)' : sc ? ringColor(sc) : 'var(--accent)'}"><span class="ico" style="font-family:var(--f-mono);font-size:12px;font-weight:600">${warn ? ic('alert') : sc ?? '?'}</span><span style="min-width:0"><div class="t">${esc(a.position)} · ${esc(a.firma)}</div><div class="d">${esc([a.bewerbungsweg === 'email' ? 'per Mail' : 'über Portal', a.pruefung?.note != null ? `Note ${a.pruefung.note}` : '', (a.pruefung?.fragen || []).length ? `${a.pruefung.fragen.length} ${a.pruefung.fragen.length === 1 ? 'Frage' : 'Fragen'} offen` : ''].filter(Boolean).join(' · '))}</div></span><span class="when ${tage != null && tage <= 3 ? 'urgent' : ''}">${a.fristBis ? 'bis ' + fmtDs(a.fristBis) : a.bewerbungsweg === 'email' ? 'Mail' : 'Portal'}</span></li>`; };
+  const n = state.zeigBereitAlle ? bereit.length : 8;
+  return `<section class="panel" id="bereitPanel"><div class="panel-head"><h2 style="display:flex;gap:8px;align-items:center">${ic('check')}Bereit zum Abschicken</h2><span class="sub">${esc([`${bereit.length} gegengelesen und freigegeben`, perMail.length ? `${perMail.length} per Mail` : '', arbeit ? `${arbeit} in Arbeit` : ''].filter(Boolean).join(' · '))}</span></div>
+    ${bereit.length ? `<ul class="todo">${bereit.slice(0, n).map(a => zeile(a)).join('')}</ul>` : `<div class="empty-mini">${ic('clock')}Noch nichts freigegeben. Der Morgenlauf liest jeden Morgen gegen.</div>`}
+    <div class="ki-row" style="margin-top:8px">${bereit.length > 8 ? `<button class="btn sm" type="button" data-act="bereit-alle">${state.zeigBereitAlle ? 'Weniger zeigen' : `Alle ${bereit.length} zeigen`}</button>` : ''}${perMail.length ? `<button class="btn sm primary" type="button" data-act="sammel-mail">${ic('mail')}${perMail.length === 1 ? 'Die Mail-Bewerbung senden' : `Alle ${perMail.length} Mail-Bewerbungen senden`}</button>` : ''}</div>
+    ${blick.length ? `<h3 style="margin-top:14px;font-size:var(--t-sm)">Brauchen deinen Blick (${blick.length})</h3><ul class="todo">${blick.slice(0, 5).map(a => zeile(a, true)).join('')}</ul>` : ''}
+  </section>`;
+}
+/* ---------- Mail-Bewerbungen über die Gmail-API senden (eigene App, nur auf Knopfdruck) ---------- */
+const GMAIL = window.bzPlattform?.gmail || null;
+const GMAIL_FEHLER = {needs_reauth: 'Die Google-Anmeldung ist abgelaufen. Tipp noch einmal auf „Senden“.', forbidden: 'Google lässt den Versand nicht zu. Ist im Google-Cloud-Projekt die Gmail-API eingeschaltet?',
+  rate_limited: 'Gmail bremst gerade. Versuch es in ein paar Minuten noch einmal.', unavailable: 'Keine Verbindung zu Google.', 'pdf-lib': 'Das PDF-Werkzeug konnte nicht geladen werden.'};
+const mailBereit = () => list().filter(a => istBereit(a) && a.bewerbungsweg === 'email' && (a.kontakt?.email || '').trim());
+function gmailEinrichtenModal(ids) {
+  const m = modal(`<div class="modal-head"><h2>Senden über Gmail einrichten</h2><button class="btn icon ghost" type="button" data-mclose aria-label="Schließen">${ic('x')}</button></div>
+    <div class="modal-body">
+      <p style="font-size:var(--t-sm)">Einmalig: Die App braucht eine eigene Google-Anmeldung, die nur Mails senden darf (lesen kann sie nichts).</p>
+      <ol style="font-size:var(--t-sm);padding-left:20px;display:flex;flex-direction:column;gap:4px">
+        <li>console.cloud.google.com öffnen, oben ein neues Projekt anlegen.</li>
+        <li>„APIs &amp; Dienste“ → „Bibliothek“ → <b>Gmail API</b> → Aktivieren.</li>
+        <li>„Google Auth Platform“ → Branding: App-Name und deine Mail. Zielgruppe: Extern, unter Testnutzer deine Gmail-Adresse eintragen.</li>
+        <li>„Clients“ → Client erstellen → Webanwendung. Autorisierte JavaScript-Quelle: <code>${esc(location.origin)}</code></li>
+        <li>Die Client-ID kopieren und hier einfügen.</li>
+      </ol>
+      <label class="fld" for="ge-id"><span>Client-ID</span><input class="in" id="ge-id" autocomplete="off" spellcheck="false" placeholder="…apps.googleusercontent.com"></label>
+      <span class="ki-status" id="ge-st"></span>
+    </div>
+    <div class="modal-foot"><button class="btn" type="button" data-mclose>Abbrechen</button><button class="btn primary" type="button" id="ge-ok">Speichern</button></div>`);
+  $$('[data-mclose]', m).forEach(b => b.onclick = closeModal);
+  $('#ge-ok', m).onclick = () => {
+    if (!GMAIL.einrichten($('#ge-id', m).value)) { $('#ge-st', m).textContent = 'Die Client-ID sieht nicht richtig aus. Sie endet auf .apps.googleusercontent.com.'; $('#ge-st', m).classList.add('err'); return; }
+    closeModal(); sammelMailModal(ids);
+  };
+}
+function sammelMailModal(ids) {
+  const liste = (ids ? ids.filter(i => state.apps[i]).map(i => ({...state.apps[i], id: i})) : mailBereit()).filter(a => a.status === 'gemerkt' && (a.kontakt?.email || '').trim());
+  if (!liste.length) return toast('Keine Mail-Bewerbung zum Senden.');
+  if (!GMAIL) return toast('Senden über Gmail gibt es in der Handy-App.');
+  if (!GMAIL.eingerichtet()) return gmailEinrichtenModal(ids);
+  const m = modal(`<div class="modal-head"><h2>${liste.length === 1 ? 'Bewerbung per Gmail senden' : `${liste.length} Bewerbungen per Gmail senden`}</h2><button class="btn icon ghost" type="button" data-mclose aria-label="Schließen">${ic('x')}</button></div>
+    <div class="modal-body">
+      <p class="muted" style="font-size:var(--t-sm)">Jede geht einzeln an ihre Firma, mit eigenem Betreff, Mailtext und eigener Mappe. Gesendet wird von deinem Google-Konto, und erst, wenn du unten tippst.</p>
+      <ul class="tasks" id="sm-liste">${liste.map((a, i) => `<li data-sm="${i}"><input type="checkbox" class="cb" id="sm-${i}" checked aria-label="${esc(a.firma)} mitsenden"><label class="tx" for="sm-${i}"><b>${esc(a.firma)}</b> · ${esc(a.position)}<small>An ${esc(a.kontakt.email.trim())} · ${esc(betreffFuer(a))}</small><span class="ki-status" data-sm-st></span></label><span></span></li>`).join('')}</ul>
+      ${ids?.length === 1 ? `<details class="manuell"><summary>Mailtext ansehen</summary><pre style="white-space:pre-wrap;font:inherit;font-size:var(--t-sm)">${esc(mailtextFuer(liste[0]))}</pre></details>` : ''}
+      <span class="ki-status" id="sm-st"><span class="pulse"></span>Google-Anmeldung wird geladen …</span>
+    </div>
+    <div class="modal-foot"><button class="btn" type="button" data-mclose>Schließen</button><button class="btn primary" type="button" id="sm-los" disabled>${ic('mail')}Senden</button></div>`);
+  const zu = $$('[data-mclose]', m), los = $('#sm-los', m), st = $('#sm-st', m);
+  zu.forEach(b => b.onclick = closeModal);
+  const zeilen = liste.map((a, i) => ({a, li: $(`[data-sm="${i}"]`, m), cb: $(`#sm-${i}`, m), rs: $(`[data-sm="${i}"] [data-sm-st]`, m), fertig: false}));
+  const anzahl = () => zeilen.filter(z => z.cb.checked && !z.fertig).length;
+  const knopf = () => { const n = anzahl(); los.innerHTML = `${ic('mail')}${n === 1 ? 'Jetzt senden' : `${n} jetzt senden`}`; return n; };
+  zeilen.forEach(z => z.cb.onchange = knopf); knopf();
+  GMAIL.vorbereiten().then(() => { st.textContent = ''; los.disabled = !knopf(); }).catch(e => { st.textContent = GMAIL_FEHLER[e?.code] || 'Die Google-Anmeldung konnte nicht geladen werden.'; st.classList.add('err'); });
+  los.onclick = async () => {
+    const auswahl = zeilen.filter(z => z.cb.checked && !z.fertig); if (!auswahl.length) return;
+    los.disabled = true; zu.forEach(b => b.disabled = true); st.classList.remove('err');
+    try { await GMAIL.anmelden(); } // im Klick, sonst blockiert der Browser das Anmeldefenster
+    catch (e) { st.textContent = e?.code === 'abgebrochen' ? 'Anmeldung abgebrochen.' : 'Ohne die Google-Anmeldung kann die App nicht senden.'; st.classList.add('err'); los.disabled = false; zu.forEach(b => b.disabled = false); return; }
+    let ok = 0, halt = '';
+    for (const z of auswahl) {
+      const id = z.a.id, a = state.apps[id];
+      if (!a || a.status !== 'gemerkt') { z.rs.textContent = 'Übersprungen, ist schon beworben.'; z.fertig = true; continue; }
+      if (halt) { z.rs.textContent = 'Nicht gesendet.'; continue; }
+      let mappe, r, an = (a.kontakt?.email || '').trim();
+      try {
+        z.rs.innerHTML = '<span class="pulse"></span>Mappe wird erstellt …';
+        mappe = await mappeBauen(a, {kompakt: true});
+        z.rs.innerHTML = '<span class="pulse"></span>Wird gesendet …';
+        r = await GMAIL.senden({an, betreff: betreffFuer(a), text: mailtextFuer(a), anhang: {name: mappe.filename, bytes: mappe.bytes, typ: 'application/pdf'}});
+      } catch (e) {
+        z.rs.classList.add('err');
+        if (e?.code === 'unklar') {
+          z.rs.textContent = 'Unklar, ob sie raus ist. Bitte in Gmail unter „Gesendet“ nachsehen.'; z.fertig = true; z.cb.checked = false; z.cb.disabled = true;
+          const cur = state.apps[id]; if (cur) { cur.verlauf.push({id: uid(), datum: today(), typ: 'notiz', text: 'Versand per Gmail mit unklarem Ergebnis, bitte in Gmail unter Gesendet prüfen'}); saveApp(id, false); }
+          halt = 'unklar';
+        } else if (e?.code === 'bad_request') z.rs.textContent = `Nicht gesendet: ${e.message}`;
+        else { z.rs.textContent = `Nicht gesendet. ${GMAIL_FEHLER[e?.code] || GMAIL_FEHLER[e?.message] || e?.message || ''}`; halt = e?.code || 'fehler'; }
+        continue;
+      }
+      // ab hier ist die Mail raus: eintragen, aber nie wieder als „nicht gesendet“ melden
+      z.fertig = true; z.cb.checked = false; z.cb.disabled = true; z.li.classList.add('done'); z.rs.textContent = 'Gesendet'; ok++;
+      try {
+        const cur = state.apps[id];
+        if (cur) {
+          if (r?.threadId || r?.id) cur.gmailThreadId = r.threadId || r.id;
+          unterlagenAbhaken(cur, mappe.ds);
+          cur.aufgaben = (cur.aufgaben || []).map(k => /bewerbungsmappe|portal/i.test(k.text) ? {...k, erledigt: true} : k);
+          cur.verlauf.push({id: uid(), datum: today(), typ: 'mail', text: `Bewerbung per Gmail an ${an} verschickt (${mappe.seiten} Seiten)`});
+          saveApp(id, false); setStatus(id, 'beworben', {quiet: true});
+        }
+      } catch (e) { console.warn('Eintragen nach dem Versand', e); z.rs.textContent = 'Gesendet (bitte in der Akte auf „beworben“ setzen)'; }
+      if (auswahl.length > 1) await new Promise(res => setTimeout(res, 1200));
+    }
+    st.textContent = `${ok} von ${auswahl.length} gesendet.${halt === 'unklar' ? ' Danach angehalten, damit nichts doppelt rausgeht.' : ''}`;
+    zu.forEach(b => b.disabled = false); los.disabled = !knopf();
+    if (ok) toast(ok === 1 ? 'Bewerbung verschickt' : `${ok} Bewerbungen verschickt`);
+    renderSoon(); if (state.openId) { renderDrawerHead(); renderDrawerBody(); }
+  };
 }
 function dateienPanel() {
   const ds = P().dateien || [];
@@ -3253,6 +3461,10 @@ document.addEventListener('click', async e => {
     if (act === 'einladung') return einladungModal(state.openId || '');
     if (act === 'ki-tab' && state.openId) { state.drawerTab = 'ki'; renderDrawerHead(); renderDrawerBody(true); return; }
     if (act === 'mark-beworben' && state.openId) { setStatus(state.openId, 'beworben'); renderDrawerBody(); return; }
+    if (act === 'pr-frei' || act === 'pr-neu' || act === 'pr-vorversion') return pruefAktion(act);
+    if (act === 'bereit-alle') { state.zeigBereitAlle = !state.zeigBereitAlle; renderSoon(); return; }
+    if (act === 'sammel-mail') return sammelMailModal();
+    if (act === 'gmail-api' && state.openId) return sammelMailModal([state.openId]);
     if (act === 'verwerfen' && state.openId) {
       const id = state.openId; const a = state.apps[id];
       a.verworfen = true; a.verlauf.push({id:uid(), datum:today(), typ:'notiz', text:'Vorschlag verworfen'});

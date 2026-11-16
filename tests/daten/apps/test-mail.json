@@ -34,5 +34,25 @@
   "firma": 70,
   "gesamt": 70,
   "fazit": "Gut."
+ },
+ "pruefung": {
+  "datum": "2026-11-16",
+  "freigabe": true,
+  "note": 94,
+  "maengel": [
+   {
+    "schwere": "gering",
+    "wo": "anschreiben",
+    "zitat": "Mit freundlichen Grüßen",
+    "problem": "Schluss etwas knapp",
+    "vorschlag": "Gesprächswunsch konkreter"
+   }
+  ],
+  "fragen": [
+   "Die Anzeige fragt nach dem frühesten Eintritt."
+  ],
+  "staerke": "Das Beispiel aus der Buchhaltung passt genau zur Kernaufgabe.",
+  "fassung": "3deee232e9cc",
+  "runden": 0
  }
 }

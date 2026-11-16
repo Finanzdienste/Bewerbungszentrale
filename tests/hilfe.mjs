@@ -26,19 +26,24 @@ export async function schliessen() { if (browser) await browser.close(); browser
 /**
  * daten: Ordner mit dem Inhalt des Daten-Repos (Standard tests/daten).
  * speicher: localStorage vor dem Start (z. B. Zugang). ki: (prompt) => Antworttext.
+ * google: Google-Anmeldung und Gmail-API nachbilden; gesendete Mails landen in gmail.
  */
-export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false, graphql = true } = {}) {
+export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false, graphql = true, google = false } = {}) {
   const b = await browserStarten();
   const ctx = await b.newContext({ viewport: { width: breite, height: hoehe }, serviceWorkers: 'block', acceptDownloads: true, permissions: ['clipboard-read', 'clipboard-write'] });
   const gh = githubAttrappe(ladeOrdner(daten), { graphql });
   const kia = kiAttrappe(ki);
-  const fehler = [];
+  const fehler = [], gmail = [];
   const vorher = speicher === undefined ? { 'bewerbungszentrale.zugang.v1': JSON.stringify({ token: gh.token }), 'bewerbungszentrale.ki.v1': JSON.stringify({ schluessel: 'sk-ant-test-00000000000000000000000000' }) } : speicher;
-  await ctx.addInitScript(({ vorher, teilen }) => {
+  await ctx.addInitScript(({ vorher, teilen, google }) => {
     if (!sessionStorage.getItem('bz-test-start')) { for (const [k, v] of Object.entries(vorher)) localStorage.setItem(k, v); sessionStorage.setItem('bz-test-start', '1'); }
     if (!navigator.clipboard) { let z = ''; Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (t) => { z = String(t); }, readText: async () => z } }); } // http://app.test ist kein sicherer Kontext
     if (teilen) { navigator.canShare = () => true; navigator.share = async (d) => { window.__geteilt = { dateien: (d.files || []).map((f) => ({ name: f.name, groesse: f.size, typ: f.type })), text: d.text, title: d.title }; }; }
-  }, { vorher, teilen });
+    if (google) {
+      window.google = { accounts: { oauth2: { hasGrantedAllScopes: () => true,
+        initTokenClient: (c) => ({ requestAccessToken: () => { window.__anmeldungen = (window.__anmeldungen || 0) + 1; setTimeout(() => c.callback({ access_token: 'ya29.test-token', expires_in: 3599 }), 20); } }) } } };
+    }
+  }, { vorher, teilen, google });
   await ctx.route('**/*', async (route) => {
     const u = new URL(route.request().url());
     if (u.hostname === 'app.test') {
@@ -50,6 +55,11 @@ export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), spe
     }
     if (u.hostname === 'api.github.com') return gh.handler(route);
     if (u.hostname === 'api.anthropic.com') return kia.handler(route);
+    if (u.hostname === 'gmail.googleapis.com') {
+      const r = route.request();
+      gmail.push({ url: u.href, methode: r.method(), kopf: r.headers(), mime: r.postData() || '' });
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'msg-' + gmail.length, threadId: 'thread-' + gmail.length, labelIds: ['SENT'] }) });
+    }
     for (const [re, datei] of CDN) if (re.test(u.href)) return route.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(NM, datei)) });
     if (u.hostname === 'fonts.googleapis.com' || u.hostname === 'fonts.gstatic.com') return route.fulfill({ status: 200, contentType: 'text/css', body: '' });
     return route.fulfill({ status: 404, body: '' });
@@ -58,7 +68,7 @@ export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), spe
   seite.on('pageerror', (e) => fehler.push('Seitenfehler: ' + e.message));
   seite.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) fehler.push('Konsole: ' + m.text().slice(0, 300)); });
   await seite.goto('http://app.test/Bewerbungszentrale/');
-  return { seite, ctx, gh, ki: kia, fehler };
+  return { seite, ctx, gh, ki: kia, fehler, gmail };
 }
 
 export const warte = (ms) => new Promise((r) => setTimeout(r, ms));

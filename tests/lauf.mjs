@@ -169,6 +169,100 @@ test('ohne-ki', async () => {
   assert.ok(gh.token);
 });
 
+const bis = async (f, ms = 10000) => { for (let i = 0; i < ms / 250; i++) { if (f()) return true; await warte(250); } return false; };
+const GOOGLE_ID = '123456789012-abcdefghijklmnop.apps.googleusercontent.com';
+const mimeTeile = (mime) => {
+  const kopf = mime.split('\r\n\r\n')[0];
+  const betreff = (kopf.match(/^Subject: ((?:.*)(?:\r\n .*)*)/m) || [])[1].split('\r\n ').map((w) => (w.match(/^=\?UTF-8\?B\?(.+)\?=$/) ? Buffer.from(RegExp.$1, 'base64').toString('utf8') : w)).join('');
+  const grenze = (kopf.match(/boundary="([^"]+)"/) || [])[1];
+  const teile = mime.split('--' + grenze).slice(1, -1).map((t) => { const [k, ...r] = t.replace(/^\r\n/, '').split('\r\n\r\n'); return { kopf: k, inhalt: Buffer.from(r.join('\r\n\r\n').replace(/\s+/g, ''), 'base64') }; });
+  return { kopf, betreff, teile };
+};
+
+test('gegenlesen', async () => {
+  const { seite, gh, fehler } = await appStarten();
+  await seite.waitForSelector('#bereitPanel', { timeout: 20000 });
+  const panel = await seite.textContent('#bereitPanel');
+  assert.match(panel, /1 gegengelesen und freigegeben/);
+  assert.match(panel, /Brauchen deinen Blick \(1\)/);
+  assert.equal(await seite.locator('#bereitPanel ul.todo').first().locator('[data-open="test-mail"]').count(), 1, 'freigegebene Mail-Bewerbung steht oben');
+  assert.equal(await seite.locator('#bereitPanel [data-act="sammel-mail"]').count(), 1);
+  await zuAkte(seite, 'test-mail');
+  assert.equal(await seite.getAttribute('#pruefung', 'class'), 'pruef frei', 'App erkennt dieselbe Fassung wie der Morgenlauf');
+  assert.match(await seite.textContent('#pruefung'), /Note 94.*frühesten Eintritt/s);
+  await seite.click('#drClose');
+  await zuAkte(seite, 'test-portal');
+  assert.match(await seite.getAttribute('#pruefung', 'class'), /maengel/);
+  assert.match(await seite.textContent('#pruefung'), /zehn Jahre Erfahrung/);
+  await seite.click('[data-act="pr-vorversion"]');
+  await seite.waitForSelector('#pruefung.geaendert', { timeout: 5000 });
+  assert.ok(await bis(() => /VORVERSION/.test(json(gh, 'apps/test-portal.json').anschreiben || '')), 'Vorversion gespeichert');
+  assert.doesNotMatch(json(gh, 'apps/test-portal.json').vorversion.anschreiben, /VORVERSION/, 'die bisherige Fassung ist jetzt die Vorversion');
+  await seite.click('#pruefung [data-act="pr-frei"]');
+  await seite.waitForSelector('#pruefung.frei', { timeout: 5000 });
+  assert.ok(await bis(() => json(gh, 'apps/test-portal.json').pruefung?.manuell === true));
+  assert.deepEqual(fehler, []);
+});
+
+test('gegenlesen-neu', async () => {
+  const { seite, gh, fehler } = await appStarten();
+  await zuAkte(seite, 'test-portal');
+  await seite.click('#pruefung [data-act="pr-neu"]');
+  assert.ok(await bis(() => json(gh, 'apps/test-portal.json').ueberarbeiten?.manuell === true));
+  assert.match(json(gh, 'apps/test-portal.json').ueberarbeiten.maengel[0], /zehn Jahre Erfahrung.*belegten zwei Jahre/);
+  assert.match(await seite.textContent('#pruefung'), /nächste Morgenlauf schreibt/);
+  assert.deepEqual(fehler, []);
+});
+
+test('gmail-einrichten', async () => {
+  const { seite, fehler } = await appStarten({ google: true });
+  await zuAkte(seite, 'test-mail');
+  await seite.click('[data-act="gmail-api"]');
+  await seite.waitForSelector('#ge-id');
+  await seite.fill('#ge-id', 'keine-client-id');
+  await seite.click('#ge-ok');
+  assert.match(await seite.textContent('#ge-st'), /sieht nicht richtig aus/);
+  await seite.fill('#ge-id', GOOGLE_ID);
+  await seite.click('#ge-ok');
+  await seite.waitForSelector('#sm-los:not([disabled])', { timeout: 5000 });
+  assert.equal(await seite.evaluate(() => JSON.parse(localStorage.getItem('bewerbungszentrale.google.v1')).clientId), GOOGLE_ID);
+  assert.match(await seite.textContent('#sm-los'), /Jetzt senden/);
+  assert.deepEqual(fehler, []);
+});
+
+test('sammel-mail', async () => {
+  const { seite, gh, gmail, fehler } = await appStarten({ google: true });
+  await seite.goto(`http://app.test/Bewerbungszentrale/#google=${GOOGLE_ID}`);
+  await seite.reload();
+  await seite.waitForSelector('#bereitPanel [data-act="sammel-mail"]', { timeout: 20000 });
+  await seite.click('#bereitPanel [data-act="sammel-mail"]');
+  await seite.waitForSelector('#sm-los:not([disabled])', { timeout: 5000 });
+  assert.equal(await seite.locator('#sm-liste li').count(), 1, 'nur freigegebene Mail-Bewerbungen');
+  assert.equal(gmail.length, 0, 'nichts gesendet vor dem Tippen');
+  await seite.click('#sm-los');
+  const ok = await bis(() => json(gh, 'apps/test-mail.json').status === 'beworben', 60000);
+  if (!ok) console.log('  Stand:', await seite.textContent('#modalRoot').catch(() => '?'), fehler, gmail.length);
+  assert.ok(ok, 'Akte steht auf beworben');
+  assert.equal(gmail.length, 1);
+  const g = gmail[0];
+  assert.match(g.url, /^https:\/\/gmail\.googleapis\.com\/upload\/gmail\/v1\/users\/me\/messages\/send\?uploadType=media$/);
+  assert.equal(g.kopf['content-type'], 'message/rfc822');
+  assert.equal(g.kopf.authorization, 'Bearer ya29.test-token');
+  const m = mimeTeile(g.mime);
+  assert.match(m.kopf, /^To: bewerbung@example\.org\r\n/);
+  assert.equal(m.betreff, 'Bewerbung als Energiecontroller (m/w/d), Max Muster');
+  assert.equal(m.teile.length, 2);
+  assert.match(m.teile[0].inhalt.toString('utf8'), /^Sehr geehrte Frau Test,\r\n/);
+  assert.match(m.teile[1].kopf, /Content-Type: application\/pdf; name="Bewerbung_Max_Muster_[^"]+\.pdf"/);
+  assert.equal(m.teile[1].inhalt.subarray(0, 5).toString(), '%PDF-');
+  const d = json(gh, 'apps/test-mail.json');
+  assert.equal(d.gmailThreadId, 'thread-1');
+  assert.ok(d.verlauf.some((v) => v.typ === 'mail' && /per Gmail an bewerbung@example\.org/.test(v.text)));
+  assert.match(await seite.textContent('#sm-st'), /1 von 1 gesendet/);
+  assert.equal(await seite.evaluate(() => window.__anmeldungen), 1);
+  assert.deepEqual(fehler, []);
+});
+
 test('oeffentlich', async () => {
   // Im öffentlichen Repo stehen keine persönlichen Daten
   const verboten = [/Kruse/i, /Walddörfer/i, /alice-dsl/i, /krusetobias/i, /o2mail/i, /PxCY3xsfP6mMNvqdAa2MzF/];

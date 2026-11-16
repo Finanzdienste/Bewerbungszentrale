@@ -35,5 +35,37 @@
   "firma": 80,
   "gesamt": 80,
   "fazit": "Passt gut."
- }
+ },
+ "vorversion": {
+  "anschreiben": "Bewerbung als Testerin\n\nSehr geehrte Damen und Herren,\n\nVORVERSION des Briefes.\n\nMit freundlichen Grüßen\nMax Muster",
+  "betreff": "",
+  "mailtext": "",
+  "bewerbungsweg": "portal",
+  "cv": {
+   "titel": null,
+   "profil": null,
+   "punkte": null,
+   "kenntnisse": null
+  },
+  "datum": "2026-11-15"
+ },
+ "pruefung": {
+  "datum": "2026-11-16",
+  "freigabe": false,
+  "note": 71,
+  "maengel": [
+   {
+    "schwere": "hoch",
+    "wo": "anschreiben",
+    "zitat": "zehn Jahre Erfahrung",
+    "problem": "Steht so nicht im Profil",
+    "vorschlag": "Auf die belegten zwei Jahre ändern"
+   }
+  ],
+  "fragen": [],
+  "staerke": "Klarer Einstieg.",
+  "fassung": "5c5c97cfef5d",
+  "runden": 2
+ },
+ "pruefRunden": 2
 }

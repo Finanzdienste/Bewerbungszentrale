@@ -42,11 +42,22 @@ Aufs Handy kommt er über das Einrichten-Fenster beim ersten Start oder per
 Link `…/Bewerbungszentrale/#zugang=<Token>&ki=<KI-Schlüssel>`. Später ändern:
 `…/Bewerbungszentrale/#einrichten`.
 
+Senden per Gmail: eine eigene Google-Cloud-App (Gmail API an, OAuth-Client
+„Webanwendung“ mit der Pages-Adresse als JavaScript-Quelle, die Person als
+Testnutzer). Die Client-ID kommt per Link `…/#google=<Client-ID>` oder über
+das Fenster beim ersten Senden. Die App fragt nur `gmail.send` an, das
+Zugriffstoken bleibt im Speicher der Seite. Gesendet wird nur, wenn die Person
+im Senden-Fenster tippt; in der Sammelliste stehen nur Bewerbungen, die das
+Gegenlesen freigegeben hat.
+
 ## Läufe
 
-Der tägliche Morgenlauf (Stellensuche, Postfach, Kalender, Unterlagen) und
-die Vorbereitungs-Läufe sind Claude-Routinen. Sie lesen und schreiben das
-Daten-Repo mit `werkzeug/db.py` (dort beschrieben).
+Der tägliche Morgenlauf (Stellensuche, Bewertung, Unterlagen, Gegenlesen) ist
+eine GitHub Action im Daten-Repo, das Postfach eine Claude-Sitzung. Beide
+schreiben das Daten-Repo mit `werkzeug/db.py` (dort beschrieben). Das Ergebnis
+des Gegenlesens steht in `pruefung` der Akte, mit dem Fingerabdruck `fassung`
+der Unterlagen (SHA-1 über Pythons `json.dumps(sort_keys=True)`, die App rechnet
+ihn genauso nach und merkt so, wenn seitdem etwas geändert wurde).
 
 ## Tests
 
