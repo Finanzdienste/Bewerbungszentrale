@@ -27,10 +27,10 @@ export async function schliessen() { if (browser) await browser.close(); browser
  * daten: Ordner mit dem Inhalt des Daten-Repos (Standard tests/daten).
  * speicher: localStorage vor dem Start (z. B. Zugang). ki: (prompt) => Antworttext.
  */
-export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false } = {}) {
+export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false, graphql = true } = {}) {
   const b = await browserStarten();
   const ctx = await b.newContext({ viewport: { width: breite, height: hoehe }, serviceWorkers: 'block', acceptDownloads: true });
-  const gh = githubAttrappe(ladeOrdner(daten));
+  const gh = githubAttrappe(ladeOrdner(daten), { graphql });
   const kia = kiAttrappe(ki);
   const fehler = [];
   const vorher = speicher === undefined ? { 'bewerbungszentrale.zugang.v1': JSON.stringify({ token: gh.token }), 'bewerbungszentrale.ki.v1': JSON.stringify({ schluessel: 'sk-ant-test-00000000000000000000000000' }) } : speicher;

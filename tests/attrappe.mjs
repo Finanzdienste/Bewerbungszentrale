@@ -24,7 +24,7 @@ export function ladeOrdner(ordner) {
   return dateien;
 }
 
-export function githubAttrappe(dateien, { owner = 'Finanzdienste', repo = 'Bewerbungszentrale-Daten', token = 'github_pat_test_0000000000000000000000' } = {}) {
+export function githubAttrappe(dateien, { owner = 'Finanzdienste', repo = 'Bewerbungszentrale-Daten', token = 'github_pat_test_0000000000000000000000', graphql = true } = {}) {
   const log = [];
   const shas = () => new Map([...dateien].map(([p, b]) => [p, blobSha(b)]));
   const nachSha = (sha) => { for (const [p, b] of dateien) if (blobSha(b) === sha) return b; return null; };
@@ -45,6 +45,7 @@ export function githubAttrappe(dateien, { owner = 'Finanzdienste', repo = 'Bewer
       return json(route, 200, { sha: 'baum', tree: [...s].map(([p, sha]) => ({ path: p, type: 'blob', sha })), truncated: false }, { etag, 'access-control-expose-headers': 'ETag' });
     }
     if (u.pathname === '/graphql' && methode === 'POST') {
+      if (!graphql) return json(route, 403, { message: 'Resource not accessible by personal access token' });
       const q = JSON.parse(req.postData()).query;
       const repoDaten = {};
       for (const m of q.matchAll(/(f\d+):object\(oid:"([0-9a-f]{40})"\)/g)) {

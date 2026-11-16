@@ -210,21 +210,39 @@
 
   /* ------------------------------------------------ Laden */
   const b64ZuText = (b64) => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g, '')), (c) => c.charCodeAt(0)));
+  let ohneGraphql = false;
+  async function blobEinzeln(sha) {
+    const rb = await gh(`/repos/${DATEN.owner}/${DATEN.repo}/git/blobs/${sha}`);
+    if (rb.status === 401) throw fehler('revoked');
+    if (!rb.ok) throw fehler('unavailable', `Blob ${rb.status}`);
+    const b = await rb.json();
+    return b.encoding === 'base64' ? b64ZuText(b.content) : b.content;
+  }
+  async function einzelnHolen(shas, out) {
+    for (let i = 0; i < shas.length; i += 8) {
+      const teil = shas.slice(i, i + 8);
+      const texte = await Promise.all(teil.map(blobEinzeln));
+      teil.forEach((s, k) => out.set(s, texte[k]));
+    }
+  }
   async function inhalteHolen(shas) {
     const out = new Map();
+    if (ohneGraphql) { await einzelnHolen(shas, out); return out; }
     for (let i = 0; i < shas.length; i += 40) {
       const teil = shas.slice(i, i + 40);
       const q = `query{repository(owner:"${DATEN.owner}",name:"${DATEN.repo}"){${teil.map((s, j) => `f${j}:object(oid:"${s}"){...on Blob{text isTruncated isBinary}}`).join(' ')}}}`;
       const r = await gh('/graphql', { method: 'POST', body: JSON.stringify({ query: q }) });
-      if (!r.ok) throw fehler(r.status === 401 ? 'revoked' : 'unavailable', `GraphQL ${r.status}`);
-      const j = await r.json();
-      const repo = j?.data?.repository || {};
+      if (r.status === 401) throw fehler('revoked');
+      const j = r.ok ? await r.json().catch(() => null) : null;
+      if (!j?.data?.repository) { ohneGraphql = true; await einzelnHolen(shas.slice(i), out); return out; } // GraphQL geht nicht: über REST, je Datei
+      const repo = j.data.repository;
+      const gross = [];
       for (let k = 0; k < teil.length; k++) {
         const o = repo[`f${k}`];
-        if (o && !o.isTruncated && !o.isBinary && typeof o.text === 'string') { out.set(teil[k], o.text); continue; }
-        const rb = await gh(`/repos/${DATEN.owner}/${DATEN.repo}/git/blobs/${teil[k]}`); // groß: einzeln holen
-        if (rb.ok) { const b = await rb.json(); out.set(teil[k], b.encoding === 'base64' ? b64ZuText(b.content) : b.content); }
+        if (o && !o.isTruncated && !o.isBinary && typeof o.text === 'string') out.set(teil[k], o.text);
+        else gross.push(teil[k]); // groß: einzeln holen
       }
+      if (gross.length) await einzelnHolen(gross, out);
     }
     return out;
   }

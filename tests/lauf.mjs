@@ -46,6 +46,14 @@ test('laden', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('ohne-graphql', async () => {
+  const { seite, gh, fehler } = await appStarten({ graphql: false });
+  await seite.goto('http://app.test/Bewerbungszentrale/#liste');
+  await seite.waitForSelector('[data-open="test-mail"]', { timeout: 20000 });
+  assert.ok(gh.log.some((x) => x.includes('/git/blobs/')), 'über REST geladen');
+  assert.deepEqual(fehler, []);
+});
+
 test('schreiben', async () => {
   const { seite, gh, fehler } = await appStarten();
   await zuAkte(seite, 'test-portal');
