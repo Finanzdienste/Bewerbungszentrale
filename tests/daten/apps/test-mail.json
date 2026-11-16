@@ -1,0 +1,38 @@
+{
+ "status": "gemerkt",
+ "maxStufe": 0,
+ "verlauf": [],
+ "termine": [],
+ "aufgaben": [],
+ "unterlagen": {},
+ "mail": {
+  "typ": "nachfassen",
+  "text": ""
+ },
+ "ort": "Hamburg",
+ "kontakt": {
+  "name": "Frau Test",
+  "rolle": "",
+  "email": "bewerbung@example.org",
+  "telefon": ""
+ },
+ "notizen": "",
+ "stellenText": "Aufgaben: Controlling.",
+ "vorschlag": true,
+ "gefundenAm": "2026-11-15",
+ "layout": "modern",
+ "akzent": "petrol",
+ "sprache": "de",
+ "firma": "Klima Beispiel GmbH",
+ "position": "Energiecontroller (m/w/d)",
+ "bewerbungsweg": "email",
+ "anschreiben": "Bewerbung als Energiecontroller (m/w/d)\n\nSehr geehrte Damen und Herren,\n\nseit März 2025 bereite ich bei der Beispiel GmbH den Monatsabschluss vor.\n\nMit freundlichen Grüßen\nMax Muster",
+ "betreff": "Bewerbung als Energiecontroller (m/w/d)",
+ "analyse": {
+  "score": 60,
+  "reiz": 75,
+  "firma": 70,
+  "gesamt": 70,
+  "fazit": "Gut."
+ }
+}

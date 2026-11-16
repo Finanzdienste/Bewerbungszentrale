@@ -1,0 +1,39 @@
+{
+ "status": "gemerkt",
+ "maxStufe": 0,
+ "verlauf": [],
+ "termine": [],
+ "aufgaben": [],
+ "unterlagen": {},
+ "mail": {
+  "typ": "nachfassen",
+  "text": ""
+ },
+ "ort": "Hamburg",
+ "kontakt": {
+  "name": "",
+  "rolle": "",
+  "email": "",
+  "telefon": ""
+ },
+ "notizen": "",
+ "stellenText": "Aufgaben: Controlling.",
+ "vorschlag": true,
+ "gefundenAm": "2026-11-15",
+ "layout": "modern",
+ "akzent": "petrol",
+ "sprache": "de",
+ "firma": "Hafen Muster AG",
+ "position": "Controller (m/w/d)",
+ "bewerbungsweg": "portal",
+ "link": "https://example.org/stelle/1",
+ "fristBis": "2026-12-01",
+ "anschreiben": "Bewerbung als Controller (m/w/d)\n\nSehr geehrte Damen und Herren,\n\nseit März 2025 bereite ich bei der Beispiel GmbH den Monatsabschluss vor.\n\nMit freundlichen Grüßen\nMax Muster",
+ "analyse": {
+  "score": 70,
+  "reiz": 85,
+  "firma": 80,
+  "gesamt": 80,
+  "fazit": "Passt gut."
+ }
+}

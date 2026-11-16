@@ -1,0 +1,37 @@
+{
+ "status": "gemerkt",
+ "maxStufe": 0,
+ "verlauf": [],
+ "termine": [],
+ "aufgaben": [],
+ "unterlagen": {},
+ "mail": {
+  "typ": "nachfassen",
+  "text": ""
+ },
+ "ort": "Hamburg",
+ "kontakt": {
+  "name": "",
+  "rolle": "",
+  "email": "",
+  "telefon": ""
+ },
+ "notizen": "",
+ "stellenText": "Aufgaben: Controlling.",
+ "vorschlag": true,
+ "gefundenAm": "2026-11-15",
+ "layout": "modern",
+ "akzent": "petrol",
+ "sprache": "de",
+ "firma": "Ohne Brief KG",
+ "position": "Datenanalyst (m/w/d)",
+ "bewerbungsweg": "portal",
+ "anschreiben": "",
+ "analyse": {
+  "score": 50,
+  "reiz": 60,
+  "firma": 50,
+  "gesamt": 56,
+  "fazit": ""
+ }
+}

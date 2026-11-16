@@ -1,0 +1,21 @@
+{
+ "items": [
+  {
+   "key": "forschung-muster",
+   "name": "Forschung Muster",
+   "score": 75,
+   "n": 1,
+   "agentur": false,
+   "bereich": "Forschung",
+   "gruende": [
+    "Meer"
+   ],
+   "jobs": [
+    "r-1"
+   ],
+   "lat": 53.56,
+   "lon": 9.98,
+   "ort": "Hamburg"
+  }
+ ]
+}

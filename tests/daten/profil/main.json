@@ -1,0 +1,172 @@
+{
+ "name": "Max Muster",
+ "email": "max@example.org",
+ "telefon": "040 000000",
+ "adresse": "Musterweg 1, 20095 Hamburg",
+ "titel": "Controlling",
+ "zielrolle": "Controller",
+ "kurzprofil": "Test",
+ "skills": "Excel",
+ "lebenslauf": "Erfunden.",
+ "gehalt": 60000,
+ "eintritt": "2027-03-01",
+ "arbeitszeit": "Vollzeit",
+ "ton": "modern",
+ "sprache": "Deutsch",
+ "heim": {
+  "lat": 53.55,
+  "lon": 9.99
+ },
+ "suche": {
+  "aktiv": true,
+  "begriffe": [
+   "Controller"
+  ],
+  "orte": [
+   "Hamburg"
+  ],
+  "umkreis": 30,
+  "minScore": 70
+ },
+ "cv": {
+  "titel": "Controlling und Daten",
+  "profil": "Erfundenes Profil für Tests.",
+  "stationen": [
+   {
+    "id": "m",
+    "von": "03/2025",
+    "bis": "heute",
+    "titel": "Sachbearbeiter Controlling",
+    "firma": "Beispiel GmbH",
+    "ort": "Hamburg",
+    "info": "",
+    "punkte": [
+     "Monatsabschluss mit Excel vorbereitet",
+     "Lieferantendaten für Meldungen erhoben"
+    ]
+   },
+   {
+    "id": "s",
+    "von": "09/2021",
+    "bis": "01/2022",
+    "titel": "Praktikant Einkauf",
+    "firma": "Muster AG",
+    "ort": "Musterstadt",
+    "info": "",
+    "punkte": [
+     "Angebote verglichen"
+    ]
+   }
+  ],
+  "ausbildung": [
+   {
+    "id": "b",
+    "von": "2018",
+    "bis": "2022",
+    "titel": "Bachelor BWL",
+    "firma": "Hochschule Muster",
+    "ort": "Musterstadt",
+    "punkte": [
+     "Note 2,0"
+    ]
+   }
+  ],
+  "weiterbildung": [],
+  "kenntnisse": [
+   {
+    "gruppe": "Werkzeuge",
+    "eintraege": [
+     "Excel",
+     "SQL"
+    ]
+   }
+  ],
+  "sprachen": [
+   [
+    "Deutsch",
+    "Muttersprache"
+   ],
+   [
+    "Englisch",
+    "C1"
+   ]
+  ],
+  "interessen": "Lesen"
+ },
+ "cv_en": {
+  "titel": "Controlling und Daten",
+  "profil": "Erfundenes Profil für Tests.",
+  "stationen": [
+   {
+    "id": "m",
+    "von": "03/2025",
+    "bis": "heute",
+    "titel": "Sachbearbeiter Controlling",
+    "firma": "Beispiel GmbH",
+    "ort": "Hamburg",
+    "info": "",
+    "punkte": [
+     "Monatsabschluss mit Excel vorbereitet",
+     "Lieferantendaten für Meldungen erhoben"
+    ]
+   },
+   {
+    "id": "s",
+    "von": "09/2021",
+    "bis": "01/2022",
+    "titel": "Praktikant Einkauf",
+    "firma": "Muster AG",
+    "ort": "Musterstadt",
+    "info": "",
+    "punkte": [
+     "Angebote verglichen"
+    ]
+   }
+  ],
+  "ausbildung": [
+   {
+    "id": "b",
+    "von": "2018",
+    "bis": "2022",
+    "titel": "Bachelor BWL",
+    "firma": "Hochschule Muster",
+    "ort": "Musterstadt",
+    "punkte": [
+     "Note 2,0"
+    ]
+   }
+  ],
+  "weiterbildung": [],
+  "kenntnisse": [
+   {
+    "gruppe": "Werkzeuge",
+    "eintraege": [
+     "Excel",
+     "SQL"
+    ]
+   }
+  ],
+  "sprachen": [
+   [
+    "Deutsch",
+    "Muttersprache"
+   ],
+   [
+    "Englisch",
+    "C1"
+   ]
+  ],
+  "interessen": "Lesen"
+ },
+ "fotoAn": false,
+ "dateien": [
+  {
+   "id": "0123456789abcdef0123456789abcdef",
+   "url": "/_blob/0123456789abcdef0123456789abcdef",
+   "name": "Arbeitszeugnis_Max_Muster.pdf",
+   "typ": "arbeitszeugnis",
+   "mappe": true,
+   "groesse": 1000
+  }
+ ]
+}
