@@ -221,8 +221,8 @@ test('gmail-einrichten', async () => {
   await seite.waitForSelector('#ge-id');
   await seite.fill('#ge-id', 'keine-client-id');
   await seite.click('#ge-ok');
-  assert.match(await seite.textContent('#ge-st'), /sieht nicht richtig aus/);
-  await seite.fill('#ge-id', GOOGLE_ID);
+  assert.match(await seite.textContent('#ge-st'), /Darin steckt keine Client-ID/);
+  await seite.fill('#ge-id', ` Client-ID: ${GOOGLE_ID.slice(0, 20)}\u200b${GOOGLE_ID.slice(20).replace('abcdef', 'ABCDEF')}\n`); // so kommt es beim Einfügen am Handy manchmal an
   await seite.click('#ge-ok');
   await seite.waitForSelector('#sm-los:not([disabled])', { timeout: 5000 });
   assert.equal(await seite.evaluate(() => JSON.parse(localStorage.getItem('bewerbungszentrale.google.v1')).clientId), GOOGLE_ID);

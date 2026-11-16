@@ -1843,13 +1843,13 @@ function gmailEinrichtenModal(ids) {
         <li>„Clients“ → Client erstellen → Webanwendung. Autorisierte JavaScript-Quelle: <code>${esc(location.origin)}</code></li>
         <li>Die Client-ID kopieren und hier einfügen.</li>
       </ol>
-      <label class="fld" for="ge-id"><span>Client-ID</span><input class="in" id="ge-id" autocomplete="off" spellcheck="false" placeholder="…apps.googleusercontent.com"></label>
+      <label class="fld" for="ge-id"><span>Client-ID</span><input class="in" id="ge-id" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url" placeholder="…apps.googleusercontent.com"></label>
       <span class="ki-status" id="ge-st"></span>
     </div>
     <div class="modal-foot"><button class="btn" type="button" data-mclose>Abbrechen</button><button class="btn primary" type="button" id="ge-ok">Speichern</button></div>`);
   $$('[data-mclose]', m).forEach(b => b.onclick = closeModal);
   $('#ge-ok', m).onclick = () => {
-    if (!GMAIL.einrichten($('#ge-id', m).value)) { $('#ge-st', m).textContent = 'Die Client-ID sieht nicht richtig aus. Sie endet auf .apps.googleusercontent.com.'; $('#ge-st', m).classList.add('err'); return; }
+    if (!GMAIL.einrichten($('#ge-id', m).value)) { $('#ge-st', m).textContent = 'Darin steckt keine Client-ID. Sie sieht so aus: 123456789012-abc…xyz.apps.googleusercontent.com (Zahlen, Bindestrich, Buchstaben und Ziffern). Nicht den Clientschlüssel nehmen, der beginnt mit GOCSPX.'; $('#ge-st', m).classList.add('err'); return; }
     closeModal(); sammelMailModal(ids);
   };
 }

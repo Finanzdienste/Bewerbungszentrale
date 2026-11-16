@@ -44,6 +44,8 @@
   const TOKEN_MUSTER = /^[A-Za-z0-9_]{20,255}$/;
   const GOOGLE = 'bewerbungszentrale.google.v1';
   const GOOGLE_MUSTER = /^[0-9]{6,20}-[a-z0-9]{10,64}\.apps\.googleusercontent\.com$/;
+  // Client-ID aus dem, was eingefügt wurde: verträgt Leerzeichen, Zeilenumbrüche, unsichtbare Zeichen, Großbuchstaben und Text drumherum
+  const googleId = (t) => (String(t || '').replace(/[\s\u00ad\u200b-\u200f\u2060\ufeff]+/g, '').toLowerCase().match(/[0-9]{6,20}-[a-z0-9]{10,64}\.apps\.googleusercontent\.com/) || [''])[0];
 
   const lies = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } };
   const schreib = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } };
@@ -57,7 +59,7 @@
     const t = wert('zugang'), k = wert('ki');
     if (TOKEN_MUSTER.test(t)) schreib(ZUGANG, { token: t, stand: new Date().toISOString() });
     if (KI_MUSTER.test(k)) schreib(KI, { schluessel: k, stand: new Date().toISOString() });
-    if (GOOGLE_MUSTER.test(wert('google'))) schreib(GOOGLE, { clientId: wert('google'), stand: new Date().toISOString() });
+    if (googleId(wert('google'))) schreib(GOOGLE, { clientId: googleId(wert('google')), stand: new Date().toISOString() });
     try { history.replaceState(null, '', location.pathname + location.search); } catch { /* egal */ }
   }
   linkAusAdresse();
@@ -549,7 +551,7 @@
     }
     return {
       eingerichtet: () => !!clientId(),
-      einrichten: (id) => { id = String(id || '').trim(); return GOOGLE_MUSTER.test(id) && schreib(GOOGLE, { clientId: id, stand: new Date().toISOString() }); },
+      einrichten: (id) => { id = googleId(id); return !!id && schreib(GOOGLE, { clientId: id, stand: new Date().toISOString() }); },
       vorbereiten: async () => { if (!clientId()) return false; await skript(); return true; },
       angemeldet, anmelden, senden,
     };
