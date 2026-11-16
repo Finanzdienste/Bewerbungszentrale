@@ -298,6 +298,22 @@ test('gmail-fehler', async () => {
   assert.deepEqual(fehler.filter((f) => !/403/.test(f)), []);
 });
 
+test('linkedin', async () => {
+  const { seite, gh, ki, fehler } = await appStarten({ ki: async () => 'Hallo [Vorname], ich arbeite im Controlling und interessiere mich für Ihr Team. Hätten Sie 15 Minuten für einen kurzen Austausch? Viele Grüße, Max Muster' });
+  await zuAkte(seite, 'test-portal');
+  await seite.click('#netzwerk summary');
+  const href = await seite.getAttribute('#li-suche', 'href');
+  assert.match(href, /^https:\/\/www\.linkedin\.com\/search\/results\/people\/\?keywords=Hafen%20Muster/);
+  await seite.click('[data-act="li-ki"]');
+  await seite.waitForSelector('#li-text', { timeout: 15000 });
+  assert.match(await seite.inputValue('#li-text'), /^Hallo \[Vorname\],/);
+  assert.match(ki.anfragen.at(-1).body.messages.at(-1).content.toString(), /höchstens 300 Zeichen/i);
+  await seite.click('[data-act="li-angeschrieben"]');
+  assert.ok(await bis(() => (json(gh, 'apps/test-portal.json').verlauf || []).some((v) => /LinkedIn/.test(v.text))));
+  assert.ok(json(gh, 'apps/test-portal.json').netzwerk?.nachricht);
+  assert.deepEqual(fehler, []);
+});
+
 test('oeffentlich', async () => {
   // Im öffentlichen Repo stehen keine persönlichen Daten
   const verboten = [/Kruse/i, /Walddörfer/i, /alice-dsl/i, /krusetobias/i, /o2mail/i, /PxCY3xsfP6mMNvqdAa2MzF/];

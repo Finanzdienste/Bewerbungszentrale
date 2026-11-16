@@ -1722,7 +1722,49 @@ function bereitHTML(a) {
            <span class="ki-status" id="mappeStatus"></span>
            <div class="ki-row"><button class="btn sm" type="button" data-act="mark-beworben">${ic('check')}Schon beworben</button>${a.vorschlag ? `<button class="btn sm ghost" type="button" data-act="verwerfen">${ic('x')}Nicht interessant</button>` : ''}</div>
            ${portalHTML(a)}`}
+    ${netzwerkHTML(a)}
   </section>`;
+}
+/* ---------- Jemanden aus dem Team finden (LinkedIn) ---------- */
+function liSuche(a) {
+  if (a.netzwerk?.suche) return a.netzwerk.suche;
+  const firma = String(a.firma || '').replace(/\([^)]*\)/g, ' ').replace(/\b(GmbH|AG|KG|SE|mbH|e\.\s?V\.|Co\.|&|und)\b/gi, ' ').replace(/\s+/g, ' ').trim();
+  const bereich = a.bereich && !/sonstig/i.test(a.bereich) ? a.bereich.split(/\s*&\s*/)[0] : '';
+  return [firma, bereich].filter(Boolean).join(' ');
+}
+function netzwerkHTML(a) {
+  if (a.status !== 'gemerkt' || a.verworfen || a.beispiel) return '';
+  const suche = liSuche(a), text = a.netzwerk?.nachricht || '';
+  const url = 'https://www.linkedin.com/search/results/people/?keywords=' + encodeURIComponent(suche) + '&origin=GLOBAL_SEARCH_HEADER';
+  const schon = (a.verlauf || []).some(v => /LinkedIn/.test(v.text || '') && /angeschrieben/.test(v.text || ''));
+  const job = kiJobs.has(`${state.openId}:li`);
+  return `<details class="manuell" id="netzwerk"><summary>Jemanden aus dem Team finden${schon ? ' (schon angeschrieben)' : ''}</summary>
+    <p class="desc" style="margin-top:6px">Eine kurze Nachricht an jemanden aus dem Team bringt oft mehr als die Bewerbung allein. Am besten jemand mit ähnlicher Rolle oder die Teamleitung, nicht die Personalabteilung.</p>
+    <div class="ki-row"><a class="btn" id="li-suche" href="${esc(url)}" target="_blank" rel="noopener">${ic('search')}Auf LinkedIn suchen: ${esc(suche)}</a></div>
+    ${text ? `<label class="fld" for="li-text" style="margin-top:8px"><span>Nachricht (${[...text].length} Zeichen, [Vorname] ersetzen)</span><textarea class="in" id="li-text" rows="5" readonly>${esc(text)}</textarea></label>
+      <div class="ki-row" style="margin-top:4px"><button class="btn sm" type="button" data-copy="li-text">${ic('copy')}Nachricht kopieren</button><button class="btn sm" type="button" data-act="li-angeschrieben">${ic('check')}Angeschrieben</button></div>
+      <p class="muted" style="font-size:var(--t-xs);margin-top:6px">Ohne LinkedIn Premium sind persönliche Notizen bei Kontaktanfragen oft begrenzt. Dann ohne Notiz vernetzen und die Nachricht nach der Annahme schicken.</p>`
+      : `<div class="ki-row" style="margin-top:8px"><button class="btn sm ki" type="button" data-act="li-ki" ${job || kiState !== 'ok' ? 'disabled' : ''}>${ic('spark')}${job ? 'Wird geschrieben …' : 'Nachricht schreiben lassen'}</button><button class="btn sm" type="button" data-act="li-angeschrieben">${ic('check')}Angeschrieben</button><span class="ki-status" id="st-li"></span></div>`}
+  </details>`;
+}
+async function liNachrichtErstellen() {
+  const id = state.openId; const a0 = state.apps[id]; if (!a0 || !KI) return;
+  const key = `${id}:li`; if (kiJobs.has(key)) return;
+  const ctl = new AbortController(); kiJobs.set(key, ctl);
+  const rer = () => { if (state.openId === id && state.drawerTab === 'details') { renderDrawerBody(); const d = $('#netzwerk'); if (d) d.open = true; } };
+  rer();
+  const p = P(); const du = a0.recherche?.anrede === 'du';
+  try {
+    const r = await KI(`Schreib eine kurze LinkedIn-Nachricht an jemanden aus dem Team, das diese Stelle besetzt. Höchstens 300 Zeichen. Beginne mit „Hallo [Vorname],“. Anrede ${du ? 'du' : 'Sie'}. Inhalt: wer ich bin (ein halber Satz zu meiner jetzigen Arbeit), dass mich genau diese Stelle oder dieses Team interessiert, und die Frage nach 15 Minuten Austausch darüber, wie das Team arbeitet. Nicht nach einem Job oder einer Empfehlung fragen. Ich-Form, sachlich, freundlich, keine Floskeln, keine Gedankenstriche, keine Semikolons. Gib nur den Text aus.
+
+Stelle: ${a0.position || ''} bei ${a0.firma || ''}
+Meine jetzige Arbeit: ${p.kurzprofil || p.zielrolle || ''}
+Mein Name: ${p.name || ''}`, {signal: ctl.signal, cache: false});
+    const a = state.apps[id] || a0;
+    a.netzwerk = {...(a.netzwerk || {}), suche: liSuche(a), nachricht: r.text.trim().slice(0, 600), erstellt: today()};
+    saveApp(id, false);
+  } catch (e) { if (e?.code !== 'cancelled') { kiJobs.delete(key); rer(); setKiStatus('li', esc(kiFehler(e)), true); return; } }
+  kiJobs.delete(key); rer();
 }
 /* ---------- Gegenlesen durch den Morgenlauf ---------- */
 // Fingerabdruck der Unterlagen wie im Morgenlauf (Python: json.dumps(sort_keys=True, ensure_ascii=False), SHA-1, 12 Zeichen).
@@ -3487,6 +3529,8 @@ document.addEventListener('click', async e => {
     if (act === 'bereit-alle') { state.zeigBereitAlle = !state.zeigBereitAlle; renderSoon(); return; }
     if (act === 'sammel-mail') return sammelMailModal();
     if (act === 'gmail-api' && state.openId) return sammelMailModal([state.openId]);
+    if (act === 'li-ki' && state.openId) return liNachrichtErstellen();
+    if (act === 'li-angeschrieben' && state.openId) { const a = state.apps[state.openId]; a.verlauf.push({id: uid(), datum: today(), typ: 'notiz', text: 'Über LinkedIn jemanden aus dem Team angeschrieben'}); saveApp(state.openId); renderDrawerBody(); toast('Vermerkt'); return; }
     if (act === 'verwerfen' && state.openId) {
       const id = state.openId; const a = state.apps[id];
       a.verworfen = true; a.verlauf.push({id:uid(), datum:today(), typ:'notiz', text:'Vorschlag verworfen'});
