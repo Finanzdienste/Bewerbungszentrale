@@ -314,6 +314,23 @@ test('linkedin', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('lesemodus', async () => {
+  const { seite, gh, fehler } = await appStarten({ nurLesen: true });
+  await seite.waitForSelector('#lesemodus', { timeout: 20000 });
+  assert.equal(await seite.locator('[data-act="sammel-mail"]').count(), 0, 'kein Sammelversand im Lesemodus');
+  await zuAkte(seite, 'test-portal');
+  await seite.click('[data-act="mark-beworben"]');
+  await warte(4000);
+  assert.ok(!gh.log.some((x) => x.startsWith('PUT')), 'nichts geschrieben');
+  assert.equal(json(gh, 'apps/test-portal.json').status, 'gemerkt');
+  await seite.click('#drClose');
+  await zuAkte(seite, 'test-mail');
+  await seite.click('details.manuell summary');
+  const [dl] = await Promise.all([seite.waitForEvent('download', { timeout: 60000 }), seite.click('details.manuell [data-act="mappe"]')]);
+  assert.match(dl.suggestedFilename(), /\.pdf$/);
+  assert.deepEqual(fehler, []);
+});
+
 test('oeffentlich', async () => {
   // Im öffentlichen Repo stehen keine persönlichen Daten
   const verboten = [/Kruse/i, /Walddörfer/i, /alice-dsl/i, /krusetobias/i, /o2mail/i, /PxCY3xsfP6mMNvqdAa2MzF/];

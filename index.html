@@ -880,6 +880,7 @@ function renderBanners() {
   if (state.mode === 'gast') out.push(`<div class="banner warn"><span class="grow"><b>Nur zum Ausprobieren.</b> Diese Bewerbungszentrale gehört einer anderen Person. Ihre Daten bleiben privat, und was du hier einträgst, wird nicht gespeichert.</span></div>`);
   if (state.mode === 'local') out.push(`<div class="banner warn"><span class="grow"><b>Speichern ist in dieser Ansicht nicht verfügbar.</b> Öffne die App angemeldet auf claude.ai, damit deine Bewerbungen dauerhaft gesichert werden. Bis dahin gehen Änderungen beim Schließen verloren.</span></div>`);
   if (state.mode === 'db' && !state.loaded && state.slow) out.push(`<div class="banner warn"><span class="grow"><b>Deine Daten sind gerade nicht erreichbar.</b> Die App versucht es im Hintergrund weiter.</span></div>`);
+  if (state.mode === 'db' && window.bzPlattform?.nurLesen?.()) out.push(`<div class="banner info" id="lesemodus"><span class="grow"><b>Nur ansehen.</b> Du kannst alle Bewerbungen öffnen und als PDF laden. Änderungen werden nicht gespeichert.</span></div>`);
   if (state.mode === 'db' && state.dead) out.push(`<div class="banner warn"><span class="grow"><b>Die Verbindung zur Datenbank ist abgebrochen.</b> Lade die Seite neu, um weiterzuarbeiten.</span></div>`);
   const bsp = list().filter(a => a.beispiel).length;
   if (bsp && state.view !== 'profil') out.push(`<div class="banner info"><span class="grow"><b>Das sind ${bsp} Beispiel-Bewerbungen</b> mit erfundenen Firmen, damit du siehst, wie alles funktioniert. Leg deine eigenen an und lösch die Beispiele, wenn du so weit bist.</span><button class="btn sm" data-act="del-bsp" type="button">${ic('trash')}Beispiele löschen</button></div>`);
@@ -1865,7 +1866,7 @@ function bereitPanel() {
   const n = state.zeigBereitAlle ? bereit.length : 8;
   return `<section class="panel" id="bereitPanel"><div class="panel-head"><h2 style="display:flex;gap:8px;align-items:center">${ic('check')}Bereit zum Abschicken</h2><span class="sub">${esc([`${bereit.length} gegengelesen und freigegeben`, perMail.length ? `${perMail.length} per Mail` : '', arbeit ? `${arbeit} in Arbeit` : ''].filter(Boolean).join(' · '))}</span></div>
     ${bereit.length ? `<ul class="todo">${bereit.slice(0, n).map(a => zeile(a)).join('')}</ul>` : `<div class="empty-mini">${ic('clock')}Noch nichts freigegeben. Der Morgenlauf liest jeden Morgen gegen.</div>`}
-    <div class="ki-row" style="margin-top:8px">${bereit.length > 8 ? `<button class="btn sm" type="button" data-act="bereit-alle">${state.zeigBereitAlle ? 'Weniger zeigen' : `Alle ${bereit.length} zeigen`}</button>` : ''}${perMail.length ? `<button class="btn sm primary" type="button" data-act="sammel-mail">${ic('mail')}${perMail.length === 1 ? 'Die Mail-Bewerbung senden' : `Alle ${perMail.length} Mail-Bewerbungen senden`}</button>` : ''}</div>
+    <div class="ki-row" style="margin-top:8px">${bereit.length > 8 ? `<button class="btn sm" type="button" data-act="bereit-alle">${state.zeigBereitAlle ? 'Weniger zeigen' : `Alle ${bereit.length} zeigen`}</button>` : ''}${perMail.length && !window.bzPlattform?.nurLesen?.() ? `<button class="btn sm primary" type="button" data-act="sammel-mail">${ic('mail')}${perMail.length === 1 ? 'Die Mail-Bewerbung senden' : `Alle ${perMail.length} Mail-Bewerbungen senden`}</button>` : ''}</div>
     ${blick.length ? `<h3 style="margin-top:14px;font-size:var(--t-sm)">Brauchen deinen Blick (${blick.length})</h3><ul class="todo">${blick.slice(0, 5).map(a => zeile(a, true)).join('')}</ul>` : ''}
   </section>`;
 }
@@ -1896,6 +1897,7 @@ function gmailEinrichtenModal(ids) {
   };
 }
 function sammelMailModal(ids) {
+  if (window.bzPlattform?.nurLesen?.()) return toast('Im Lesemodus wird nichts gesendet.');
   const liste = (ids ? ids.filter(i => state.apps[i]).map(i => ({...state.apps[i], id: i})) : mailBereit()).filter(a => a.status === 'gemerkt' && (a.kontakt?.email || '').trim());
   if (!liste.length) return toast('Keine Mail-Bewerbung zum Senden.');
   if (!GMAIL) return toast('Senden über Gmail gibt es in der Handy-App.');

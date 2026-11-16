@@ -24,7 +24,9 @@
  *              Google-Cloud-App kommt per Link …/#google=<Client-ID>.
  *
  * Zugang: ein Fine-grained Token von GitHub, das nur das Daten-Repo lesen
- * und schreiben darf, nur im localStorage dieses Handys. Kommt per Link
+ * und schreiben darf, nur im localStorage dieses Handys. Darf ein Token nur
+ * lesen (z. B. für Familie zum Gegenlesen), läuft die App im Lesemodus:
+ * alles ansehen und als PDF laden, aber nichts wird gespeichert. Kommt per Link
  * …/#zugang=<Token>&ki=<Schlüssel> oder über das Einrichten-Fenster.
  * Tokens und Schlüssel stehen nie im Code, im Repo oder in Logs.
  */
@@ -74,7 +76,7 @@
   }
   const anbieterVon = (s) => (s.startsWith('sk-ant-') ? 'anthropic' : s ? 'gemini' : '');
 
-  let token = '';
+  let token = '', nurLesen = false;
   async function gh(pfad, opt = {}) {
     let res;
     try {
@@ -142,8 +144,9 @@
       if (!TOKEN_MUSTER.test(t)) { f.textContent = 'Der GitHub-Schlüssel sieht nicht richtig aus.'; return; }
       f.textContent = 'Prüfe …';
       const r = await tokenPruefen(t);
-      if (r !== 'ok') { f.textContent = { ungueltig: 'GitHub kennt diesen Schlüssel nicht.', 'kein-zugriff': 'Der Schlüssel darf das Repo Bewerbungszentrale-Daten nicht lesen.', 'nur-lesen': 'Der Schlüssel darf nur lesen. Unter Permissions → Contents „Read and write“ wählen.', netz: 'Keine Verbindung zu GitHub.' }[r]; return; }
-      schreib(ZUGANG, { token: t, stand: new Date().toISOString() });
+      if (r !== 'ok' && r !== 'nur-lesen') { f.textContent = { ungueltig: 'GitHub kennt diesen Schlüssel nicht.', 'kein-zugriff': 'Der Schlüssel darf das Repo Bewerbungszentrale-Daten nicht lesen.', netz: 'Keine Verbindung zu GitHub.' }[r]; return; }
+      schreib(ZUGANG, { token: t, stand: new Date().toISOString(), lesen: r === 'nur-lesen' });
+      nurLesen = r === 'nur-lesen';
       if (k) schreib(KI, { schluessel: k, stand: new Date().toISOString() });
       if (gestartet) { location.reload(); return; } // Schlüssel geändert: neu starten, damit KI und Daten ihn nehmen
       token = t; d.remove(); fertigMelden(true);
@@ -153,8 +156,9 @@
     for (const [t, eigen] of [[eigenerToken(), true], [boxToken(), false]]) {
       if (!t) continue;
       const r = await tokenPruefen(t);
-      if (r === 'ok') { token = t; if (!eigen) schreib(ZUGANG, { token: t, stand: new Date().toISOString(), ausBoxenstopp: true }); fertigMelden(true); return; }
-      if (r === 'netz' && eigen) { token = t; fertigMelden(true); return; } // offline: mit dem Zwischenspeicher arbeiten
+      if (r === 'ok') { token = t; if (!eigen) schreib(ZUGANG, { token: t, stand: new Date().toISOString(), ausBoxenstopp: true }); else if (lies(ZUGANG)?.lesen) schreib(ZUGANG, { ...lies(ZUGANG), lesen: false }); fertigMelden(true); return; }
+      if (r === 'nur-lesen' && eigen) { token = t; nurLesen = true; schreib(ZUGANG, { ...lies(ZUGANG), lesen: true }); fertigMelden(true); return; } // Lesemodus
+      if (r === 'netz' && eigen) { token = t; nurLesen = !!lies(ZUGANG)?.lesen; fertigMelden(true); return; } // offline: mit dem Zwischenspeicher arbeiten
     }
     const start = () => einrichtenZeigen(eigenerToken() ? 'Der gespeicherte Schlüssel funktioniert nicht mehr.' : '');
     if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
@@ -354,8 +358,8 @@
   function dokRef(pfad) {
     return {
       id: idVon(pfad),
-      async set(data) { await bereit; lokal.set(pfad, kopie(data)); melden(new Set([sammlungVon(pfad)])); return vormerken(pfad); },
-      async delete() { await bereit; lokal.set(pfad, null); melden(new Set([sammlungVon(pfad)])); return vormerken(pfad); },
+      async set(data) { await bereit; lokal.set(pfad, kopie(data)); melden(new Set([sammlungVon(pfad)])); return nurLesen ? undefined : vormerken(pfad); },
+      async delete() { await bereit; lokal.set(pfad, null); melden(new Set([sammlungVon(pfad)])); return nurLesen ? undefined : vormerken(pfad); },
       async get() { await bereit; return dokSnap(pfad); },
       onSnapshot(n, f) { const h = { art: 'dok', name: pfad, n, f }; hoerer.add(h); if (stand.size || netzGeladen) queueMicrotask(() => n(dokSnap(pfad))); return () => hoerer.delete(h); },
     };
@@ -411,6 +415,7 @@
   const assets = {
     async upload(datei) {
       await bereit;
+      if (nurLesen) throw fehler('not_granted', 'Nur Lesezugriff');
       const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
       const pfad = `dateien/${id}.${endung(datei.name)}`;
       const bytes = new Uint8Array(await datei.arrayBuffer());
@@ -573,7 +578,7 @@
     mcp: async () => { throw fehler('not_granted', 'In der App gibt es keinen direkten Gmail-Versand.'); },
   };
   window.claude = { use: (name) => (faehig[name] ? faehig[name]() : Promise.reject(fehler('not_granted', name))) };
-  window.bzPlattform = { abgleichen: () => abgleichen(), einrichten: () => einrichtenZeigen(''), offen: () => lokal.size + warteschlange.size, kiDa: () => !!kiSchluessel(), gmail };
+  window.bzPlattform = { abgleichen: () => abgleichen(), einrichten: () => einrichtenZeigen(''), offen: () => warteschlange.size + (nurLesen ? 0 : lokal.size), kiDa: () => !!kiSchluessel(), nurLesen: () => nurLesen, gmail };
 
   zugangHerstellen();
   start();

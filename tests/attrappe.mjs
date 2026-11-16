@@ -24,7 +24,7 @@ export function ladeOrdner(ordner) {
   return dateien;
 }
 
-export function githubAttrappe(dateien, { owner = 'Finanzdienste', repo = 'Bewerbungszentrale-Daten', token = 'github_pat_test_0000000000000000000000', graphql = true } = {}) {
+export function githubAttrappe(dateien, { owner = 'Finanzdienste', repo = 'Bewerbungszentrale-Daten', token = 'github_pat_test_0000000000000000000000', graphql = true, nurLesen = false } = {}) {
   const log = [];
   const shas = () => new Map([...dateien].map(([p, b]) => [p, blobSha(b)]));
   const nachSha = (sha) => { for (const [p, b] of dateien) if (blobSha(b) === sha) return b; return null; };
@@ -37,7 +37,7 @@ export function githubAttrappe(dateien, { owner = 'Finanzdienste', repo = 'Bewer
     if (methode === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,PUT,POST,DELETE' } });
     if ((req.headers().authorization || '') !== `Bearer ${token}`) return json(route, 401, { message: 'Bad credentials' });
     log.push(`${methode} ${u.pathname}`);
-    if (u.pathname === basis && methode === 'GET') return json(route, 200, { full_name: `${owner}/${repo}`, private: true, permissions: { pull: true, push: true } });
+    if (u.pathname === basis && methode === 'GET') return json(route, 200, { full_name: `${owner}/${repo}`, private: true, permissions: { pull: true, push: !nurLesen } });
     if (u.pathname === `${basis}/git/trees/main`) {
       const s = shas();
       const etag = `"${crypto.createHash('sha1').update([...s].sort().join()).digest('hex')}"`;
@@ -66,6 +66,7 @@ export function githubAttrappe(dateien, { owner = 'Finanzdienste', repo = 'Bewer
         return json(route, 200, { path: p, sha: blobSha(da) });
       }
       const body = JSON.parse(req.postData() || '{}');
+      if (nurLesen && (methode === 'PUT' || methode === 'DELETE')) return json(route, 403, { message: 'Resource not accessible by personal access token' });
       if (methode === 'PUT') {
         if (da && body.sha !== blobSha(da)) return json(route, 409, { message: `${p} does not match ${body.sha}` });
         if (!da && body.sha) return json(route, 409, { message: 'does not exist' });

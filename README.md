@@ -38,6 +38,10 @@ und schreiben darf (Contents: Read and write). Er steht nur im localStorage
 des Handys, nie im Code. Hat der Boxenstopp-Token auch Zugriff auf das
 Daten-Repo, nimmt die App ihn automatisch (gleiche Adresse).
 
+Darf ein Token nur lesen (Contents: Read-only), läuft die App im Lesemodus: alles ansehen und
+als PDF laden, nichts wird gespeichert, kein Mailversand. So lässt sich die App zum Gegenlesen
+teilen, ohne dass jemand etwas ändern kann.
+
 Aufs Handy kommt er über das Einrichten-Fenster beim ersten Start oder per
 Link `…/Bewerbungszentrale/#zugang=<Token>&ki=<KI-Schlüssel>`. Später ändern:
 `…/Bewerbungszentrale/#einrichten`.
