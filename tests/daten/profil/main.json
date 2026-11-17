@@ -91,7 +91,19 @@
     "C1"
    ]
   ],
-  "interessen": "Lesen"
+  "interessen": "Lesen",
+  "projekte": [
+   {
+    "von": "08/2026",
+    "bis": "heute",
+    "titel": "Eigene Apps (erfundenes Testprojekt)",
+    "firma": "Privates Projekt",
+    "punkte": [
+     "Test-App für Tabellen, mit KI-Unterstützung gebaut",
+     "Automatische Läufe über eine Schnittstelle"
+    ]
+   }
+  ]
  },
  "cv_en": {
   "titel": "Controlling und Daten",
