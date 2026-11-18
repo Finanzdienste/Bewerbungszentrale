@@ -203,6 +203,24 @@ test('reiter', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('aufgaben', async () => {
+  // nur echte To-dos: keine Versand-Aufgaben (die stehen unter „Bereit zum Abschicken“), keine Hinweise, nichts aus zurückgestellten Akten
+  const { seite, gh, fehler } = await appStarten({ breite: 1400, hoehe: 900 });
+  const a = json(gh, 'apps/test-portal.json');
+  const auf = (text) => ({ id: Math.random().toString(36).slice(2), text, faellig: '2026-11-10', erledigt: false });
+  gh.dateien.set('apps/test-portal.json', Buffer.from(JSON.stringify({ ...a, aufgaben: [auf('Über das Portal bewerben (Bewerbungsmappe aus der App hochladen)'), auf('Beispiel GmbH nimmt keine Initiativbewerbungen an, offene Stellen beobachtet der Radar'), auf('Arbeitsprobe an die Fachabteilung schicken')] }, null, 1) + '\n'));
+  gh.dateien.set('apps/test-zurueck.json', Buffer.from(JSON.stringify({ ...a, firma: 'Zurück Beispiel GmbH', keinBrief: true, aufgaben: [auf('Etwas Altes erledigen')] }, null, 1) + '\n'));
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.goto('http://app.test/Bewerbungszentrale/#termine');
+  await seite.waitForFunction(() => /Arbeitsprobe an die Fachabteilung/.test(document.querySelector('#v-termine')?.textContent || ''), null, { timeout: 10000 });
+  const text = await seite.textContent('#v-termine');
+  assert.doesNotMatch(text, /Über das Portal bewerben/);
+  assert.doesNotMatch(text, /nimmt keine Initiativbewerbungen an/);
+  assert.doesNotMatch(text, /Etwas Altes erledigen/);
+  assert.deepEqual(fehler, []);
+});
+
 test('empfaenger', async () => {
   // reine Funktion aus index.html, ohne Browser
   const html = fs.readFileSync(path.join(WURZEL, 'index.html'), 'utf8');

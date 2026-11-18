@@ -920,6 +920,18 @@ function stats() {
   const avg = tage.length ? Math.round(tage.reduce((s, n) => s + n, 0) / tage.length) : null;
   return {all, sent, aktiv, gespraech, angebot, zusage, rueck, avg};
 }
+/* Aufgaben, die gerade etwas zu tun bedeuten. Versand-Aufgaben stehen schon unter „Bereit zum Abschicken“, Hinweise des Laufs sind keine To-dos,
+   Klärungen zählen erst, wenn die Bewerbung fertig ist, und abgeschlossene oder zurückgestellte Akten haben keine offenen Aufgaben mehr. */
+const VERSAND_AUFGABE = /^(Bewerbungsmappe in der App herunterladen und per Mail|Über das Portal bewerben|Initiativbewerbung an .+ schicken)/;
+const INFO_AUFGABE = /nimmt keine Initiativbewerbungen an/;
+function aufgabeZeigen(a, k) {
+  if (a.verworfen || a.keinBrief || ZU.has(a.status)) return false;
+  if (k.erledigt) return true;
+  const t = k.text || '';
+  if (INFO_AUFGABE.test(t) || VERSAND_AUFGABE.test(t)) return false;
+  if (/^Vor der Bewerbung klären/.test(t)) return a.status === 'gemerkt' && pruefStand(a) === 'frei';
+  return true;
+}
 function attentionItems() {
   const out = []; const now = new Date();
   for (const a of list()) {
@@ -930,7 +942,7 @@ function attentionItems() {
       if (d >= new Date(now.getTime() - 3600e3) && days <= 7) out.push({id:a.id, kind:'termin', tone:'var(--s-interview)', icon:'cal', t:`${t.art || 'Termin'} bei ${a.firma || '…'}`, d:[a.position, t.ort].filter(Boolean).join(' · '), when:`${WT[d.getDay()]} ${fmtDs(isoDate(d))} · ${fmtT(d)}`, sort:d.getTime(), urgent: days <= 1});
     }
     for (const k of a.aufgaben) {
-      if (k.erledigt || !k.faellig) continue;
+      if (k.erledigt || !k.faellig || !aufgabeZeigen(a, k)) continue;
       const n = dayDiff(new Date(), parseD(k.faellig));
       if (n <= 3) out.push({id:a.id, kind:'aufgabe', tone: n < 0 ? 'var(--bad)' : 'var(--warn)', icon:'check', t:k.text, d:`${a.firma}${a.position ? ' · ' + a.position : ''}`, when: n < 0 ? `${-n} T überfällig` : n === 0 ? 'heute fällig' : `in ${n} T`, sort:parseD(k.faellig).getTime(), urgent: n <= 0});
     }
@@ -1591,7 +1603,8 @@ function renderTermine() {
   const kommend = ts.filter(x => x.d >= new Date(now.getTime() - 3 * 3600e3)).sort((x, y) => x.d - y.d);
   const vergangen = ts.filter(x => x.d < new Date(now.getTime() - 3 * 3600e3)).sort((x, y) => y.d - x.d).slice(0, 6);
   const byDay = {}; for (const x of kommend) (byDay[isoDate(x.d)] ||= []).push(x);
-  const tasks = []; for (const a of all) for (const k of a.aufgaben) tasks.push({a, k});
+  const tasks = []; for (const a of all) for (const k of a.aufgaben) if (aufgabeZeigen(a, k)) tasks.push({a, k});
+  const bereitN = all.filter(a => a.status === 'gemerkt' && istBereit(a)).length;
   tasks.sort((x, y) => (x.k.erledigt - y.k.erledigt) || (x.k.faellig || '9999').localeCompare(y.k.faellig || '9999'));
   const nf = all.filter(nachfassFaellig).sort((x, y) => x.beworbenAm.localeCompare(y.beworbenAm));
   const agItem = x => `<div class="ag-item" data-open="${x.a.id}" style="--stage:${stageVar(x.a.status)}" tabindex="0"><span class="tm">${fmtT(x.d)}</span><span class="tt">${esc(x.t.art || 'Termin')} · ${esc(x.a.firma)}</span><span class="ts">${esc([x.a.position, x.t.ort].filter(Boolean).join(' · '))}${x.t.notiz ? `<br>${esc(x.t.notiz)}` : ''}</span><span class="tl">${calLinks(x.a, x.t)}</span></div>`;
@@ -1608,6 +1621,7 @@ function renderTermine() {
         : `<div class="empty-mini">${ic('check')}Keine offenen Nachfragen.</div>`}
       </section>
       <section class="panel"><div class="panel-head"><h2>Aufgaben</h2><span class="sub">${tasks.filter(x => !x.k.erledigt).length} offen</span></div>
+        ${bereitN ? `<p class="desc" id="aufgabenBereit" style="margin:0 0 10px"><a href="#uebersicht">${bereitN} ${bereitN === 1 ? 'Bewerbung ist' : 'Bewerbungen sind'} bereit zum Abschicken</a>, die stehen auf der Startseite.</p>` : ''}
         ${tasks.length ? `<ul class="tasks">${tasks.slice(0, 30).map(({a, k}) => { const n = k.faellig ? dayDiff(new Date(), parseD(k.faellig)) : null; return `<li class="${k.erledigt ? 'done' : ''}"><input type="checkbox" class="cb" id="tk-${a.id}-${k.id}" data-task="${a.id}|${k.id}" ${k.erledigt ? 'checked' : ''} aria-label="Erledigt: ${esc(k.text)}"><label class="tx" for="tk-${a.id}-${k.id}">${esc(k.text)}<small>${esc(a.firma)}</small></label><span class="due ${n != null && n < 0 && !k.erledigt ? 'over' : ''}">${k.faellig ? fmtDs(k.faellig) : ''}</span></li>`; }).join('')}</ul>`
         : `<div class="empty-mini">Noch keine Aufgaben. Leg sie in der Akte an, etwa „Arbeitsprobe schicken“.</div>`}
       </section>
