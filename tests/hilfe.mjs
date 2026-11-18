@@ -41,7 +41,7 @@ export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), spe
     if (teilen) { navigator.canShare = () => true; navigator.share = async (d) => { window.__geteilt = { dateien: (d.files || []).map((f) => ({ name: f.name, groesse: f.size, typ: f.type })), text: d.text, title: d.title }; }; }
     if (google) {
       window.google = { accounts: { oauth2: { hasGrantedAllScopes: () => true,
-        initTokenClient: (c) => ({ requestAccessToken: () => { window.__anmeldungen = (window.__anmeldungen || 0) + 1; setTimeout(() => c.callback({ access_token: 'ya29.test-token', expires_in: 3599 }), 20); } }) } } };
+        initTokenClient: (c) => ({ requestAccessToken: () => { window.__anmeldungen = (window.__anmeldungen || 0) + 1; window.__hinweis = c.hint; setTimeout(() => c.callback({ access_token: 'ya29.test-token', expires_in: 3599 }), 20); } }) } } };
     }
   }, { vorher, teilen, google });
   await ctx.route('**/*', async (route) => {

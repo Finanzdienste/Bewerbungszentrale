@@ -579,7 +579,9 @@
   /* ------------------------------------------------ Gmail: senden über die Gmail-API, nur auf Knopfdruck */
   const gmail = (() => {
     const SCOPE = 'https://www.googleapis.com/auth/gmail.send';
-    let zugriff = null, laden = null;
+    const MERKEN = 'bewerbungszentrale.gmail.v1'; // Zugriff darf nur senden und läuft nach einer Stunde ab: so lange überlebt er Neuladen und Neustart
+    let zugriff = (() => { const z = lies(MERKEN); return z && typeof z.token === 'string' && z.bis > Date.now() + 60_000 ? z : null; })(), laden = null;
+    const vergessen = () => { zugriff = null; try { localStorage.removeItem(MERKEN); } catch {} };
     const clientId = () => { const g = lies(GOOGLE); return g && GOOGLE_MUSTER.test(g.clientId || '') ? g.clientId : ''; };
     const skript = () => laden ||= new Promise((res, rej) => {
       if (window.google?.accounts?.oauth2) return res();
@@ -588,15 +590,15 @@
       document.head.appendChild(el);
     });
     const angemeldet = () => !!zugriff && zugriff.bis > Date.now() + 60_000;
-    function anmelden() { // direkt im Klick aufrufen, sonst blockiert der Browser das Anmeldefenster
+    function anmelden(konto = '') { // direkt im Klick aufrufen, sonst blockiert der Browser das Anmeldefenster; konto: Gmail-Adresse als Vorauswahl
       if (angemeldet()) return Promise.resolve();
       const o = window.google?.accounts?.oauth2;
       if (!o || !clientId()) return Promise.reject(fehler('unavailable', 'Die Google-Anmeldung ist nicht bereit.'));
       return new Promise((res, rej) => {
         o.initTokenClient({
-          client_id: clientId(), scope: SCOPE,
+          client_id: clientId(), scope: SCOPE, ...(/@/.test(konto) ? { hint: konto } : {}),
           callback: (r) => {
-            if (r?.access_token && (!o.hasGrantedAllScopes || o.hasGrantedAllScopes(r, SCOPE))) { zugriff = { token: r.access_token, bis: Date.now() + (Number(r.expires_in) || 3600) * 1000 }; res(); }
+            if (r?.access_token && (!o.hasGrantedAllScopes || o.hasGrantedAllScopes(r, SCOPE))) { zugriff = { token: r.access_token, bis: Date.now() + (Number(r.expires_in) || 3600) * 1000 }; schreib(MERKEN, zugriff); res(); }
             else rej(fehler('consent_required', 'Ohne die Erlaubnis zum Senden geht es nicht.'));
           },
           error_callback: (e) => rej(fehler(e?.type === 'popup_closed' ? 'abgebrochen' : 'consent_required', e?.message || 'Anmeldung abgebrochen')),
@@ -629,7 +631,7 @@
       } catch (e) { throw fehler('unklar', e?.message); } // kann trotzdem angekommen sein
       if (r.ok) return r.json().catch(() => ({}));
       const j = await r.json().catch(() => null), m = j?.error?.message || `HTTP ${r.status}`;
-      if (r.status === 401) { zugriff = null; throw fehler('needs_reauth', m); }
+      if (r.status === 401) { vergessen(); throw fehler('needs_reauth', m); }
       throw fehler({ 400: 'bad_request', 403: 'forbidden', 429: 'rate_limited' }[r.status] || 'unklar', m);
     }
     return {

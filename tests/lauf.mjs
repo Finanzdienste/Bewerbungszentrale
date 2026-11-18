@@ -424,6 +424,29 @@ test('gmail-probe', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('gmail-merken', async () => {
+  // die Erlaubnis zum Senden gilt eine Stunde: nach dem Neuladen ohne neue Anmeldung, mit dem Gmail-Konto aus dem Profil als Vorauswahl
+  const { seite, gmail, fehler } = await appStarten({ google: true });
+  await seite.goto(`http://app.test/Bewerbungszentrale/#google=${GOOGLE_ID}`);
+  await seite.reload();
+  const probe = async () => {
+    await zuAkte(seite, 'test-mail');
+    await seite.click('[data-act="gmail-api"]');
+    await seite.waitForSelector('#sm-probe:not([disabled])', { timeout: 5000 });
+    await seite.click('#sm-probe');
+    await seite.waitForFunction(() => /gesendet/.test(document.querySelector('#sm-st')?.textContent || ''), null, { timeout: 60000 });
+  };
+  await probe();
+  assert.equal(await seite.evaluate(() => window.__anmeldungen), 1);
+  const konto = JSON.parse(fs.readFileSync(path.join(WURZEL, 'tests/daten/profil/main.json'), 'utf8')).gmailKonto;
+  if (konto) assert.equal(await seite.evaluate(() => window.__hinweis), konto, 'Konto vorausgewählt');
+  await seite.reload();
+  await probe();
+  assert.equal(await seite.evaluate(() => window.__anmeldungen || 0), 0, 'nach dem Neuladen keine neue Anmeldung');
+  assert.equal(gmail.length, 2);
+  assert.deepEqual(fehler, []);
+});
+
 test('gmail-fehler', async () => {
   const { seite, gh, fehler } = await appStarten({ google: true, gmailFehler: 403 });
   await seite.goto(`http://app.test/Bewerbungszentrale/#google=${GOOGLE_ID}`);
