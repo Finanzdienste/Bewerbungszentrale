@@ -142,6 +142,28 @@ test('eine-je-firma', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('gehalt', async () => {
+  const { seite, gh, fehler } = await appStarten();
+  const a = json(gh, 'apps/test-portal.json');
+  gh.dateien.set('apps/test-portal.json', Buffer.from(JSON.stringify({ ...a, gehaltWunsch: 64000, gehaltBegruendung: 'Erfundene Begründung aus Vergleichsanzeigen.', gehaltAuto: true,
+    anschreiben: a.anschreiben.replace('Mit freundlichen', 'Meine Gehaltsvorstellung liegt bei 61.000 Euro brutto im Jahr.\n\nMit freundlichen') }, null, 1) + '\n'));
+  await seite.waitForSelector('#bereitPanel, #v-liste', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await zuAkte(seite, 'test-portal');
+  const h = seite.locator('#gwunschGrund');
+  await seite.waitForFunction(() => /Erfundene Begründung/.test(document.querySelector('#gwunschGrund')?.textContent || ''), null, { timeout: 10000 });
+  assert.match(await h.textContent(), /Vorschlag des Morgenlaufs: Erfundene Begründung/);
+  assert.match(await h.textContent(), /steht noch 61\.000/, 'warnt, wenn der Brief eine andere Zahl nennt');
+  await seite.fill('#d-gwunsch', '61000');
+  for (let i = 0; i < 40 && !json(gh, 'apps/test-portal.json').gehaltPerson; i++) await warte(250);
+  const d = json(gh, 'apps/test-portal.json');
+  assert.equal(d.gehaltWunsch, 61000);
+  assert.equal(d.gehaltPerson, true, 'eigene Forderung bleibt vor dem Morgenlauf geschützt');
+  assert.match(await h.textContent(), /Deine eigene Forderung/);
+  assert.doesNotMatch(await h.textContent(), /steht noch/);
+  assert.deepEqual(fehler, []);
+});
+
 test('empfaenger', async () => {
   // reine Funktion aus index.html, ohne Browser
   const html = fs.readFileSync(path.join(WURZEL, 'index.html'), 'utf8');

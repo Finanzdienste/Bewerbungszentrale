@@ -2752,6 +2752,16 @@ function fld(id, label, f, val, {type = 'text', ph = '', span = false, attrs = '
 function sel(id, label, f, val, opts, empty = '–') {
   return `<label class="fld" for="d-${id}"><span>${label}</span><select class="in" id="d-${id}" data-f="${f}"><option value="">${empty}</option>${opts.map(o => `<option ${o === val ? 'selected' : ''}>${esc(o)}</option>`).join('')}${val && !opts.includes(val) ? `<option selected>${esc(val)}</option>` : ''}</select></label>`;
 }
+/* Gehaltsvorstellung je Stelle: Begründung des Laufs, eigene Forderung, Hinweis wenn der Brief noch eine andere Zahl nennt */
+function gehaltHinweis(a) {
+  const teile = [];
+  if (a.gehaltPerson && a.gehaltWunsch) teile.push('Deine eigene Forderung. Der Morgenlauf ändert sie nicht.');
+  else if (a.gehaltBegruendung) teile.push(`Vorschlag des Morgenlaufs: ${esc(a.gehaltBegruendung)}`);
+  const zahlen = [...`${a.anschreiben || ''}\n${a.mailtext || ''}`.matchAll(/(\d{2,3}\.\d{3}) Euro brutto/g)].map(m => Number(m[1].replace('.', '')));
+  const anders = a.gehaltWunsch ? zahlen.filter(z => z !== a.gehaltWunsch) : [];
+  if (anders.length) teile.push(`<b>Im Anschreiben oder in der Mail steht noch ${eur(anders[0])}.</b> Pass die Zahl dort an, bevor du sendest.`);
+  return teile.join(' ');
+}
 function renderDrawerBody(reset = false) {
   const id = state.openId; const a = state.apps[id]; const b = $('#drBody'); if (!a || !b) return;
   const t = state.drawerTab;
@@ -2775,7 +2785,7 @@ function renderDrawerBody(reset = false) {
         ${fld('gmin', 'Laut Anzeige von', 'gehaltMin', a.gehaltMin, {type:'number', ph:'55000', attrs:'inputmode="numeric" step="1000" min="0"'})}
         ${fld('gmax', 'bis', 'gehaltMax', a.gehaltMax, {type:'number', ph:'65000', attrs:'inputmode="numeric" step="1000" min="0"'})}
         ${fld('gwunsch', 'Meine Forderung', 'gehaltWunsch', a.gehaltWunsch, {type:'number', ph:String(P().gehalt || 62000), attrs:'inputmode="numeric" step="1000" min="0"'})}
-      </div></fieldset>
+      </div><p class="desc" id="gwunschGrund" style="margin-top:6px">${gehaltHinweis(a)}</p></fieldset>
       <div class="fld span-2"><span class="lbl" id="lbl-int">Wie sehr willst du diese Stelle?</span><div class="stars" role="radiogroup" aria-labelledby="lbl-int">${[1,2,3,4,5].map(n => `<button type="button" role="radio" aria-checked="${a.interesse === n}" aria-label="${n} von 5" class="${n <= a.interesse ? 'on' : ''}" data-stars="${n}">${STAR}</button>`).join('')}</div></div>
       <fieldset class="span-2"><legend>Ansprechperson</legend><div class="form-grid">
         ${fld('kname', 'Name', 'kontakt.name', a.kontakt.name, {ph:'Frau Dr. Meier'})}
@@ -3693,10 +3703,12 @@ $('#drawer').addEventListener('input', e => {
   const a = state.apps[state.openId];
   let v = e.target.value;
   if (['gehaltMin','gehaltMax','gehaltWunsch'].includes(f)) v = v === '' ? null : Number(v);
+  if (f === 'gehaltWunsch') { a.gehaltPerson = v != null; if (v == null) { a.gehaltBegruendung = ''; a.gehaltAuto = false; } }
   const parts = f.split('.');
   if (parts.length === 2) a[parts[0]] = {...a[parts[0]], [parts[1]]: v}; else a[f] = v;
   if (f === 'beworbenAm' && v && a.status === 'gemerkt') { /* Datum gesetzt, Status bleibt bewusst manuell */ }
   saveApp(state.openId);
+  if (f === 'gehaltWunsch' && $('#gwunschGrund')) $('#gwunschGrund').innerHTML = gehaltHinweis(a);
   if (f === 'firma') $('#drFirma').textContent = v || 'Neue Bewerbung';
   if (f === 'position') $('#drPos').textContent = v;
   if (f === 'link') { const o = $('#d-link-open'); const okL = /^https?:\/\//.test(v); o.hidden = !okL; o.href = okL ? v : '#'; }
