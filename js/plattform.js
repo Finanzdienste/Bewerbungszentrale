@@ -596,7 +596,7 @@
       if (!o || !clientId()) return Promise.reject(fehler('unavailable', 'Die Google-Anmeldung ist nicht bereit.'));
       return new Promise((res, rej) => {
         o.initTokenClient({
-          client_id: clientId(), scope: SCOPE, ...(/@/.test(konto) ? { hint: konto } : {}),
+          client_id: clientId(), scope: SCOPE, prompt: '', ...(/@/.test(konto) ? { hint: konto } : {}), // prompt '': nur beim ersten Mal fragen, danach schließt sich das Fenster von selbst
           callback: (r) => {
             if (r?.access_token && (!o.hasGrantedAllScopes || o.hasGrantedAllScopes(r, SCOPE))) { zugriff = { token: r.access_token, bis: Date.now() + (Number(r.expires_in) || 3600) * 1000 }; schreib(MERKEN, zugriff); res(); }
             else rej(fehler('consent_required', 'Ohne die Erlaubnis zum Senden geht es nicht.'));
