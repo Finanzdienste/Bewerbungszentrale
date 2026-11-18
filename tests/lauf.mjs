@@ -164,6 +164,21 @@ test('gehalt', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('suche-autofill', async () => {
+  const { seite, fehler } = await appStarten();
+  await seite.goto('http://app.test/Bewerbungszentrale/#liste');
+  await seite.waitForSelector('[data-open="test-portal"]', { timeout: 20000 });
+  // so trägt ein Passwortmanager die Mailadresse ein: Wert setzen und input auslösen, ohne dass das Feld den Fokus hat
+  await seite.evaluate(() => { const q = document.querySelector('#q'); q.blur(); q.value = 'max@example.org'; q.dispatchEvent(new Event('input', { bubbles: true })); });
+  await warte(300);
+  assert.equal(await seite.inputValue('#q'), '', 'Autofill wird verworfen');
+  assert.ok(await seite.locator('[data-open="test-portal"]').count() > 0, 'Liste bleibt sichtbar');
+  await seite.fill('#q', 'Beispiel');
+  await warte(300);
+  assert.equal(await seite.inputValue('#q'), 'Beispiel', 'echte Suche bleibt');
+  assert.deepEqual(fehler, []);
+});
+
 test('empfaenger', async () => {
   // reine Funktion aus index.html, ohne Browser
   const html = fs.readFileSync(path.join(WURZEL, 'index.html'), 'utf8');

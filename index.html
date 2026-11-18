@@ -3760,7 +3760,13 @@ async function fillFromAd() {
 }
 document.addEventListener('change', e => { const id = e.target?.id; if (id === 'radarSort') { state.radarSort = e.target.value; state.radarZeig = RADAR_SEITE; renderRadar(); } else if (id === 'listSortier') { state.listSortier = e.target.value; renderListe(); } else if (id === 'radarBereich') { state.radarBereich = e.target.value; state.radarZeig = RADAR_SEITE; state.firmenZeig = RADAR_SEITE; renderRadar(); } });
 document.addEventListener('input', e => { if (e.target?.id === 'radarQ') { state.radarSuche = e.target.value.trim(); state.radarZeig = RADAR_SEITE; state.firmenZeig = RADAR_SEITE; renderRadar(); } });
-$('#q').addEventListener('input', e => { state.search = e.target.value.trim(); if (state.view === 'uebersicht' && state.search) location.hash = '#pipeline'; else renderAll(); });
+// Browser tragen gespeicherte Anmeldedaten (Mailadresse) gern ins erste Textfeld ein: das ist keine Suche
+const autoFuellung = el => document.activeElement !== el && /@/.test(el.value);
+$('#q').addEventListener('input', e => {
+  if (autoFuellung(e.target)) { e.target.value = ''; if (state.search) { state.search = ''; renderAll(); } return; }
+  state.search = e.target.value.trim(); if (state.view === 'uebersicht' && state.search) location.hash = '#pipeline'; else renderAll();
+});
+setTimeout(() => { const q = $('#q'); if (q && autoFuellung(q)) { q.value = ''; if (state.search) { state.search = ''; renderAll(); } } }, 1500);
 $('#btnNew').onclick = () => newModal('manuell');
 $('#btnPaste').onclick = () => newModal(kiState === 'ok' ? 'ki' : 'manuell');
 

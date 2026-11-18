@@ -123,7 +123,7 @@
       <p>Deine Bewerbungen liegen im privaten Repo <b>${DATEN.owner}/${DATEN.repo}</b>. Die App braucht einmal einen Schlüssel dafür. Er bleibt nur auf diesem Handy.</p>
       <p class="fehler" id="bz-e-fehler">${grund || ''}</p>
       <label for="bz-e-token">GitHub-Schlüssel (Fine-grained Token)</label>
-      <input id="bz-e-token" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_…">
+      <input id="bz-e-token" type="password" autocomplete="new-password" spellcheck="false" placeholder="github_pat_…">
       <ol>
         <li>github.com → Settings → Developer settings → Fine-grained tokens. Entweder deinen Boxenstopp-Schlüssel bearbeiten und unter „Repository access“ <b>Bewerbungszentrale-Daten</b> dazunehmen, oder einen neuen anlegen.</li>
         <li>Resource owner: Finanzdienste, nur das Repo Bewerbungszentrale-Daten, Permissions → Contents: <b>Read and write</b>.</li>
