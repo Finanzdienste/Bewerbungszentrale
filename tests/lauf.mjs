@@ -142,6 +142,20 @@ test('eine-je-firma', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('empfaenger', async () => {
+  // reine Funktion aus index.html, ohne Browser
+  const html = fs.readFileSync(path.join(WURZEL, 'index.html'), 'utf8');
+  const i = html.indexOf('function empfaengerName'); const src = html.slice(i, html.indexOf('\n}\n', i) + 3);
+  const empfaengerName = new Function(`${src}; return empfaengerName;`)();
+  const f = (name, an) => empfaengerName({ kontakt: { name }, anschreiben: an });
+  const zwei = 'Bewerbung\n\nSehr geehrte Frau Beispiel-Muster, sehr geehrter Herr Probe,\n\nText';
+  assert.equal(f('Erika Beispiel-Muster', zwei), 'Frau Erika Beispiel-Muster', 'Anrede vor dem eigenen Nachnamen zählt');
+  assert.equal(f('Paul Probe', zwei), 'Herrn Paul Probe');
+  assert.equal(f('Max Muster', 'Sehr geehrter Herr Dr. Muster,'), 'Herrn Max Muster');
+  assert.equal(f('Herr Max Muster', ''), 'Herrn Max Muster');
+  assert.equal(f('Anna Gauß', 'Sehr geehrte Frau Gauß, sehr geehrter Herr Klein,'), 'Frau Anna Gauß');
+});
+
 test('konflikt', async () => {
   const { seite, gh, fehler } = await appStarten();
   await zuAkte(seite, 'test-mail');

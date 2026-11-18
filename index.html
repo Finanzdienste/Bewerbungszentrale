@@ -2439,6 +2439,12 @@ function empfaengerName(a) { // DIN 5008: "Herrn Max Muster" bzw. "Frau Maria Mu
   if (/^herr\b/i.test(k)) return k.replace(/^herr\b/i, 'Herrn');
   if (/^(frau|herrn)\b/i.test(k)) return k;
   const an = String(a.anschreiben || '');
+  // Werden zwei Personen angesprochen („sehr geehrte Frau A, sehr geehrter Herr B“), zählt die Anrede vor dem Nachnamen des Kontakts
+  const nach = k.split(/\s+/).pop().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const titel = '(?:(?:Dr|Prof)\\.\\s+)*';
+  const ende = '(?![\\wäöüÄÖÜß-])';
+  if (new RegExp(`(geehrter|Lieber|Hallo)\\s+Herr\\s+${titel}${nach}${ende}`).test(an)) return 'Herrn ' + k;
+  if (new RegExp(`(geehrte|Liebe|Hallo)\\s+Frau\\s+${titel}${nach}${ende}`).test(an)) return 'Frau ' + k;
   return (/(geehrter|Lieber|Hallo)\s+Herr\b/.test(an) ? 'Herrn ' : /(geehrte|Liebe|Hallo)\s+Frau\b/.test(an) ? 'Frau ' : '') + k;
 }
 async function mappeBauen(a, opt = {}) {
