@@ -26,6 +26,7 @@ export function ladeOrdner(ordner) {
 
 export function githubAttrappe(dateien, { owner = 'Finanzdienste', repo = 'Bewerbungszentrale-Daten', token = 'github_pat_test_0000000000000000000000', graphql = true, nurLesen = false } = {}) {
   const log = [];
+  const schalter = { schreibenHaengt: false }; // true: PUT kommt nie an (wie eine App, die beim Speichern geschlossen wird)
   const shas = () => new Map([...dateien].map(([p, b]) => [p, blobSha(b)]));
   const nachSha = (sha) => { for (const [p, b] of dateien) if (blobSha(b) === sha) return b; return null; };
   const basis = `/repos/${owner}/${repo}`;
@@ -68,6 +69,7 @@ export function githubAttrappe(dateien, { owner = 'Finanzdienste', repo = 'Bewer
       const body = JSON.parse(req.postData() || '{}');
       if (nurLesen && (methode === 'PUT' || methode === 'DELETE')) return json(route, 403, { message: 'Resource not accessible by personal access token' });
       if (methode === 'PUT') {
+        if (schalter.schreibenHaengt) { log.push(`  hängt: ${p}`); return new Promise(() => {}); }
         if (da && body.sha !== blobSha(da)) return json(route, 409, { message: `${p} does not match ${body.sha}` });
         if (!da && body.sha) return json(route, 409, { message: 'does not exist' });
         const neu = Buffer.from(body.content, 'base64');
@@ -84,7 +86,7 @@ export function githubAttrappe(dateien, { owner = 'Finanzdienste', repo = 'Bewer
     }
     return json(route, 404, { message: 'Attrappe kennt das nicht' });
   }
-  return { handler, log, dateien, token };
+  return { handler, log, dateien, token, schalter };
 }
 
 /** KI-Attrappe: antwortet als Strom (Anthropic-SSE) mit dem, was antwort(prompt) liefert. */

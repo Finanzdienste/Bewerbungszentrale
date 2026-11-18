@@ -67,6 +67,54 @@ test('schreiben', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('aussortiert', async () => {
+  const { seite, gh, fehler } = await appStarten();
+  await seite.goto('http://app.test/Bewerbungszentrale/#liste');
+  await seite.waitForSelector('#aussortiert', { timeout: 20000 });
+  assert.equal(await seite.locator('.rang-item[data-open="test-raus"]').count(), 0, 'nicht in der normalen Liste');
+  assert.match(await seite.textContent('#aussortiert summary'), /1 Stelle passt nicht/);
+  await seite.click('#aussortiert summary');
+  assert.match(await seite.textContent('#aussortiert'), /Zeitwerk Personal GmbH[\s\S]*Zeitarbeit/);
+  await seite.click('#aussortiert [data-act="zurueckholen"][data-rid="test-raus"]');
+  await seite.waitForSelector('.rang-item[data-open="test-raus"]', { timeout: 5000 });
+  for (let i = 0; i < 40 && json(gh, 'apps/test-raus.json').verworfen; i++) await warte(250);
+  const d = json(gh, 'apps/test-raus.json');
+  assert.equal(d.verworfen, false);
+  assert.equal(d.ausgewaehlt, true, 'der Morgenlauf sortiert sie nicht noch einmal aus');
+  assert.equal(d.aussortiert, undefined);
+  assert.ok(d.verlauf.some((v) => /zurückgeholt/.test(v.text)));
+  assert.equal(await seite.locator('#aussortiert').count(), 0, 'nichts mehr aussortiert');
+  assert.deepEqual(fehler, []);
+});
+
+test('nachholen', async () => {
+  const { seite, gh, fehler } = await appStarten();
+  gh.schalter.schreibenHaengt = true;
+  await zuAkte(seite, 'test-portal');
+  await seite.click('[data-act="mark-beworben"]');
+  const offen = () => seite.evaluate(() => new Promise((ok) => { const r = indexedDB.open('bewerbungszentrale', 1); r.onsuccess = () => { const g = r.result.transaction('meta').objectStore('meta').get('offen:apps/test-portal.json'); g.onsuccess = () => ok(g.result || null); g.onerror = () => ok(null); }; r.onerror = () => ok(null); }));
+  let o = null;
+  for (let i = 0; i < 40 && !(o = await offen()); i++) await warte(250);
+  assert.ok(o && o.daten.status === 'beworben', 'offene Änderung in IndexedDB gemerkt');
+  for (let i = 0; i < 40 && !gh.log.some((x) => x.includes('hängt: apps/test-portal.json')); i++) await warte(250);
+  // Inzwischen ändert der Morgenlauf dieselbe Akte
+  const d = json(gh, 'apps/test-portal.json');
+  d.notizen = 'vom Lauf'; d.verlauf = [...(d.verlauf || []), { id: 'lauf1', datum: '2026-11-18', typ: 'notiz', text: 'Vom Lauf' }];
+  gh.dateien.set('apps/test-portal.json', Buffer.from(JSON.stringify(d, null, 1) + '\n'));
+  assert.equal(json(gh, 'apps/test-portal.json').status, 'gemerkt');
+  // App wird geschlossen und später wieder geöffnet
+  gh.schalter.schreibenHaengt = false;
+  await seite.reload();
+  for (let i = 0; i < 60 && json(gh, 'apps/test-portal.json').status !== 'beworben'; i++) await warte(250);
+  const e = json(gh, 'apps/test-portal.json');
+  assert.equal(e.status, 'beworben', 'beim nächsten Start nachgeholt');
+  assert.equal(e.notizen, 'vom Lauf', 'Änderung des Laufs bleibt');
+  assert.ok(e.verlauf.some((v) => v.id === 'lauf1') && e.verlauf.some((v) => v.typ === 'status'), 'Verlauf beider Seiten');
+  for (let i = 0; i < 20 && await offen(); i++) await warte(250);
+  assert.equal(await offen(), null, 'danach nichts mehr offen');
+  assert.deepEqual(fehler, []);
+});
+
 test('konflikt', async () => {
   const { seite, gh, fehler } = await appStarten();
   await zuAkte(seite, 'test-mail');
@@ -259,6 +307,7 @@ test('sammel-mail', async () => {
   assert.equal(d.gmailThreadId, 'thread-1');
   assert.ok(d.verlauf.some((v) => v.typ === 'mail' && /per Gmail an bewerbung@example\.org/.test(v.text)));
   assert.match(await seite.textContent('#sm-st'), /1 von 1 gesendet/);
+  assert.match(await seite.textContent('#sm-liste'), /Gesendet und eingetragen/);
   assert.equal(await seite.evaluate(() => window.__anmeldungen), 1);
   assert.deepEqual(fehler, []);
 });

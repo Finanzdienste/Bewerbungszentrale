@@ -117,6 +117,14 @@ svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-widt
 @media (max-width:640px){.bw-bar h1{font-size:var(--t-lg)}.bw-bar .search{flex-basis:100%}}
 .mehr-btn{align-self:center}
 .erklaer{font-size:var(--t-sm);color:var(--muted);margin-top:14px}
+.raus{margin-top:18px}
+.raus>summary{cursor:pointer;font-weight:600;display:flex;gap:8px;align-items:baseline}
+.raus>summary span{font-weight:500;color:var(--muted);font-size:var(--t-sm)}
+.raus h3{font-size:var(--t-sm);font-weight:600;margin:14px 0 4px;color:var(--muted)}
+.raus ul{list-style:none;margin:0;padding:0}
+.raus li{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line)}
+.raus li .tx{min-width:0;font-size:var(--t-sm)}
+.raus li .tx small{display:block;color:var(--muted)}
 .erklaer summary{cursor:pointer;color:var(--ink);font-weight:500}
 .erklaer p{margin-top:6px;max-width:72ch}
 .radar-opts{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;margin-top:10px}
@@ -767,14 +775,14 @@ function scheduleSave(id, delay = 600) {
   clearTimeout(timers.get(id));
   timers.set(id, setTimeout(() => flush(id), delay));
 }
-async function flush(id) {
+async function flush(id, sofort = false) {
   timers.delete(id);
   if (!DB || state.mode !== 'db') { dirty.delete(id); return; }
   if (writing.get(id)) { writing.set(id, 'again'); return; }
   writing.set(id, true);
   const a = state.apps[id];
   try {
-    if (a) await DB.collection('apps').doc(id).set(clone(a));
+    if (a) await DB.collection('apps').doc(id).set(clone(a), sofort ? {sofort: true} : undefined);
     else await DB.collection('apps').doc(id).delete();
   } catch (e) { await writeError(e, () => a ? DB.collection('apps').doc(id).set(clone(a)) : DB.collection('apps').doc(id).delete()); }
   const again = writing.get(id) === 'again';
@@ -794,6 +802,16 @@ async function writeError(e, retry) {
   else toast('Speichern hat nicht geklappt. Prüfe deine Verbindung und ändere das Feld erneut.');
 }
 function saveApp(id, rerender = true) { touch(state.apps[id]); scheduleSave(id); if (rerender) renderSoon(); }
+/** Ohne die übliche Pause speichern und warten, bis es angekommen ist. true, wenn nichts mehr offen ist. */
+async function speichernJetzt(id) {
+  for (let i = 0; i < 80 && (dirty.has(id) || writing.has(id)); i++) {
+    if (!writing.has(id) && timers.has(id)) { clearTimeout(timers.get(id)); await flush(id, true); }
+    else if (!writing.has(id)) await flush(id, true);
+    else await new Promise(r => setTimeout(r, 250));
+  }
+  await window.bzPlattform?.speichern?.();
+  return !dirty.has(id) && !(window.bzPlattform?.offen?.() > 0);
+}
 async function removeApp(id) {
   delete state.apps[id];
   clearTimeout(timers.get(id)); timers.delete(id);
@@ -1218,7 +1236,31 @@ function renderListe() {
     ${rows.length ? `${getrennt ? `<h2 class="rang-h">Stellen<span>${rows.filter(a => !istIni(a)).length} · nach Gesamtwertung</span></h2><div class="radar-list">${rows.filter(a => !istIni(a)).map(item).join('')}</div>
       <h2 class="rang-h">Initiativbewerbungen<span>${rows.filter(istIni).length} · nach Firmenwertung</span></h2><div class="radar-list">${rows.filter(istIni).map(item).join('')}</div>` : `<div class="radar-list">${rows.map(item).join('')}</div>`}
     <details class="erklaer"><summary>Was die Zahlen bedeuten</summary><p>Der Kreis zeigt die Gesamtwertung: Reiz 50 % (wie gut der Job für dich wäre: Themen, Gehalt, Konditionen), Eignung 30 % (wie gut dein Profil passt) und Firma 20 %. Stellen und Initiativbewerbungen stehen in einer Rangliste. Bei Initiativbewerbungen gibt es keine Anzeige: Die Konditionen im Reiz (Tarif, Befristung, Homeoffice, Gehälter) stammen aus denselben Firmendaten wie die Firmenwertung. Damit die Firma nicht doppelt zählt, gilt dort 70 % Reiz und 30 % Eignung. Die Eignung ist mit 50 angesetzt („offen“), weil es keine Anforderungen gibt. Hat die Firma gerade keine Stellen ausgeschrieben, kennt die App nur die Branche, der Reiz ist dann grob geschätzt. Große Unternehmen (Konzerne, große öffentliche Arbeitgeber oder Firmen mit vielen offenen Stellen) bekommen 5 Punkte dazu, weil du dort gern arbeiten würdest.</p></details>`
-    : `<div class="panel"><div class="empty-mini">${allL.length ? 'Keine Bewerbung passt zu Suche und Filter.' : 'Noch keine Bewerbungen. Leg oben rechts die erste an.'}</div></div>`}`;
+    : `<div class="panel"><div class="empty-mini">${allL.length ? 'Keine Bewerbung passt zu Suche und Filter.' : 'Noch keine Bewerbungen. Leg oben rechts die erste an.'}</div></div>`}${aussortiertHTML()}`;
+}
+const RAUS_ART = {ort: 'Ort', anue: 'Zeitarbeit', gehalt: 'Gehalt', niveau: 'Niveau unter dem Abschluss', befristet: 'Befristung', fach: 'Fachlich zu weit weg', beratung: 'Arbeitsweise', klima: 'Arbeitsklima', weg: 'Nicht mehr offen', doppelt: 'Doppelt', gegenlesen: 'Beim Gegenlesen', recherche: 'Bei der Recherche'};
+document.addEventListener('toggle', e => { if (e.target?.id === 'aussortiert') state.rausOffen = e.target.open; }, true);
+const aussortierte = () => Object.entries(state.apps).filter(([, a]) => a.verworfen && a.aussortiert && a.status === 'gemerkt' && !a.beispiel).map(([id, a]) => ({id, ...a}));
+function aussortiertHTML() {
+  const rs = aussortierte().filter(a => matches(a, state.search)); if (!rs.length) return '';
+  const gruppen = new Map();
+  for (const a of rs.sort((x, y) => (y.aussortiert.datum || '').localeCompare(x.aussortiert.datum || '') || (x.firma || '').localeCompare(y.firma || '', 'de'))) {
+    const k = RAUS_ART[a.aussortiert.art] || 'Sonstiges'; if (!gruppen.has(k)) gruppen.set(k, []); gruppen.get(k).push(a);
+  }
+  const lesen = window.bzPlattform?.nurLesen?.();
+  return `<details class="panel raus" id="aussortiert" ${state.rausOffen ? 'open' : ''}><summary>Aussortiert<span>${rs.length} ${rs.length === 1 ? 'Stelle passt' : 'Stellen passen'} nicht zu deinen Wünschen</span></summary>
+    <p class="muted" style="font-size:var(--t-sm);margin-top:8px">Hier landet, was eine harte Regel verletzt: Zeitarbeit, Sachbearbeitung, Gehalt unter deiner Untergrenze, Befristung, Ort, fachfremd oder viel Präsentieren und Reisen. Passt doch etwas, hol es zurück. Dann sortiert der Morgenlauf es nicht noch einmal aus.</p>
+    ${[...gruppen].map(([k, as]) => `<h3>${esc(k)} · ${as.length}</h3><ul>${as.map(a => `<li><span class="tx"><b>${esc(a.firma || 'Ohne Firma')}</b> · ${esc(a.position || '')}<small>${esc(a.aussortiert.grund || '')}${a.aussortiert.von ? ` · ${esc(a.aussortiert.von)}` : ''}${a.aussortiert.datum ? `, ${fmtDs(a.aussortiert.datum)}` : ''}</small></span>${lesen ? '' : `<button class="btn sm" type="button" data-act="zurueckholen" data-rid="${esc(a.id)}">Zurückholen</button>`}</li>`).join('')}</ul>`).join('')}
+  </details>`;
+}
+function zurueckholen(id) {
+  const a = state.apps[id]; if (!a || !a.verworfen) return;
+  const alt = {aussortiert: a.aussortiert, ausgewaehlt: a.ausgewaehlt};
+  const vid = uid();
+  a.verworfen = false; a.ausgewaehlt = true; delete a.aussortiert; state.rausOffen = true;
+  a.verlauf.push({id: vid, datum: today(), typ: 'notiz', text: `Aus „Aussortiert“ zurückgeholt (${alt.aussortiert?.grund || 'ohne Grund'})`});
+  saveApp(id);
+  toast(`${a.firma || 'Stelle'} ist zurück in der Liste.`, {action: {label: 'Rückgängig', fn: () => { a.verworfen = true; a.aussortiert = alt.aussortiert; if (alt.ausgewaehlt === undefined) delete a.ausgewaehlt; else a.ausgewaehlt = alt.ausgewaehlt; a.verlauf = a.verlauf.filter(v => v.id !== vid); saveApp(id); }}});
 }
 
 /* ================= Radar: offene Stellen mit Gesamtwertung, Firmen und Karte ================= */
@@ -1968,6 +2010,9 @@ function sammelMailModal(ids) {
           cur.aufgaben = (cur.aufgaben || []).map(k => /bewerbungsmappe|portal/i.test(k.text) ? {...k, erledigt: true} : k);
           cur.verlauf.push({id: uid(), datum: today(), typ: 'mail', text: `Bewerbung per Gmail an ${an} verschickt (${mappe.seiten} Seiten)`});
           saveApp(id, false); setStatus(id, 'beworben', {quiet: true});
+          z.rs.innerHTML = '<span class="pulse"></span>Gesendet, wird eingetragen …';
+          const ok2 = await speichernJetzt(id);
+          z.rs.textContent = ok2 ? 'Gesendet und eingetragen' : 'Gesendet. Das Eintragen holt die App beim nächsten Öffnen nach.';
         }
       } catch (e) { console.warn('Eintragen nach dem Versand', e); z.rs.textContent = 'Gesendet (bitte in der Akte auf „beworben“ setzen)'; }
       if (auswahl.length > 1) await new Promise(res => setTimeout(res, 1200));
@@ -3543,6 +3588,7 @@ document.addEventListener('click', async e => {
     if (act === 'mark-beworben' && state.openId) { setStatus(state.openId, 'beworben'); renderDrawerBody(); return; }
     if (act === 'pr-frei' || act === 'pr-neu' || act === 'pr-vorversion') return pruefAktion(act);
     if (act === 'bereit-alle') { state.zeigBereitAlle = !state.zeigBereitAlle; renderSoon(); return; }
+    if (act === 'zurueckholen') { const rid = t.closest('[data-rid]')?.dataset.rid; if (rid) zurueckholen(rid); return; }
     if (act === 'sammel-mail') return sammelMailModal();
     if (act === 'gmail-api' && state.openId) return sammelMailModal([state.openId]);
     if (act === 'li-ki' && state.openId) return liNachrichtErstellen();

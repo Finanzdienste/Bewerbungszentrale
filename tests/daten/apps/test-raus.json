@@ -1,0 +1,51 @@
+{
+ "status": "gemerkt",
+ "maxStufe": 0,
+ "verlauf": [
+  {
+   "id": "rausv1",
+   "datum": "2026-11-18",
+   "typ": "notiz",
+   "text": "Aussortiert (Zeitarbeit): Zeitarbeit"
+  }
+ ],
+ "termine": [],
+ "aufgaben": [],
+ "unterlagen": {},
+ "mail": {
+  "typ": "nachfassen",
+  "text": ""
+ },
+ "ort": "Hamburg",
+ "kontakt": {
+  "name": "",
+  "rolle": "",
+  "email": "",
+  "telefon": ""
+ },
+ "notizen": "",
+ "stellenText": "Aufgaben: Controlling.",
+ "vorschlag": true,
+ "gefundenAm": "2026-11-15",
+ "layout": "modern",
+ "akzent": "petrol",
+ "sprache": "de",
+ "firma": "Zeitwerk Personal GmbH",
+ "position": "Controller (m/w/d) in Arbeitnehmerüberlassung",
+ "bewerbungsweg": "portal",
+ "anschreiben": "",
+ "analyse": {
+  "score": 50,
+  "reiz": 60,
+  "firma": 50,
+  "gesamt": 56,
+  "fazit": ""
+ },
+ "verworfen": true,
+ "aussortiert": {
+  "art": "anue",
+  "grund": "Zeitarbeit",
+  "datum": "2026-11-18",
+  "von": "Claude"
+ }
+}

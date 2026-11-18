@@ -180,6 +180,10 @@
       loeschen: (k) => tx('dok', 'readwrite', (s) => s.delete(k)).catch(() => {}),
       meta: (k) => tx('meta', 'readonly', (s) => s.get(k)).catch(() => null),
       metaSetzen: (k, v) => tx('meta', 'readwrite', (s) => s.put(v, k)).catch(() => {}),
+      // Noch nicht bestätigte Schreibvorgänge: überleben das Schließen der App und werden beim nächsten Start nachgeholt
+      offenSetzen: (pfad, v) => tx('meta', 'readwrite', (s) => s.put(v, 'offen:' + pfad)).catch(() => {}),
+      offenLoeschen: (pfad) => tx('meta', 'readwrite', (s) => s.delete('offen:' + pfad)).catch(() => {}),
+      offenAlle: async () => { try { const db = await oeffnen(); return await new Promise((res) => { const out = {}; const c = db.transaction('meta').objectStore('meta').openCursor(); c.onsuccess = () => { const k = c.result; if (k) { if (String(k.key).startsWith('offen:')) out[String(k.key).slice(6)] = k.value; k.continue(); } else res(out); }; c.onerror = () => res({}); }); } catch { return {}; } },
     };
   })();
 
@@ -295,7 +299,7 @@
     for (const [p, v] of Object.entries(cache)) if (v && v.sha && istDok(p)) stand.set(p, v);
     if (stand.size) melden();
     await bereit;
-    try { await abgleichen(); } catch (e) { console.warn('Abgleich', e?.message); if (!stand.size) for (const h of hoerer) h.f?.(e); }
+    try { await abgleichen(); await nachholen(); } catch (e) { console.warn('Abgleich', e?.message); if (!stand.size) for (const h of hoerer) h.f?.(e); }
     setInterval(() => { if (document.visibilityState === 'visible') abgleichen().catch(() => {}); }, ABGLEICH_MS);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') abgleichen().catch(() => {}); });
   }
@@ -336,13 +340,18 @@
       throw fehler('unavailable', `löschen ${r.status}`);
     }
   }
-  const warteschlange = new Map(); // pfad -> {timer, wartende:[{ok,nein}]}
-  function vormerken(pfad) {
+  const warteschlange = new Map(); // pfad -> {timer, los, wartende:[{ok,nein}]}
+  const basisVon = new Map();      // pfad -> {basis, sha}: der bestätigte Stand, auf dem die offene Änderung aufbaut
+  function vormerken(pfad, pause = SCHREIB_PAUSE_MS) {
     let w = warteschlange.get(pfad);
     if (!w) { w = { timer: 0, wartende: [] }; warteschlange.set(pfad, w); }
     clearTimeout(w.timer);
+    if (!basisVon.has(pfad)) basisVon.set(pfad, { basis: kopie(stand.get(pfad)?.data ?? null), sha: shaVon(pfad) });
+    idb.offenSetzen(pfad, { daten: lokal.get(pfad) ?? null, ...basisVon.get(pfad), zeit: Date.now() });
     const p = new Promise((ok, nein) => w.wartende.push({ ok, nein }));
-    w.timer = setTimeout(() => {
+    w.los = () => {
+      clearTimeout(w.timer);
+      if (warteschlange.get(pfad) !== w) return;
       warteschlange.delete(pfad);
       const daten = lokal.has(pfad) ? lokal.get(pfad) : undefined;
       if (daten === undefined) { w.wartende.forEach((x) => x.ok()); return; }
@@ -350,15 +359,60 @@
       nacheinander(async () => {
         if (daten === null) { await dateiLoeschen(pfad, nachricht); stand.delete(pfad); idb.loeschen(pfad); }
         else { const sha = await dateiSchreiben(pfad, textZuB64(JSON.stringify(daten, null, 1) + '\n'), nachricht); stand.set(pfad, { sha, data: daten }); idb.setzen(pfad, { sha, data: daten }); }
-        if (lokal.get(pfad) === daten) lokal.delete(pfad); // inzwischen nicht wieder geändert
+        if (lokal.get(pfad) === daten) { lokal.delete(pfad); basisVon.delete(pfad); idb.offenLoeschen(pfad); } // inzwischen nicht wieder geändert
+        else basisVon.set(pfad, { basis: kopie(daten), sha: stand.get(pfad)?.sha || '' });
       }).then(() => w.wartende.forEach((x) => x.ok()), (e) => w.wartende.forEach((x) => x.nein(e)));
-    }, SCHREIB_PAUSE_MS);
+    };
+    w.timer = setTimeout(w.los, pause);
     return p;
+  }
+  /** Alles, was noch wartet, sofort schreiben (z. B. direkt nach dem Versand einer Bewerbung). */
+  function sofortSchreiben() {
+    const ps = [];
+    for (const w of [...warteschlange.values()]) { ps.push(new Promise((ok) => w.wartende.push({ ok, nein: ok }))); w.los(); }
+    return Promise.all(ps).then(() => kette);
+  }
+  const gleich = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  /** Drei-Wege-Abgleich auf Feldebene: was ich gegenüber basis geändert habe, kommt auf den neueren Stand fremd.
+   *  Listen mit ids (Verlauf, Termine, Aufgaben) werden vereint, damit nichts von der anderen Seite verloren geht. */
+  function zusammenfuehren(basis, mein, fremd) {
+    if (!mein || !fremd || typeof fremd !== 'object' || !basis || typeof basis !== 'object') return mein;
+    const out = kopie(fremd);
+    for (const k of new Set([...Object.keys(basis), ...Object.keys(mein)])) {
+      if (gleich(mein[k], basis[k])) continue;
+      if (!(k in mein)) { delete out[k]; continue; }
+      const a = mein[k], f = fremd[k], b = basis[k];
+      const mitIds = (l) => Array.isArray(l) && l.every((x) => x && typeof x === 'object' && x.id);
+      if (mitIds(a) && mitIds(f)) {
+        const weg = new Set((mitIds(b) ? b : []).filter((x) => !a.some((y) => y.id === x.id)).map((x) => x.id)); // von mir entfernt
+        const m = new Map(f.map((x) => [x.id, x]));
+        for (const x of a) m.set(x.id, x);
+        out[k] = [...m.values()].filter((x) => !weg.has(x.id));
+      } else out[k] = kopie(a);
+    }
+    return out;
+  }
+  /** Beim Start: was beim letzten Mal nicht mehr geschrieben wurde (App geschlossen, kein Netz), jetzt nachholen. */
+  async function nachholen() {
+    if (nurLesen) return;
+    const offen = await idb.offenAlle();
+    let n = 0;
+    for (const [pfad, o] of Object.entries(offen)) {
+      if (!istDok(pfad) || lokal.has(pfad) || warteschlange.has(pfad)) continue;
+      const jetzt = stand.get(pfad);
+      let daten = o?.daten ?? null;
+      if (daten === null) { if (!jetzt || (o.sha && jetzt.sha !== o.sha)) { idb.offenLoeschen(pfad); continue; } } // gelöscht oder inzwischen geändert: nicht blind löschen
+      else if (jetzt && o.sha !== jetzt.sha) daten = zusammenfuehren(o.basis, daten, jetzt.data);
+      if (daten !== null && jetzt && gleich(daten, jetzt.data)) { idb.offenLoeschen(pfad); continue; } // ist schon angekommen
+      idb.offenLoeschen(pfad);
+      lokal.set(pfad, daten); vormerken(pfad, 0).catch(() => {}); n++;
+    }
+    if (n) { melden(); console.info(`Nachgeholt: ${n} Änderung(en) vom letzten Mal`); }
   }
   function dokRef(pfad) {
     return {
       id: idVon(pfad),
-      async set(data) { await bereit; lokal.set(pfad, kopie(data)); melden(new Set([sammlungVon(pfad)])); return nurLesen ? undefined : vormerken(pfad); },
+      async set(data, opt) { await bereit; lokal.set(pfad, kopie(data)); melden(new Set([sammlungVon(pfad)])); return nurLesen ? undefined : vormerken(pfad, opt?.sofort ? 0 : SCHREIB_PAUSE_MS); },
       async delete() { await bereit; lokal.set(pfad, null); melden(new Set([sammlungVon(pfad)])); return nurLesen ? undefined : vormerken(pfad); },
       async get() { await bereit; return dokSnap(pfad); },
       onSnapshot(n, f) { const h = { art: 'dok', name: pfad, n, f }; hoerer.add(h); if (stand.size || netzGeladen) queueMicrotask(() => n(dokSnap(pfad))); return () => hoerer.delete(h); },
@@ -578,7 +632,7 @@
     mcp: async () => { throw fehler('not_granted', 'In der App gibt es keinen direkten Gmail-Versand.'); },
   };
   window.claude = { use: (name) => (faehig[name] ? faehig[name]() : Promise.reject(fehler('not_granted', name))) };
-  window.bzPlattform = { abgleichen: () => abgleichen(), einrichten: () => einrichtenZeigen(''), offen: () => warteschlange.size + (nurLesen ? 0 : lokal.size), kiDa: () => !!kiSchluessel(), nurLesen: () => nurLesen, gmail };
+  window.bzPlattform = { abgleichen: () => abgleichen(), einrichten: () => einrichtenZeigen(''), offen: () => warteschlange.size + (nurLesen ? 0 : lokal.size), speichern: () => sofortSchreiben(), kiDa: () => !!kiSchluessel(), nurLesen: () => nurLesen, gmail };
 
   zugangHerstellen();
   start();
