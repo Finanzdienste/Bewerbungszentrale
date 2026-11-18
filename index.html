@@ -922,15 +922,15 @@ function stats() {
 }
 /* Aufgaben, die gerade etwas zu tun bedeuten. Versand-Aufgaben stehen schon unter „Bereit zum Abschicken“, Hinweise des Laufs sind keine To-dos,
    Klärungen zählen erst, wenn die Bewerbung fertig ist, und abgeschlossene oder zurückgestellte Akten haben keine offenen Aufgaben mehr. */
-const VERSAND_AUFGABE = /^(Bewerbungsmappe in der App herunterladen und per Mail|Über das Portal bewerben|Initiativbewerbung an .+ schicken)/;
+const VERSAND_AUFGABE = /^(Bewerbungsmappe in der App herunterladen und per Mail|Über (das|den|die) .*(Portal|[Ff]ormular).* bewerben|Im Portal |Initiativbewerbung an .+ schicken)/;
 const INFO_AUFGABE = /nimmt keine Initiativbewerbungen an/;
+// Prüfpunkte vor dem Absenden: gehören zur Akte (dort stehen sie weiter), nicht in die Gesamtliste
+const PRUEF_AUFGABE = /^(Vor (dem|der) |Postanschrift|Bewerbungsadresse|Hausnummer|Bewertungen von|Anzeigentext|Stelle auf |Karriereseite von|Bei .+ prüfen, ob)|kununu|Glassdoor|Impressum/i;
 function aufgabeZeigen(a, k) {
   if (a.verworfen || a.keinBrief || ZU.has(a.status)) return false;
   if (k.erledigt) return true;
   const t = k.text || '';
-  if (INFO_AUFGABE.test(t) || VERSAND_AUFGABE.test(t)) return false;
-  if (/^Vor der Bewerbung klären/.test(t)) return a.status === 'gemerkt' && pruefStand(a) === 'frei';
-  return true;
+  return !(INFO_AUFGABE.test(t) || VERSAND_AUFGABE.test(t) || PRUEF_AUFGABE.test(t));
 }
 function attentionItems() {
   const out = []; const now = new Date();
@@ -1621,7 +1621,7 @@ function renderTermine() {
         : `<div class="empty-mini">${ic('check')}Keine offenen Nachfragen.</div>`}
       </section>
       <section class="panel"><div class="panel-head"><h2>Aufgaben</h2><span class="sub">${tasks.filter(x => !x.k.erledigt).length} offen</span></div>
-        ${bereitN ? `<p class="desc" id="aufgabenBereit" style="margin:0 0 10px"><a href="#uebersicht">${bereitN} ${bereitN === 1 ? 'Bewerbung ist' : 'Bewerbungen sind'} bereit zum Abschicken</a>, die stehen auf der Startseite.</p>` : ''}
+        ${bereitN ? `<p class="desc" id="aufgabenBereit" style="margin:0 0 10px"><a href="#uebersicht">${bereitN} ${bereitN === 1 ? 'Bewerbung ist' : 'Bewerbungen sind'} bereit zum Abschicken</a> und stehen auf der Startseite. Was vor dem Absenden noch zu klären ist, steht in der jeweiligen Akte.</p>` : ''}
         ${tasks.length ? `<ul class="tasks">${tasks.slice(0, 30).map(({a, k}) => { const n = k.faellig ? dayDiff(new Date(), parseD(k.faellig)) : null; return `<li class="${k.erledigt ? 'done' : ''}"><input type="checkbox" class="cb" id="tk-${a.id}-${k.id}" data-task="${a.id}|${k.id}" ${k.erledigt ? 'checked' : ''} aria-label="Erledigt: ${esc(k.text)}"><label class="tx" for="tk-${a.id}-${k.id}">${esc(k.text)}<small>${esc(a.firma)}</small></label><span class="due ${n != null && n < 0 && !k.erledigt ? 'over' : ''}">${k.faellig ? fmtDs(k.faellig) : ''}</span></li>`; }).join('')}</ul>`
         : `<div class="empty-mini">Noch keine Aufgaben. Leg sie in der Akte an, etwa „Arbeitsprobe schicken“.</div>`}
       </section>
