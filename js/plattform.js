@@ -236,33 +236,45 @@
     return b.encoding === 'base64' ? b64ZuText(b.content) : b.content;
   }
   async function einzelnHolen(shas, out) {
-    for (let i = 0; i < shas.length; i += 8) {
-      const teil = shas.slice(i, i + 8);
+    for (let i = 0; i < shas.length; i += 16) {
+      const teil = shas.slice(i, i + 16);
       const texte = await Promise.all(teil.map(blobEinzeln));
       teil.forEach((s, k) => out.set(s, texte[k]));
     }
   }
-  async function inhalteHolen(shas) {
-    const out = new Map();
-    if (ohneGraphql) { await einzelnHolen(shas, out); return out; }
-    for (let i = 0; i < shas.length; i += 40) {
-      const teil = shas.slice(i, i + 40);
-      const q = `query{repository(owner:"${DATEN.owner}",name:"${DATEN.repo}"){${teil.map((s, j) => `f${j}:object(oid:"${s}"){...on Blob{text isTruncated isBinary}}`).join(' ')}}}`;
-      const r = await gh('/graphql', { method: 'POST', body: JSON.stringify({ query: q }) });
-      if (r.status === 401) throw fehler('revoked');
-      const j = r.ok ? await r.json().catch(() => null) : null;
-      if (!j?.data?.repository) { ohneGraphql = true; await einzelnHolen(shas.slice(i), out); return out; } // GraphQL geht nicht: über REST, je Datei
-      const repo = j.data.repository;
-      const gross = [];
-      for (let k = 0; k < teil.length; k++) {
-        const o = repo[`f${k}`];
-        if (o && !o.isTruncated && !o.isBinary && typeof o.text === 'string') out.set(teil[k], o.text);
-        else gross.push(teil[k]); // groß: einzeln holen
-      }
-      if (gross.length) await einzelnHolen(gross, out);
+  async function paketHolen(teil, out) {
+    if (ohneGraphql) return einzelnHolen(teil, out);
+    const q = `query{repository(owner:"${DATEN.owner}",name:"${DATEN.repo}"){${teil.map((s, j) => `f${j}:object(oid:"${s}"){...on Blob{text isTruncated isBinary}}`).join(' ')}}}`;
+    const r = await gh('/graphql', { method: 'POST', body: JSON.stringify({ query: q }) });
+    if (r.status === 401) throw fehler('revoked');
+    const j = r.ok ? await r.json().catch(() => null) : null;
+    if (!j?.data?.repository) { ohneGraphql = true; return einzelnHolen(teil, out); } // GraphQL geht nicht: über REST, je Datei
+    const repo = j.data.repository;
+    const gross = [];
+    for (let k = 0; k < teil.length; k++) {
+      const o = repo[`f${k}`];
+      if (o && !o.isTruncated && !o.isBinary && typeof o.text === 'string') out.set(teil[k], o.text);
+      else gross.push(teil[k]); // groß: einzeln holen
     }
-    return out;
+    if (gross.length) await einzelnHolen(gross, out);
   }
+  /* Holt die Inhalte in Paketen zu 40, bis zu 4 Pakete gleichzeitig. fertig(map) bekommt jedes Paket, sobald es da ist:
+     so erscheinen die Bewerbungen beim ersten Start, bevor der Radar geladen ist. */
+  async function inhalteHolen(shas, fertig) {
+    const pakete = [];
+    for (let i = 0; i < shas.length; i += 40) pakete.push(shas.slice(i, i + 40));
+    let naechstes = 0;
+    const arbeiter = async () => {
+      while (naechstes < pakete.length) {
+        const teil = pakete[naechstes++]; const out = new Map();
+        await paketHolen(teil, out);
+        fertig(out);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, pakete.length) }, arbeiter));
+  }
+  const VORRANG = ['profil', 'system', 'apps', 'kandidaten', 'radarwahl', 'firmenwahl']; // was die Startseite braucht, zuerst
+  const rang = (p) => { const i = VORRANG.indexOf(sammlungVon(p)); return i < 0 ? VORRANG.length : i; };
   let etag = '';
   let abgleichLaeuft = null;
   function abgleichen() {
@@ -277,16 +289,22 @@
         etag = r.headers.get('ETag') || '';
         baum.clear();
         for (const e of j.tree || []) if (e.type === 'blob') baum.set(e.path, e.sha);
-        const neu = [...baum].filter(([p, sha]) => istDok(p) && stand.get(p)?.sha !== sha);
+        const neu = [...baum].filter(([p, sha]) => istDok(p) && stand.get(p)?.sha !== sha).sort((x, y) => rang(x[0]) - rang(y[0]));
         const weg = [...stand.keys()].filter((p) => !baum.has(p));
         const geaendert = new Set();
         if (neu.length) {
-          const texte = await inhalteHolen([...new Set(neu.map(([, s]) => s))]);
-          for (const [p, sha] of neu) {
-            const t = texte.get(sha); if (t == null) continue;
-            let data; try { data = JSON.parse(t); } catch { continue; }
-            stand.set(p, { sha, data }); idb.setzen(p, { sha, data }); geaendert.add(sammlungVon(p));
-          }
+          const pfade = new Map(); // sha -> Pfade (gleicher Inhalt kann mehrfach vorkommen)
+          for (const [p, sha] of neu) pfade.set(sha, [...(pfade.get(sha) || []), p]);
+          const vorher = !netzGeladen && stand.size === 0; // allererster Start auf diesem Gerät: Teilstände gleich zeigen
+          await inhalteHolen([...pfade.keys()], (texte) => {
+            const jetzt = new Set();
+            for (const [sha, t] of texte) {
+              if (t == null) continue;
+              let data; try { data = JSON.parse(t); } catch { continue; }
+              for (const p of pfade.get(sha) || []) { stand.set(p, { sha, data }); idb.setzen(p, { sha, data }); geaendert.add(sammlungVon(p)); jetzt.add(sammlungVon(p)); }
+            }
+            if (vorher && jetzt.size) melden(jetzt);
+          });
         }
         for (const p of weg) { stand.delete(p); idb.loeschen(p); geaendert.add(sammlungVon(p)); }
         const erstes = !netzGeladen; netzGeladen = true;

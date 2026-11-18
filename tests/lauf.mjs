@@ -179,6 +179,19 @@ test('suche-autofill', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('laden-viel', async () => {
+  // viele Akten: Pakete zu 40, mehrere gleichzeitig, alle kommen an (erfundene Daten)
+  const { seite, gh, fehler } = await appStarten();
+  const vorlage = json(gh, 'apps/test-portal.json');
+  for (let i = 0; i < 130; i++) gh.dateien.set(`apps/test-viel-${i}.json`, Buffer.from(JSON.stringify({ ...vorlage, firma: `Viel Beispiel ${i} GmbH`, position: `Stelle ${i}` }, null, 1) + '\n'));
+  await seite.waitForSelector('[data-open="test-portal"]', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.goto('http://app.test/Bewerbungszentrale/#liste');
+  await seite.waitForFunction(() => document.querySelectorAll('[data-open^="test-viel-"]').length >= 130, null, { timeout: 20000 });
+  assert.ok(gh.log.filter((x) => x === 'POST /graphql').length >= 4, '130 Akten in mindestens 4 Paketen');
+  assert.deepEqual(fehler, []);
+});
+
 test('empfaenger', async () => {
   // reine Funktion aus index.html, ohne Browser
   const html = fs.readFileSync(path.join(WURZEL, 'index.html'), 'utf8');
