@@ -192,6 +192,17 @@ test('laden-viel', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('reiter', async () => {
+  // beim Wechsel des Reiters ist nur die neue Seite sichtbar, die alte verschwindet
+  const { seite, fehler } = await appStarten({ breite: 1400, hoehe: 900 });
+  const sichtbar = () => seite.evaluate(() => [...document.querySelectorAll('section.view')].filter((s) => getComputedStyle(s).display !== 'none').map((s) => s.id));
+  for (const [hash, id] of [['#uebersicht', 'v-uebersicht'], ['#liste', 'v-liste'], ['#radar', 'v-radar'], ['#termine', 'v-termine'], ['#profil', 'v-profil'], ['#uebersicht', 'v-uebersicht']]) {
+    await seite.goto('http://app.test/Bewerbungszentrale/' + hash); await warte(400);
+    assert.deepEqual(await sichtbar(), [id], `${hash} zeigt nur ${id}`);
+  }
+  assert.deepEqual(fehler, []);
+});
+
 test('empfaenger', async () => {
   // reine Funktion aus index.html, ohne Browser
   const html = fs.readFileSync(path.join(WURZEL, 'index.html'), 'utf8');
