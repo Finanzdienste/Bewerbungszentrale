@@ -9,7 +9,7 @@ import { appStarten, schliessen, warte, WURZEL } from './hilfe.mjs';
 
 const tests = {};
 const test = (name, f) => { tests[name] = f; };
-const zuAkte = async (seite, id) => { await seite.goto('http://app.test/Bewerbungszentrale/#liste'); await seite.waitForSelector(`[data-open="${id}"]`, { timeout: 20000 }); await seite.click(`[data-open="${id}"]`); await warte(500); };
+const zuAkte = async (seite, id) => { await seite.goto('http://app.test/Bewerbungszentrale/#liste'); await seite.waitForSelector(`#v-liste [data-open="${id}"]`, { timeout: 20000 }); await seite.click(`#v-liste [data-open="${id}"]`); await warte(500); };
 const json = (gh, p) => JSON.parse(gh.dateien.get(p).toString('utf8'));
 
 test('einrichten', async () => {
@@ -22,7 +22,7 @@ test('einrichten', async () => {
   await seite.click('#bz-e-los');
   await seite.waitForSelector('#bz-einrichten', { state: 'detached', timeout: 10000 });
   await seite.goto('http://app.test/Bewerbungszentrale/#liste');
-  await seite.waitForSelector('[data-open="test-portal"]', { timeout: 20000 });
+  await seite.waitForSelector('#v-liste [data-open="test-portal"]', { timeout: 20000 });
   const gespeichert = await seite.evaluate(() => JSON.parse(localStorage.getItem('bewerbungszentrale.zugang.v1')).token);
   assert.equal(gespeichert, gh.token);
   assert.deepEqual(fehler, []);
@@ -33,7 +33,7 @@ test('zugang-link', async () => {
   await seite.goto(`http://app.test/Bewerbungszentrale/#zugang=${gh.token}`);
   await seite.reload();
   await seite.goto('http://app.test/Bewerbungszentrale/#liste');
-  await seite.waitForSelector('[data-open="test-portal"]', { timeout: 20000 });
+  await seite.waitForSelector('#v-liste [data-open="test-portal"]', { timeout: 20000 });
   assert.equal(await seite.locator('#bz-einrichten').count(), 0);
   assert.ok(!/zugang=/.test(await seite.evaluate(() => location.href)), 'Schlüssel bleibt nicht in der Adresse');
 });
@@ -41,7 +41,7 @@ test('zugang-link', async () => {
 test('laden', async () => {
   const { seite, fehler } = await appStarten();
   await seite.goto('http://app.test/Bewerbungszentrale/#liste');
-  await seite.waitForSelector('[data-open="test-mail"]', { timeout: 20000 });
+  await seite.waitForSelector('#v-liste [data-open="test-mail"]', { timeout: 20000 });
   assert.equal(await seite.locator('.rang-item[data-open]').count(), 3);
   assert.deepEqual(fehler, []);
 });
@@ -49,7 +49,7 @@ test('laden', async () => {
 test('ohne-graphql', async () => {
   const { seite, gh, fehler } = await appStarten({ graphql: false });
   await seite.goto('http://app.test/Bewerbungszentrale/#liste');
-  await seite.waitForSelector('[data-open="test-mail"]', { timeout: 20000 });
+  await seite.waitForSelector('#v-liste [data-open="test-mail"]', { timeout: 20000 });
   assert.ok(gh.log.some((x) => x.includes('/git/blobs/')), 'über REST geladen');
   assert.deepEqual(fehler, []);
 });
@@ -167,7 +167,7 @@ test('gehalt', async () => {
 test('suche-autofill', async () => {
   const { seite, fehler } = await appStarten();
   await seite.goto('http://app.test/Bewerbungszentrale/#liste');
-  await seite.waitForSelector('[data-open="test-portal"]', { timeout: 20000 });
+  await seite.waitForSelector('#v-liste [data-open="test-portal"]', { timeout: 20000 });
   // so trägt ein Passwortmanager die Mailadresse ein: Wert setzen und input auslösen, ohne dass das Feld den Fokus hat
   await seite.evaluate(() => { const q = document.querySelector('#q'); q.blur(); q.value = 'max@example.org'; q.dispatchEvent(new Event('input', { bubbles: true })); });
   await warte(300);
@@ -233,7 +233,7 @@ test('konflikt', async () => {
 test('abgleich', async () => {
   const { seite, gh } = await appStarten();
   await seite.goto('http://app.test/Bewerbungszentrale/#liste');
-  await seite.waitForSelector('[data-open="test-portal"]', { timeout: 20000 });
+  await seite.waitForSelector('#v-liste [data-open="test-portal"]', { timeout: 20000 });
   const neu = { ...json(gh, 'apps/test-leer.json'), firma: 'Neu vom Morgenlauf GmbH' };
   gh.dateien.set('apps/test-neu.json', Buffer.from(JSON.stringify(neu, null, 1) + '\n'));
   await seite.evaluate(() => window.bzPlattform.abgleichen());
@@ -246,12 +246,12 @@ test('abgleich', async () => {
 test('cache', async () => {
   const { seite, ctx } = await appStarten();
   await seite.goto('http://app.test/Bewerbungszentrale/#liste');
-  await seite.waitForSelector('[data-open="test-portal"]', { timeout: 20000 });
+  await seite.waitForSelector('#v-liste [data-open="test-portal"]', { timeout: 20000 });
   await warte(500);
   await ctx.route('https://api.github.com/**', (r) => r.abort('internetdisconnected'));
   await seite.reload();
   await seite.goto('http://app.test/Bewerbungszentrale/#liste');
-  await seite.waitForSelector('[data-open="test-portal"]', { timeout: 10000 });
+  await seite.waitForSelector('#v-liste [data-open="test-portal"]', { timeout: 10000 });
 });
 
 test('teilen', async () => {
