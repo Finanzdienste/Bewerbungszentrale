@@ -1238,7 +1238,7 @@ function renderListe() {
     <details class="erklaer"><summary>Was die Zahlen bedeuten</summary><p>Der Kreis zeigt die Gesamtwertung: Reiz 50 % (wie gut der Job für dich wäre: Themen, Gehalt, Konditionen), Eignung 30 % (wie gut dein Profil passt) und Firma 20 %. Stellen und Initiativbewerbungen stehen in einer Rangliste. Bei Initiativbewerbungen gibt es keine Anzeige: Die Konditionen im Reiz (Tarif, Befristung, Homeoffice, Gehälter) stammen aus denselben Firmendaten wie die Firmenwertung. Damit die Firma nicht doppelt zählt, gilt dort 70 % Reiz und 30 % Eignung. Die Eignung ist mit 50 angesetzt („offen“), weil es keine Anforderungen gibt. Hat die Firma gerade keine Stellen ausgeschrieben, kennt die App nur die Branche, der Reiz ist dann grob geschätzt. Große Unternehmen (Konzerne, große öffentliche Arbeitgeber oder Firmen mit vielen offenen Stellen) bekommen 5 Punkte dazu, weil du dort gern arbeiten würdest.</p></details>`
     : `<div class="panel"><div class="empty-mini">${allL.length ? 'Keine Bewerbung passt zu Suche und Filter.' : 'Noch keine Bewerbungen. Leg oben rechts die erste an.'}</div></div>`}${aussortiertHTML()}`;
 }
-const RAUS_ART = {ort: 'Ort', anue: 'Zeitarbeit', gehalt: 'Gehalt', niveau: 'Niveau unter dem Abschluss', befristet: 'Befristung', fach: 'Fachlich zu weit weg', beratung: 'Arbeitsweise', klima: 'Arbeitsklima', weg: 'Nicht mehr offen', doppelt: 'Doppelt', gegenlesen: 'Beim Gegenlesen', recherche: 'Bei der Recherche'};
+const RAUS_ART = {ort: 'Ort', anue: 'Zeitarbeit', gehalt: 'Gehalt', niveau: 'Niveau unter dem Abschluss', befristet: 'Befristung', fach: 'Fachlich zu weit weg', beratung: 'Arbeitsweise', klima: 'Arbeitsklima', weg: 'Nicht mehr offen', doppelt: 'Doppelt', firma: 'Eine Bewerbung je Firma', gegenlesen: 'Beim Gegenlesen', recherche: 'Bei der Recherche'};
 document.addEventListener('toggle', e => { if (e.target?.id === 'aussortiert') state.rausOffen = e.target.open; }, true);
 const aussortierte = () => Object.entries(state.apps).filter(([, a]) => a.verworfen && a.aussortiert && a.status === 'gemerkt' && !a.beispiel).map(([id, a]) => ({id, ...a}));
 function aussortiertHTML() {
@@ -1250,11 +1250,27 @@ function aussortiertHTML() {
   const lesen = window.bzPlattform?.nurLesen?.();
   return `<details class="panel raus" id="aussortiert" ${state.rausOffen ? 'open' : ''}><summary>Aussortiert<span>${rs.length} ${rs.length === 1 ? 'Stelle passt' : 'Stellen passen'} nicht zu deinen Wünschen</span></summary>
     <p class="muted" style="font-size:var(--t-sm);margin-top:8px">Hier landet, was eine harte Regel verletzt: Zeitarbeit, Sachbearbeitung, Gehalt unter deiner Untergrenze, Befristung, Ort, fachfremd oder viel Präsentieren und Reisen. Passt doch etwas, hol es zurück. Dann sortiert der Morgenlauf es nicht noch einmal aus.</p>
-    ${[...gruppen].map(([k, as]) => `<h3>${esc(k)} · ${as.length}</h3><ul>${as.map(a => `<li><span class="tx"><b>${esc(a.firma || 'Ohne Firma')}</b> · ${esc(a.position || '')}<small>${esc(a.aussortiert.grund || '')}${a.aussortiert.von ? ` · ${esc(a.aussortiert.von)}` : ''}${a.aussortiert.datum ? `, ${fmtDs(a.aussortiert.datum)}` : ''}</small></span>${lesen ? '' : `<button class="btn sm" type="button" data-act="zurueckholen" data-rid="${esc(a.id)}">Zurückholen</button>`}</li>`).join('')}</ul>`).join('')}
+    ${[...gruppen].map(([k, as]) => `<h3>${esc(k)} · ${as.length}</h3><ul>${as.map(a => `<li><span class="tx"><b>${esc(a.firma || 'Ohne Firma')}</b> · ${esc(a.position || '')}<small>${esc(a.aussortiert.grund || '')}${a.aussortiert.von ? ` · ${esc(a.aussortiert.von)}` : ''}${a.aussortiert.datum ? `, ${fmtDs(a.aussortiert.datum)}` : ''}</small></span>${lesen ? '' : rausKnopf(a)}</li>`).join('')}</ul>`).join('')}
   </details>`;
+}
+function rausKnopf(a) {
+  const knopf = l => `<button class="btn sm" type="button" data-act="zurueckholen" data-rid="${esc(a.id)}">${l}</button>`;
+  if (a.aussortiert?.art !== 'firma') return knopf('Zurückholen');
+  const l = laufendBeiFirma(a, a.id);
+  if (!l) return knopf('Zurückholen');
+  if (AKTIV.has(l.status)) return `<span class="muted" style="font-size:var(--t-xs);max-width:14ch;text-align:right">rückt nach, wenn ${esc(l.firma)} geantwortet hat</span>`;
+  return knopf('Stattdessen nehmen');
 }
 function zurueckholen(id) {
   const a = state.apps[id]; if (!a || !a.verworfen) return;
+  const l = a.aussortiert?.art === 'firma' ? laufendBeiFirma(a, id) : null;
+  if (l && AKTIV.has(l.status)) return toast(`Bei ${l.firma} läuft schon eine Bewerbung. Diese rückt nach, wenn die Antwort da ist.`);
+  if (l) { // tauschen: die bisher gewählte Stelle dieser Firma wartet jetzt
+    const b = state.apps[l.id];
+    b.verworfen = true; b.aussortiert = {art: 'firma', grund: `Eine Bewerbung je Firma: du hast „${a.position || 'die andere Stelle'}“ vorgezogen`, datum: today(), von: 'dir'};
+    b.verlauf.push({id: uid(), datum: today(), typ: 'notiz', text: `Zurückgestellt, weil du bei dieser Firma „${a.position || 'eine andere Stelle'}“ vorgezogen hast`});
+    saveApp(l.id, false);
+  }
   const alt = {aussortiert: a.aussortiert, ausgewaehlt: a.ausgewaehlt};
   const vid = uid();
   a.verworfen = false; a.ausgewaehlt = true; delete a.aussortiert; state.rausOffen = true;
@@ -1853,6 +1869,22 @@ function pruefStand(a) { // frei | maengel | geaendert | wird (Morgenlauf übera
   if (p.fassung && fassungVon(a) !== p.fassung) return 'geaendert';
   return p.freigabe ? 'frei' : 'maengel';
 }
+/* Eine Bewerbung je Firma zur selben Zeit. Firmengruppe wie firma_gruppe() im Morgenlauf (Daten-Repo) */
+const FIRMA_WEG = new Set(['gmbh', 'ag', 'kg', 'se', 'co', 'mbh', 'ev', 'aör', 'aor', 'ggmbh', 'eg', 'deutschland', 'germany', 'hamburg']);
+const FIRMA_GENERISCH = new Set(['hamburger', 'hamburg', 'deutsche', 'deutsches', 'deutscher', 'stadt', 'stadtwerke', 'universität', 'universitätsklinikum', 'technische', 'the', 'die', 'der', 'das', 'bundesamt', 'max', 'helmholtz', 'zentrum', 'institut', 'otto', 'green', 'nord', 'neue', 'ingenieurbüro', 'berufsgenossenschaft', 'verwaltungs', 'johann', 'heinrich', 'von', 'dr', 'und', 'hanse', 'hanseatische', 'gesellschaft', 'international', 'group', 'gruppe', 'holding', 'klinik', 'kliniken', 'landesbetrieb', 'freie', 'hansestadt', 'evangelisch', 'ev', 'st', 'sankt']);
+const FIRMA_ALIAS = [[/^henw(?= |$)/, 'hamburger energiewerke'], [/^hamburger stadtentwässerung(?= |$)/, 'wasser'], [/^hhla(?= |$)/, 'hamburger hafen'], [/^hpa(?= |$)/, 'port'], [/^ernst young(?= |$)/, 'ey']];
+function firmaGruppe(f) {
+  const n = String(f || '').toLowerCase().replace(/\((?:[mwdfx*/ ]|all genders?|gn|a\*)+\)/g, ' ').replace(/[^a-z0-9äöüß]+/g, ' ').trim();
+  let k = (' ' + n + ' ').replace(/ e v /g, ' ').split(' ').filter(w => w && !FIRMA_WEG.has(w)).join(' ');
+  for (const [rx, z] of FIRMA_ALIAS) k = k.replace(rx, z);
+  const w = k.split(' ').filter(Boolean);
+  for (let i = 0; i < w.length; i++) if (w[i].length >= 2 && !FIRMA_GENERISCH.has(w[i])) return w.slice(0, i + 1).join(' ');
+  return k;
+}
+const laeuftBei = a => !a.beispiel && (AKTIV.has(a.status) || (a.status === 'gemerkt' && !a.verworfen && !a.keinBrief));
+/** Die andere laufende Bewerbung derselben Firma (abgeschickt oder offen), sonst null. */
+const laufendBeiFirma = (a, id) => { const g = firmaGruppe(a.firma); return Object.entries(state.apps).map(([i, x]) => ({...x, id: i})).find(x => x.id !== id && laeuftBei(x) && firmaGruppe(x.firma) === g) || null; };
+const firmenMitVersand = () => new Set(Object.values(state.apps).filter(x => AKTIV.has(x.status) && !x.beispiel).map(x => firmaGruppe(x.firma)));
 const istBereit = a => !a.verworfen && !a.beispiel && pruefStand(a) === 'frei';
 const PR_WO = {anschreiben: 'Anschreiben', betreff: 'Betreff', mailtext: 'Begleitmail', lebenslauf: 'Lebenslauf', bewerbungsweg: 'Bewerbungsweg', sonstiges: 'Sonstiges'};
 function maengelHTML(ms) {
@@ -1899,7 +1931,8 @@ function bereitPanel() {
   const offen = list().filter(a => a.status === 'gemerkt' && !a.verworfen && !a.beispiel && a.anschreiben?.trim());
   if (!offen.some(a => a.pruefung || a.ueberarbeiten)) return '';
   const stand = new Map(offen.map(a => [a.id, pruefStand(a)]));
-  const bereit = offen.filter(istBereit).sort((x, y) => (x.fristBis || '9999').localeCompare(y.fristBis || '9999') || (wertungVon(y).wert ?? 0) - (wertungVon(x).wert ?? 0));
+  const belegt = firmenMitVersand();
+  const bereit = offen.filter(a => istBereit(a) && !belegt.has(firmaGruppe(a.firma))).sort((x, y) => (x.fristBis || '9999').localeCompare(y.fristBis || '9999') || (wertungVon(y).wert ?? 0) - (wertungVon(x).wert ?? 0));
   const blick = offen.filter(a => ['maengel', 'geaendert'].includes(stand.get(a.id)));
   const arbeit = offen.filter(a => ['neu', 'wird'].includes(stand.get(a.id))).length;
   const perMail = bereit.filter(a => a.bewerbungsweg === 'email' && (a.kontakt?.email || '').trim());
@@ -1916,7 +1949,7 @@ function bereitPanel() {
 const GMAIL = window.bzPlattform?.gmail || null;
 const GMAIL_FEHLER = {needs_reauth: 'Die Google-Anmeldung ist abgelaufen. Tipp noch einmal auf „Senden“.', forbidden: 'Google lässt den Versand nicht zu. Ist im Google-Cloud-Projekt die Gmail-API eingeschaltet?',
   rate_limited: 'Gmail bremst gerade. Versuch es in ein paar Minuten noch einmal.', unavailable: 'Keine Verbindung zu Google.', 'pdf-lib': 'Das PDF-Werkzeug konnte nicht geladen werden.'};
-const mailBereit = () => list().filter(a => istBereit(a) && a.bewerbungsweg === 'email' && (a.kontakt?.email || '').trim());
+const mailBereit = () => { const belegt = firmenMitVersand(); return list().filter(a => istBereit(a) && a.bewerbungsweg === 'email' && (a.kontakt?.email || '').trim() && !belegt.has(firmaGruppe(a.firma))); };
 function gmailEinrichtenModal(ids) {
   const m = modal(`<div class="modal-head"><h2>Senden über Gmail einrichten</h2><button class="btn icon ghost" type="button" data-mclose aria-label="Schließen">${ic('x')}</button></div>
     <div class="modal-body">

@@ -115,6 +115,33 @@ test('nachholen', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('eine-je-firma', async () => {
+  const { seite, gh, fehler } = await appStarten();
+  const leer = json(gh, 'apps/test-raus.json');
+  // eine zweite Stelle bei derselben Firma wie test-portal (andere Schreibweise), zurückgestellt
+  gh.dateien.set('apps/test-firma2.json', Buffer.from(JSON.stringify({ ...leer, firma: 'Hafen Muster Aktiengesellschaft Hamburg', position: 'Zweite Stelle (m/w/d)',
+    aussortiert: { art: 'firma', grund: 'Eine Bewerbung je Firma: zuerst die andere Stelle', datum: '2026-11-18', von: 'Claude' } }, null, 1) + '\n'));
+  // und eine abgeschickte Bewerbung bei der Firma von test-mail
+  gh.dateien.set('apps/test-aktiv.json', Buffer.from(JSON.stringify({ ...leer, firma: 'Klima Beispiel GmbH & Co. KG', position: 'Andere Stelle', verworfen: false, aussortiert: undefined, status: 'beworben', beworbenAm: '2026-11-10' }, null, 1) + '\n'));
+  await seite.waitForSelector('#bereitPanel', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.waitForFunction(() => !document.querySelector('#bereitPanel [data-open="test-mail"]'), null, { timeout: 10000 });
+  assert.equal(await seite.locator('#bereitPanel [data-act="sammel-mail"]').count(), 0, 'nichts senden, wo schon eine Bewerbung läuft');
+  await seite.goto('http://app.test/Bewerbungszentrale/#liste');
+  await seite.waitForSelector('#aussortiert', { timeout: 20000 });
+  await seite.click('#aussortiert summary');
+  const k = seite.locator('#aussortiert [data-rid="test-firma2"]');
+  assert.equal((await k.textContent()).trim(), 'Stattdessen nehmen');
+  await k.click();
+  for (let i = 0; i < 40 && !json(gh, 'apps/test-portal.json').verworfen; i++) await warte(250);
+  const p = json(gh, 'apps/test-portal.json'), z = json(gh, 'apps/test-firma2.json');
+  assert.equal(p.verworfen, true, 'die bisherige Stelle wartet jetzt');
+  assert.equal(p.aussortiert.art, 'firma');
+  assert.equal(z.verworfen, false);
+  assert.equal(z.ausgewaehlt, true);
+  assert.deepEqual(fehler, []);
+});
+
 test('konflikt', async () => {
   const { seite, gh, fehler } = await appStarten();
   await zuAkte(seite, 'test-mail');
