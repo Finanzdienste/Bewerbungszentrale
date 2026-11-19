@@ -680,6 +680,31 @@ test('eingang', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('dashboard', async () => {
+  // drei Reiter (Dashboard, Karte, Profil), Kacheln je Stand öffnen genau diese Bewerbungen, Unterseiten mit Zurück-Link
+  const { seite, gh, fehler } = await appStarten({ breite: 412 });
+  const a = json(gh, 'apps/test-mail.json');
+  gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...a, status: 'beworben', beworbenAm: '2026-11-18', maxStufe: 1 }, null, 1) + '\n'));
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.goto('http://app.test/Bewerbungszentrale/#uebersicht');
+  assert.deepEqual(await seite.$$eval('.tabbar a', (as) => as.map((x) => x.textContent.trim())), ['Dashboard', 'Karte', 'Profil']);
+  await seite.waitForSelector('.stufen a[href="#liste/beworben"]', { timeout: 10000 });
+  assert.match(await seite.textContent('.stufen a[href="#liste/beworben"]'), /^1Beworben/);
+  await seite.click('.stufen a[href="#liste/beworben"]');
+  await seite.waitForSelector('#v-liste [data-open="test-mail"]', { timeout: 10000 });
+  assert.equal(await seite.locator('#v-liste [data-open="test-portal"]').count(), 0, 'nur beworbene');
+  assert.equal(await seite.isVisible('#zurueck'), true, 'Zurück zum Dashboard');
+  assert.equal(await seite.getAttribute('.tabbar a[data-tab="uebersicht"]', 'aria-current'), 'page');
+  await seite.click('#zurueck');
+  await seite.waitForSelector('.stufen', { timeout: 10000 });
+  await seite.click('.tabbar a[data-tab="karte"]');
+  await seite.waitForFunction(() => !document.querySelector('#v-radar').hidden, null, { timeout: 10000 });
+  assert.equal(await seite.getAttribute('.tabbar a[data-tab="karte"]', 'aria-current'), 'page');
+  assert.equal(await seite.isVisible('#zurueck'), false);
+  assert.deepEqual(fehler, []);
+});
+
 test('gmail-merken', async () => {
   // die Erlaubnis zum Senden gilt eine Stunde: nach dem Neuladen ohne neue Anmeldung, mit dem Gmail-Konto aus dem Profil als Vorauswahl
   const { seite, gmail, fehler } = await appStarten({ google: true });

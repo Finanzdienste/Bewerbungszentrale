@@ -90,6 +90,15 @@ svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .search input:focus{border-color:var(--accent);background:var(--sheet);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
 .top-actions{display:flex;gap:8px;align-items:center}
 .tabbar{display:flex;gap:2px;align-items:stretch}
+.stufen{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:4px 0 22px}
+.stufe{display:flex;flex-direction:column;gap:2px;padding:12px 14px 12px 16px;border:1px solid var(--line);border-left:4px solid var(--stage);border-radius:12px;background:var(--sheet);text-decoration:none;color:var(--ink);min-width:0}
+.stufe:hover{border-color:color-mix(in srgb,var(--stage) 45%,var(--line));background:var(--sheet-2)}
+.stufe b{font:600 26px/1.1 var(--f-mono);color:var(--ink)}
+.stufe span{font-weight:600;font-size:var(--t-sm)}
+.stufe small{color:var(--muted);font-size:var(--t-xs)}
+.zurueck{display:inline-flex;align-items:center;gap:4px;margin:0 0 10px;color:var(--muted);text-decoration:none;font-size:var(--t-sm);font-weight:500}
+.zurueck:hover{color:var(--ink)}
+.zurueck svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .tabbar a{position:relative;display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:8px;text-decoration:none;color:var(--muted);font-weight:500;font-size:var(--t-sm);white-space:nowrap}
 .tabbar a:hover{color:var(--ink);background:var(--sheet-2)}
 .tabbar a[aria-current="page"]{color:var(--accent);background:var(--accent-soft);font-weight:600}
@@ -570,10 +579,8 @@ table.wirkung tr.grp th{padding-top:12px;font-size:var(--t-xs);text-transform:up
       <span class="brand-name">Bewerbungszentrale</span>
     </a>
     <nav class="tabbar" aria-label="Bereiche">
-      <a href="#uebersicht" data-tab="uebersicht"><span class="ti"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11 12 4l8 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/></svg></span><span class="tl">Start</span></a>
-      <a href="#liste" data-tab="bewerbungen" id="tab-bw"><span class="ti"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5a1 1 0 0 1 1-1h4.2l2 2h8.8a1 1 0 0 1 1 1V18a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1z"/></svg></span><span class="tl">Bewerbungen</span><b class="badge" id="cnt-pipeline" hidden>0</b></a>
-      <a href="#radar" data-tab="radar"><span class="ti"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="m12 12 5.5-5.5"/></svg></span><span class="tl">Radar</span><b class="badge" id="cnt-radar" hidden>0</b></a>
-      <a href="#termine" data-tab="termine"><span class="ti"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span><span class="tl">Termine</span><b class="badge hot" id="cnt-termine" hidden>0</b></a>
+      <a href="#uebersicht" data-tab="uebersicht"><span class="ti"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="8" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="5" rx="1.5"/><rect x="13.5" y="11.5" width="7" height="9" rx="1.5"/><rect x="3.5" y="14.5" width="7" height="6" rx="1.5"/></svg></span><span class="tl">Dashboard</span></a>
+      <a href="#karte" data-tab="karte"><span class="ti"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3.5 6v14L9 18l6 2 5.5-2V4L15 6z"/><path d="M9 4v14M15 6v14"/></svg></span><span class="tl">Karte</span></a>
       <a href="#profil" data-tab="profil"><span class="ti"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c.8-3.8 3.8-5.8 7.5-5.8s6.7 2 7.5 5.8"/></svg></span><span class="tl">Profil</span></a>
     </nav>
     <div class="top-actions">
@@ -585,6 +592,7 @@ table.wirkung tr.grp th{padding-top:12px;font-size:var(--t-xs);text-transform:up
 
 <main>
   <div id="banners" class="view" style="gap:10px;margin-bottom:20px" hidden></div>
+  <a class="zurueck" id="zurueck" href="#uebersicht" hidden><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>Dashboard</a>
   <div class="bw-bar" id="bwBar" hidden>
     <h1>Bewerbungen</h1>
     <div class="seg bw-seg" role="group" aria-label="Darstellung"><button type="button" data-bw="liste" aria-pressed="true">Rangliste</button><button type="button" data-bw="pipeline" aria-pressed="false">Pipeline</button></div>
@@ -706,7 +714,7 @@ const state = {
   apps: {}, profil: {}, loaded: false, profilLoaded: false,
   mode: 'pending', // pending | db | local | gast
   view: 'uebersicht', search: '',
-  listSort: {key:'aktivitaet', dir:'desc'}, listFilter: new Set(), hideClosed: false,
+  listSort: {key:'aktivitaet', dir:'desc'}, listFilter: new Set(), listBereit: false, hideClosed: false,
   openId: null, drawerTab: 'details',
   coach: {text:'', running:false, err:''},
   lauf: null,
@@ -879,32 +887,32 @@ function route() {
     setTimeout(() => { if (!/[#&]bildschirmzeit=/.test(location.hash)) try { history.replaceState(history.state, '', `${location.pathname}${location.search}#${v}`); } catch {} }, 0);
     return;
   }
-  const h = (location.hash || '').slice(1);
-  const v = VIEWS.includes(h) ? h : 'uebersicht';
+  const [h0, h1] = (location.hash || '').slice(1).split('/');
+  if (h0 === 'karte') state.radarAnsicht = 'karte';
+  else if (h0 === 'radar' && state.radarAnsicht === 'karte') state.radarAnsicht = 'liste';
+  if (h0 === 'liste' && h1) { state.listBereit = h1 === 'bereit'; state.listFilter = new Set(h1 === 'bereit' || h1 === 'alle' ? [] : [h1]); if (h1 === 'absage') state.hideClosed = false; } // aus den Kacheln im Dashboard
+  const v = h0 === 'karte' ? 'radar' : VIEWS.includes(h0) ? h0 : 'uebersicht';
   state.view = v;
   $$('[data-view]').forEach(s => s.hidden = s.dataset.view !== v);
   const vorher = state.view_vorher; state.view_vorher = v;
   const bw = v === 'pipeline' || v === 'liste';
-  $$('.tabbar a').forEach(a => { const on = a.dataset.tab === v || (a.dataset.tab === 'bewerbungen' && bw); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+  reiterMarkieren();
   const bar = $('#bwBar'); if (bar) { bar.hidden = !bw; $$('[data-bw]', bar).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.bw === v))); }
-  if (bw) { $('#tab-bw').setAttribute('href', '#' + v); try { localStorage.setItem('bz-bw2', v); } catch {} }
+  if (bw) { try { localStorage.setItem('bz-bw2', v); } catch {} }
   if (vorher && vorher !== v && !(bw && (vorher === 'pipeline' || vorher === 'liste'))) window.scrollTo(0, 0);
   if (v === 'profil') renderProfil(true); else renderAll();
   renderCounts(); renderBanners();
 }
 window.addEventListener('hashchange', route);
-try { const bwv = localStorage.getItem('bz-bw2'); if (bwv === 'pipeline') $('#tab-bw').setAttribute('href', '#pipeline'); } catch {}
-
-function renderCounts() {
-  const all = list();
-  const heute = new Date(); const nv = vorschlaege().filter(a => a.gefundenAm && dayDiff(parseD(a.gefundenAm), heute) <= 1).length; const cp = $('#cnt-pipeline');
-  cp.hidden = true; cp.textContent = nv;
-  const due = attentionItems().filter(x => x.urgent).length;
-  const c = $('#cnt-termine');
-  c.hidden = !due; c.textContent = due; c.classList.toggle('hot', due > 0);
-  const rc = $('#cnt-radar');
-  if (rc) { const jetzt = new Date(); const n = radarListe().filter(r => !r.wahl && r.gesamt >= RADAR_GUT && r.datum && dayDiff(parseD(r.datum), jetzt) <= 2).length; rc.hidden = true; rc.textContent = n; }
+/** Drei Reiter: Dashboard (mit allen Unterseiten), Karte (Radar als Karte), Profil. Unterseiten haben einen Zurück-Link. */
+function reiterMarkieren() {
+  const v = state.view, karte = v === 'radar' && state.radarAnsicht === 'karte';
+  const reiter = v === 'profil' ? 'profil' : karte ? 'karte' : 'uebersicht';
+  $$('.tabbar a').forEach(a => { if (a.dataset.tab === reiter) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+  const z = $('#zurueck'); if (z) z.hidden = v === 'uebersicht' || v === 'profil' || karte;
 }
+
+function renderCounts() {} // die Reiterleiste hat keine Zähler mehr, die Zahlen stehen im Dashboard
 
 function renderBanners() {
   const el = $('#banners'); const out = [];
@@ -1005,13 +1013,8 @@ function renderUebersicht() {
     <div class="ov-head">
       <div><p class="eyebrow">KW ${kw(now)} · ${now.toLocaleDateString('de-DE', {weekday:'long', day:'numeric', month:'long'})}</p><h1>${esc(head)}</h1><p class="lede">${esc(lede)}</p></div>
     </div>
-    <div class="kpis k3">
-      <div class="kpi"><div class="lbl">Versendet</div><div class="val">${st.sent.length}</div><div class="hint">${st.all.length - st.sent.length} gemerkt</div></div>
-      <div class="kpi"><div class="lbl">Im Prozess</div><div class="val">${st.aktiv.length}</div><div class="hint">${st.all.filter(a => a.status === 'interview').length} im Gespräch</div></div>
-      <div class="kpi"><div class="lbl">Antwortquote</div><div class="val">${pct(st.rueck.length, st.sent.length)}<small>%</small></div><div class="hint">${st.rueck.length} von ${st.sent.length} reagierten</div></div>
-    </div>
+    ${stufenKacheln()}
     ${bereitPanel()}
-    ${vorschlagPanel()}
     <section class="panel"><div class="panel-head"><h2>Jetzt dran</h2><span class="sub">Termine, Fristen, Nachfragen · nächste 7 Tage</span></div>
         ${att.length ? `<ul class="todo">${att.slice(0, 8).map(x => `<li data-open="${x.id}" style="--tone:${x.tone}" tabindex="0"><span class="ico">${ic(x.icon)}</span><span style="min-width:0"><div class="t">${esc(x.t)}</div><div class="d">${esc(x.d)}</div></span><span class="when ${x.urgent ? 'urgent' : ''}">${esc(x.when)}</span></li>`).join('')}</ul>${att.length > 8 ? `<p class="f-note"><a href="#termine">Alle ${att.length} Punkte ansehen</a></p>` : ''}`
         : `<div class="empty-mini">${ic('check')}Nichts Dringendes. Gute Gelegenheit, neue Stellen zu sammeln.</div>`}
@@ -1038,6 +1041,28 @@ function renderUebersicht() {
     </section>` : ''}`;
   renderCoach();
   wireWeekChart();
+}
+/** Kacheln im Dashboard: je Stufe die Zahl, ein Tipp öffnet die Liste genau dieser Bewerbungen. */
+function stufenKacheln() {
+  const alle = list().filter(a => !a.beispiel), belegt = firmenMitVersand(), n = k => alle.filter(a => a.status === k).length;
+  const bereit = alle.filter(a => istBereit(a) && !belegt.has(firmaGruppe(a.firma))).length;
+  const heute = today();
+  const termine = alle.reduce((s, a) => s + (a.termine || []).filter(t => (t.datum || '').slice(0, 10) >= heute).length, 0);
+  let radar = 0; try { radar = radarListe().filter(r => !r.wahl && r.gesamt >= RADAR_GUT).length; } catch { /* Radar noch nicht geladen */ }
+  const k = (href, zahl, label, farbe, hinweis = '') => `<a class="stufe" href="${href}" style="--stage:${farbe}"><b>${zahl}</b><span>${label}</span>${hinweis ? `<small>${hinweis}</small>` : ''}</a>`;
+  return `<nav class="stufen" aria-label="Bewerbungen nach Stand">
+    ${k('#liste/bereit', bereit, 'Bereit zum Abschicken', 'var(--accent)')}
+    ${k('#liste/gemerkt', n('gemerkt'), 'Gemerkt', stageVar('gemerkt'), 'in Vorbereitung')}
+    ${k('#liste/beworben', n('beworben'), 'Beworben', stageVar('beworben'))}
+    ${k('#liste/rueckmeldung', n('rueckmeldung'), 'Rückmeldung', stageVar('rueckmeldung'))}
+    ${k('#liste/interview', n('interview'), 'Gespräch', stageVar('interview'))}
+    ${n('angebot') ? k('#liste/angebot', n('angebot'), 'Angebot', stageVar('angebot')) : ''}
+    ${n('zusage') ? k('#liste/zusage', n('zusage'), 'Zusage', stageVar('zusage')) : ''}
+    ${k('#liste/absage', n('absage'), 'Absage', stageVar('absage'))}
+    ${k('#termine', termine, 'Termine', 'var(--warn)', 'und Aufgaben')}
+    ${k('#radar', radar, 'Radar', 'var(--muted)', 'passende offene Stellen')}
+    ${k('#liste/alle', alle.length, 'Alle Bewerbungen', 'var(--line-2, var(--line))')}
+  </nav>`;
 }
 function vorschlagPanel() {
   const vs = vorschlaege().filter(a => !istBereit(a)); const p = P();
@@ -1295,8 +1320,9 @@ function renderListe() {
   let rows = allL.filter(a => matches(a, state.search));
   const nIni = rows.filter(istIni).length, nSt = rows.length - nIni;
   if (state.listArt === 'stelle') rows = rows.filter(a => !istIni(a)); else if (state.listArt === 'initiativ') rows = rows.filter(istIni);
+  if (state.listBereit) { const belegt = firmenMitVersand(); rows = rows.filter(a => istBereit(a) && !belegt.has(firmaGruppe(a.firma))); }
   if (state.listFilter.size) rows = rows.filter(a => state.listFilter.has(a.status));
-  if (state.hideClosed) rows = rows.filter(a => !ZU.has(a.status) || a.status === 'zusage');
+  if (state.hideClosed && !state.listFilter.size) rows = rows.filter(a => !ZU.has(a.status) || a.status === 'zusage');
   const sortier = state.listSortier || 'score';
   const wvMap = new Map(rows.map(a => [a.id, wertungVon(a).wert ?? -1])); // einmal je Zeile statt in jedem Vergleich
   const wv = a => wvMap.get(a.id) ?? -1;
@@ -1324,7 +1350,7 @@ function renderListe() {
     <div class="radar-opts"><select class="in sm" id="listSortier" aria-label="Sortierung"><option value="score" ${sortier === 'score' ? 'selected' : ''}>Nach Score</option><option value="neu" ${sortier === 'neu' ? 'selected' : ''}>Neueste zuerst</option><option value="status" ${sortier === 'status' ? 'selected' : ''}>Nach Status</option><option value="firma" ${sortier === 'firma' ? 'selected' : ''}>Firma A–Z</option></select>
       ${counts.absage || counts.zurueckgezogen ? `<label class="toggle" for="hideClosed"><input type="checkbox" class="cb" id="hideClosed" ${state.hideClosed ? 'checked' : ''}>Absagen ausblenden</label>` : ''}
       <button class="btn sm ghost" data-act="export-csv" type="button" style="margin-left:auto" ${DL ? '' : 'disabled title="Export ist in dieser Ansicht nicht verfügbar"'}>${ic('down')}CSV</button></div>
-    ${mehrStatus ? `<div class="filters scroll">${STUFEN.filter(s => counts[s.key]).map(s => `<button type="button" class="fchip" style="--stage:${stageVar(s.key)}" data-filter="${s.key}" aria-pressed="${state.listFilter.has(s.key)}"><i></i>${s.label}<span class="c">${counts[s.key]}</span></button>`).join('')}${state.listFilter.size ? `<button class="btn sm ghost" data-act="clear-filter" type="button">Filter zurücksetzen</button>` : ''}</div>` : ''}
+    ${mehrStatus ? `<div class="filters scroll">${STUFEN.filter(s => counts[s.key]).map(s => `<button type="button" class="fchip" style="--stage:${stageVar(s.key)}" data-filter="${s.key}" aria-pressed="${state.listFilter.has(s.key)}"><i></i>${s.label}<span class="c">${counts[s.key]}</span></button>`).join('')}${state.listFilter.size || state.listBereit ? `<button class="btn sm ghost" data-act="clear-filter" type="button">Filter zurücksetzen</button>` : ''}</div>` : ''}${state.listBereit ? `<p class="desc" style="margin:4px 0 10px">Nur Bewerbungen, die bereit zum Abschicken sind.</p>` : ''}
     ${rows.length ? `${getrennt ? `<h2 class="rang-h">Stellen<span>${rows.filter(a => !istIni(a)).length} · nach Gesamtwertung</span></h2><div class="radar-list">${rows.filter(a => !istIni(a)).map(item).join('')}</div>
       <h2 class="rang-h">Initiativbewerbungen<span>${rows.filter(istIni).length} · nach Firmenwertung</span></h2><div class="radar-list">${rows.filter(istIni).map(item).join('')}</div>` : `<div class="radar-list">${rows.map(item).join('')}</div>`}
     <details class="erklaer"><summary>Was die Zahlen bedeuten</summary><p>Der Kreis zeigt die Gesamtwertung: Reiz 50 % (wie gut der Job für dich wäre: Themen, Gehalt, Konditionen), Eignung 30 % (wie gut dein Profil passt) und Firma 20 %. Stellen und Initiativbewerbungen stehen in einer Rangliste. Bei Initiativbewerbungen gibt es keine Anzeige: Die Konditionen im Reiz (Tarif, Befristung, Homeoffice, Gehälter) stammen aus denselben Firmendaten wie die Firmenwertung. Damit die Firma nicht doppelt zählt, gilt dort 70 % Reiz und 30 % Eignung. Die Eignung ist mit 50 angesetzt („offen“), weil es keine Anforderungen gibt. Hat die Firma gerade keine Stellen ausgeschrieben, kennt die App nur die Branche, der Reiz ist dann grob geschätzt. Große Unternehmen (Konzerne, große öffentliche Arbeitgeber oder Firmen mit vielen offenen Stellen) bekommen 5 Punkte dazu, weil du dort gern arbeiten würdest. Die Fahrzeit zählt mit: der Weg ab deiner Wohnung mit ÖPNV und Rad hin und zurück, mal die Bürotage laut Anzeige. Die Autozeit steht in der Akte nur zur Info. Bis 2,5 Stunden pro Woche gibt es keinen Abzug, darüber 2 Punkte je Stunde, höchstens 15. Nennt die Anzeige keine Bürotage, sind sie geschätzt (≈), dann kannst du sie in der Akte eintragen.</p></details>`
@@ -3939,7 +3965,7 @@ document.addEventListener('click', async e => {
   const rbz = t.closest('[data-rbereich]'); if (rbz) { state.radarBereich = rbz.dataset.rbereich; state.radarZeig = RADAR_SEITE; renderRadar(); return; }
   const la = t.closest('[data-lart]'); if (la) { state.listArt = la.dataset.lart; renderListe(); return; }
   const bwb = t.closest('[data-bw]'); if (bwb) { location.hash = '#' + bwb.dataset.bw; return; }
-  const ra = t.closest('[data-rans]'); if (ra) { state.radarAnsicht = ra.dataset.rans; state.karteAuswahl = []; renderRadar(); return; }
+  const ra = t.closest('[data-rans]'); if (ra) { state.radarAnsicht = ra.dataset.rans; state.karteAuswahl = []; try { history.replaceState(history.state, '', `${location.pathname}${location.search}#${ra.dataset.rans === 'karte' ? 'karte' : 'radar'}`); } catch {} reiterMarkieren(); renderRadar(); return; }
   const fw = t.closest('[data-fwahl]'); if (fw) { const it = fw.closest('[data-fk]'); if (it) firmaWahl(it.dataset.fk, fw.dataset.fwahl); return; }
   const rfk = t.closest('[data-act="radar-firma"]'); if (rfk) { state.radarFirma = rfk.dataset.fk; state.radarAnsicht = 'liste'; state.radarFilter = 'gut'; state.radarBereich = ''; state.radarZeig = RADAR_SEITE; const g = radarGefiltert(); if (!g.rows.length) state.radarFilter = 'weitere'; renderRadar(); $('#v-radar')?.scrollIntoView({block: 'start'}); return; }
   if (t.closest('[data-act="radar-firma-weg"]')) { state.radarFirma = ''; renderRadar(); return; }
@@ -3958,7 +3984,7 @@ document.addEventListener('click', async e => {
     if (act === 'coach') return runCoach(true);
     if (act === 'auswertung') { state.zeigAuswertung = !state.zeigAuswertung; try { localStorage.setItem('bz-auswertung', state.zeigAuswertung ? '1' : ''); } catch {} return renderUebersicht(); }
     if (act === 'coach-stop') return kiJobs.get('coach')?.abort();
-    if (act === 'clear-filter') { state.listFilter.clear(); return renderListe(); }
+    if (act === 'clear-filter') { state.listFilter.clear(); state.listBereit = false; return renderListe(); }
     if (act === 'export-csv') return save(`Bewerbungen_${today()}.csv`, csv());
     if (act === 'bildschirmzeit-trennen') { window.bzBildschirmzeit?.trennen(); return toast('Getrennt: Die Bewerbungszentrale meldet nichts mehr an dein Widget.'); }
     if (act === 'export-json') return save(`Bewerbungszentrale_Backup_${today()}.json`, JSON.stringify({app:'Bewerbungszentrale', version:1, exportiert:new Date().toISOString(), profil:state.profil, bewerbungen:list()}, null, 2));
