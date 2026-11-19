@@ -1199,7 +1199,41 @@ function iniWertung(a) {
   reiz = Math.max(0, Math.min(100, reiz)); const eignung = 50;
   return {wert: Math.round(0.7 * reiz + 0.3 * eignung), art: 'Gesamt', ini: true, reiz, eignung, eignungOffen: true, firma: mitDaten ? f.score : (w.firma ?? null), geschaetzt: !mitDaten, gruende: mitDaten ? gr : (w.gruende || [])};
 }
-function wertungVon(a) { const w = wertungBasis(a); if (w.wert == null) return w; const gb = grossAkte(a), bm = a.art === 'initiativ' ? 0 : beratMalus(a.position); return (gb || bm) ? {...w, wert: Math.max(0, Math.min(100, w.wert + gb - bm)), gross: gb > 0, beratung: bm > 0} : w; }
+/* Anfahrt je Stelle: schnellster Weg ab Wohnung (ÖPNV mit Rad, Rad oder Auto, berechnet vom Morgenlauf im Daten-Repo), mal Bürotage.
+   Bürotage: Eintrag der Person (buerotage) vor dem Wert aus der Anzeige. Dieselbe Formel steht in werkzeug/anfahrt.py. */
+const WEG_ART = {oepnv: 'mit ÖPNV und Rad', rad: 'nur mit dem Rad', auto: 'mit dem Auto'};
+const zahlDe = x => String(x).replace('.', ',');
+function pendelTage(x) { return Number.isFinite(x?.buerotage) ? x.buerotage : Number.isFinite(x?.anfahrt?.tage) ? x.anfahrt.tage : null; }
+function pendelStunden(x) { const t = pendelTage(x), m = x?.anfahrt?.min; if (t == null) return null; if (t === 0) return 0; if (!m) return null; return Math.round(2 * m * t / 60 * 2) / 2; }
+function pendelMalus(h) { return h == null ? 0 : Math.round(Math.min(12, Math.max(0, (h - 2.5) * 1.5))); }
+function fahrtChip(x) {
+  const h = pendelStunden(x); if (h == null) return '';
+  if (h === 0) return '<span class="chip good">ohne Pendeln</span>';
+  const an = x.anfahrt || {}, pm = pendelMalus(h);
+  return `<span class="chip ${pm >= 6 ? 'warn' : ''}" title="${esc(`${an.min} min einfach ${WEG_ART[an.art] || ''}, ${zahlDe(pendelTage(x))} Bürotage${pm ? `, minus ${pm} in der Gesamtwertung` : ''}`)}">${zahlDe(h)} Std. Fahrt pro Woche</span>`;
+}
+function fahrtHTML(a) {
+  const an = a.anfahrt;
+  if (!an || (!an.min && an.tage !== 0)) return 'Die Fahrzeit berechnet der Morgenlauf, sobald Ort oder Anschrift der Firma bekannt sind.';
+  const teile = [];
+  if (an.min) {
+    teile.push(`<b>${an.min} min</b> einfach ${WEG_ART[an.art] || ''}${an.art === 'auto' ? ' (geschätzt mit Berufsverkehr und Parken)' : ''}${an.art === 'oepnv' && an.weg ? `: ${esc(an.weg)}` : ''}.`);
+    const andere = [an.art !== 'oepnv' && an.oepnv ? `ÖPNV und Rad ${an.oepnv} min${an.weg ? ` (${esc(an.weg)})` : ''}` : '', an.art !== 'rad' && an.rad ? `nur Rad ${an.rad} min` : '', an.art !== 'auto' && an.auto ? `Auto ${an.auto} min` : ''].filter(Boolean);
+    if (andere.length) teile.push(`Sonst: ${andere.join(', ')}.`);
+    if (an.genau === false) teile.push('Nur der Ort ist bekannt, die Zeit ist grob.');
+  }
+  return teile.join(' ');
+}
+function fahrtStundenHTML(a) {
+  const an = a.anfahrt || {}, t = pendelTage(a), h = pendelStunden(a);
+  if (t == null) return '';
+  const quelle = Number.isFinite(a.buerotage) ? 'Deine Angabe.' : esc(an.tageGrund ? an.tageGrund.charAt(0).toUpperCase() + an.tageGrund.slice(1) + '.' : '');
+  if (h == null) return quelle;
+  if (h === 0) return `${quelle} Kein Pendeln, kein Abzug in der Gesamtwertung.`;
+  const pm = pendelMalus(h);
+  return `${quelle} Rund <b>${zahlDe(h)} Stunden pro Woche</b> unterwegs, hin und zurück. ${pm ? `Das zieht ${pm} ${pm === 1 ? 'Punkt' : 'Punkte'} von der Gesamtwertung ab.` : 'Bis 2,5 Stunden pro Woche gibt es keinen Abzug.'}`;
+}
+function wertungVon(a) { const w = wertungBasis(a); if (w.wert == null) return w; const gb = grossAkte(a), bm = a.art === 'initiativ' ? 0 : beratMalus(a.position), pm = pendelMalus(pendelStunden(a)); return (gb || bm || pm) ? {...w, wert: Math.max(0, Math.min(100, w.wert + gb - bm - pm)), gross: gb > 0, beratung: bm > 0, fahrt: pm} : w; }
 function wertungBasis(a) {
   const an = a.analyse || {}, w = a.wertung || {};
   if (a.art === 'initiativ') {
@@ -1238,7 +1272,7 @@ function renderListe() {
       <div class="radar-score" style="--c:${w.wert == null ? 'var(--muted)' : ringColor(w.wert)}" title="${w.ini ? 'Gesamtwertung: 70 % Reiz (mit den Firmendaten) und 30 % Eignung' : w.art === 'Gesamt' ? 'Gesamtwertung aus Reiz, Eignung und Firma' : w.art === 'Firma' ? 'Wertung des Unternehmens' + (w.geschaetzt ? ', grob geschätzt' : '') : 'Eignung laut Analyse'}">${w.wert ?? '–'}<small>${w.art}</small></div>
       <div class="radar-main"><div class="t1">${esc(titel)}</div><div class="t2">${esc([a.firma || 'Ohne Firma', a.ort].filter(Boolean).join(' · '))} · ${esc(gehaltText(ini ? a.initiativ?.fokus : a.position, a.wertung?.fk || iniFirma(a)?.key, w.gross, a.gehaltMin, a.gehaltMax))}</div>
         ${werte ? `<div class="radar-werte">${werte}</div>` : ''}
-        <div class="radar-chips">${a.status !== 'gemerkt' ? `<span class="stamp" style="--stage:${stageVar(a.status)}">${S[a.status].label}</span>` : ''}${ini ? '<span class="chip acc">Initiativ</span>' : ''}${w.gross ? '<span class="chip good">großes Unternehmen</span>' : ''}${w.beratung ? '<span class="chip warn">Beratung, viel Präsentieren</span>' : ''}<span class="chip ${fertig ? 'good' : ''}">${fertig ? 'Unterlagen fertig' : 'Unterlagen folgen'}</span>${a.sprache === 'en' ? '<span class="chip">auf Englisch</span>' : ''}${w.geschaetzt ? '<span class="chip warn">Wertung geschätzt</span>' : ''}${nachfassFaellig(a) ? '<span class="chip warn">Nachfragen fällig</span>' : ''}</div></div>
+        <div class="radar-chips">${a.status !== 'gemerkt' ? `<span class="stamp" style="--stage:${stageVar(a.status)}">${S[a.status].label}</span>` : ''}${ini ? '<span class="chip acc">Initiativ</span>' : ''}${w.gross ? '<span class="chip good">großes Unternehmen</span>' : ''}${w.beratung ? '<span class="chip warn">Beratung, viel Präsentieren</span>' : ''}${ini ? '' : fahrtChip(a)}<span class="chip ${fertig ? 'good' : ''}">${fertig ? 'Unterlagen fertig' : 'Unterlagen folgen'}</span>${a.sprache === 'en' ? '<span class="chip">auf Englisch</span>' : ''}${w.geschaetzt ? '<span class="chip warn">Wertung geschätzt</span>' : ''}${nachfassFaellig(a) ? '<span class="chip warn">Nachfragen fällig</span>' : ''}</div></div>
     </article>`;
   };
   el.innerHTML = `<div class="filters scroll">${chip('', 'Alle', nSt + nIni)}${chip('stelle', 'Stellen', nSt)}${chip('initiativ', 'Initiativ', nIni)}</div>
@@ -1248,7 +1282,7 @@ function renderListe() {
     ${mehrStatus ? `<div class="filters scroll">${STUFEN.filter(s => counts[s.key]).map(s => `<button type="button" class="fchip" style="--stage:${stageVar(s.key)}" data-filter="${s.key}" aria-pressed="${state.listFilter.has(s.key)}"><i></i>${s.label}<span class="c">${counts[s.key]}</span></button>`).join('')}${state.listFilter.size ? `<button class="btn sm ghost" data-act="clear-filter" type="button">Filter zurücksetzen</button>` : ''}</div>` : ''}
     ${rows.length ? `${getrennt ? `<h2 class="rang-h">Stellen<span>${rows.filter(a => !istIni(a)).length} · nach Gesamtwertung</span></h2><div class="radar-list">${rows.filter(a => !istIni(a)).map(item).join('')}</div>
       <h2 class="rang-h">Initiativbewerbungen<span>${rows.filter(istIni).length} · nach Firmenwertung</span></h2><div class="radar-list">${rows.filter(istIni).map(item).join('')}</div>` : `<div class="radar-list">${rows.map(item).join('')}</div>`}
-    <details class="erklaer"><summary>Was die Zahlen bedeuten</summary><p>Der Kreis zeigt die Gesamtwertung: Reiz 50 % (wie gut der Job für dich wäre: Themen, Gehalt, Konditionen), Eignung 30 % (wie gut dein Profil passt) und Firma 20 %. Stellen und Initiativbewerbungen stehen in einer Rangliste. Bei Initiativbewerbungen gibt es keine Anzeige: Die Konditionen im Reiz (Tarif, Befristung, Homeoffice, Gehälter) stammen aus denselben Firmendaten wie die Firmenwertung. Damit die Firma nicht doppelt zählt, gilt dort 70 % Reiz und 30 % Eignung. Die Eignung ist mit 50 angesetzt („offen“), weil es keine Anforderungen gibt. Hat die Firma gerade keine Stellen ausgeschrieben, kennt die App nur die Branche, der Reiz ist dann grob geschätzt. Große Unternehmen (Konzerne, große öffentliche Arbeitgeber oder Firmen mit vielen offenen Stellen) bekommen 5 Punkte dazu, weil du dort gern arbeiten würdest.</p></details>`
+    <details class="erklaer"><summary>Was die Zahlen bedeuten</summary><p>Der Kreis zeigt die Gesamtwertung: Reiz 50 % (wie gut der Job für dich wäre: Themen, Gehalt, Konditionen), Eignung 30 % (wie gut dein Profil passt) und Firma 20 %. Stellen und Initiativbewerbungen stehen in einer Rangliste. Bei Initiativbewerbungen gibt es keine Anzeige: Die Konditionen im Reiz (Tarif, Befristung, Homeoffice, Gehälter) stammen aus denselben Firmendaten wie die Firmenwertung. Damit die Firma nicht doppelt zählt, gilt dort 70 % Reiz und 30 % Eignung. Die Eignung ist mit 50 angesetzt („offen“), weil es keine Anforderungen gibt. Hat die Firma gerade keine Stellen ausgeschrieben, kennt die App nur die Branche, der Reiz ist dann grob geschätzt. Große Unternehmen (Konzerne, große öffentliche Arbeitgeber oder Firmen mit vielen offenen Stellen) bekommen 5 Punkte dazu, weil du dort gern arbeiten würdest. Die Fahrzeit zählt mit: der schnellste Weg ab deiner Wohnung (ÖPNV mit Rad, nur Rad oder Auto) hin und zurück, mal die Bürotage laut Anzeige. Bis 2,5 Stunden pro Woche gibt es keinen Abzug, darüber 1,5 Punkte je Stunde, höchstens 12. Die Bürotage kannst du in der Akte ändern.</p></details>`
     : `<div class="panel"><div class="empty-mini">${allL.length ? 'Keine Bewerbung passt zu Suche und Filter.' : 'Noch keine Bewerbungen. Leg oben rechts die erste an.'}</div></div>`}${aussortiertHTML()}`;
 }
 const RAUS_ART = {ort: 'Ort', anue: 'Zeitarbeit', gehalt: 'Gehalt', niveau: 'Niveau unter dem Abschluss', befristet: 'Befristung', fach: 'Fachlich zu weit weg', beratung: 'Arbeitsweise', klima: 'Arbeitsklima', weg: 'Nicht mehr offen', doppelt: 'Doppelt', firma: 'Eine Bewerbung je Firma', gegenlesen: 'Beim Gegenlesen', recherche: 'Bei der Recherche'};
@@ -1306,7 +1340,7 @@ function radarListeRoh() {
   const m = new Map();
   for (const [pid, pk] of Object.entries(state.radarPakete || {})) { if (pid === 'firmen') continue; for (const it of (pk.items || [])) if (it && it.id) m.set(it.id, it); }
   for (const [id, it] of Object.entries(state.radar || {})) m.set(id, {...it, id});
-  return [...m.values()].map(r => { const reiz = Number(r.reiz ?? r.score ?? 0), chance = r.chance == null ? null : Number(r.chance); const gb = grossRadar(r), bm = beratMalus(r.titel); return {...r, reiz, chance, gross: gb > 0, beratung: bm > 0, gesamt: Math.max(0, Math.min(100, gesamtVon({...r, reiz, chance}) + gb - bm))}; });
+  return [...m.values()].map(r => { const reiz = Number(r.reiz ?? r.score ?? 0), chance = r.chance == null ? null : Number(r.chance); const gb = grossRadar(r), bm = beratMalus(r.titel), pm = pendelMalus(pendelStunden(r)); return {...r, reiz, chance, gross: gb > 0, beratung: bm > 0, fahrt: pm, gesamt: Math.max(0, Math.min(100, gesamtVon({...r, reiz, chance}) + gb - bm - pm))}; });
 }
 function radarListe() {
   const m = new Map();
@@ -1315,8 +1349,8 @@ function radarListe() {
   return [...m.values()].map(r => {
     const w = state.radarWahl[r.id] || {};
     const reiz = Number(r.reiz ?? r.score ?? 0), chance = r.chance == null ? null : Number(r.chance);
-    const gb = grossRadar(r), bm = beratMalus(r.titel);
-    return {...r, reiz, chance, gross: gb > 0, beratung: bm > 0, gesamt: Math.max(0, Math.min(100, gesamtVon({...r, reiz, chance}) + gb - bm)), bereich: r.bereich || 'Sonstiges', wahl: w.wahl || '', akteId: w.akteId || r.akteId || ''};
+    const gb = grossRadar(r), bm = beratMalus(r.titel), pm = pendelMalus(pendelStunden(r));
+    return {...r, reiz, chance, gross: gb > 0, beratung: bm > 0, fahrt: pm, gesamt: Math.max(0, Math.min(100, gesamtVon({...r, reiz, chance}) + gb - bm - pm)), bereich: r.bereich || 'Sonstiges', wahl: w.wahl || '', akteId: w.akteId || r.akteId || ''};
   }).filter(r => !r.akteId && !state.apps['ba-' + r.id] && state.firmenWahl[r.fk]?.wahl !== 'nein');
 }
 /* Große Arbeitgeber: Wunsch der Person, bekommen +5 auf die Gesamtwertung */
@@ -1350,13 +1384,13 @@ function radarGefiltert() {
   return {all, GR, f, inGruppe, rows};
 }
 function radarItem(r) {
-  const ortText = r.remote ? 'Komplett remote' : [r.ort, r.km != null ? `${Math.round(r.km)} km` : ''].filter(Boolean).join(', ');
+  const ortText = r.remote ? 'Komplett remote' : [r.ort, r.km != null ? `${Math.round(r.km)} km` : '', r.anfahrt?.min ? `${r.anfahrt.min} min Fahrt` : ''].filter(Boolean).join(', ');
   const fz = r.firma_score;
   return `<article class="radar-item" data-rid="${esc(r.id)}" data-wahl="${esc(r.wahl || '')}">
-      <div class="radar-score" style="--c:${ringColor(r.gesamt)}" title="Gesamtwertung aus Reiz (50 %), Eignung (30 %) und Firma (20 %)">${Math.round(r.gesamt) || 0}<small>Gesamt</small></div>
+      <div class="radar-score" style="--c:${ringColor(r.gesamt)}" title="Gesamtwertung aus Reiz (50 %), Eignung (30 %) und Firma (20 %)${r.fahrt ? `, minus ${r.fahrt} für die Fahrzeit` : ''}">${Math.round(r.gesamt) || 0}<small>Gesamt</small></div>
       <div class="radar-main"><div class="t1">${esc(r.titel)}</div><div class="t2">${esc([r.firma, ortText].filter(Boolean).join(' · '))}${r.datum ? ` · online seit ${fmtD(r.datum)}` : ''}${Number(r.gehaltVon) >= 10000 ? ` · ab ${eur(r.gehaltVon)} im Jahr` : ` · ${esc(gehaltText(r.titel, r.fk, r.gross))}`}${r.quelle && r.quelle !== 'Bundesagentur für Arbeit' ? ` · über ${esc(r.quelle)}` : ''}${r.sprache === 'en' ? ' · Anzeige auf Englisch' : ''}</div>
         <div class="radar-werte"><span title="Wie gut der Job für dich wäre: Themen, Gehalt, Konditionen"><b>${Math.round(r.reiz)}</b> Reiz</span><span title="Wie gut dein Profil zu den Anforderungen passt"><b>${r.chance == null ? '–' : Math.round(r.chance)}</b> Eignung (${eignungText(r.chance) || 'offen'})</span><span title="Wertung des Unternehmens: Branche, Tarif, Befristung, Homeoffice, Gehälter"><b>${fz == null ? '–' : Math.round(fz)}</b> Firma${fz == null ? ' (Vermittler)' : ''}</span></div>
-        <div class="radar-chips"><span class="chip acc">${esc(r.bereich)}</span>${r.gross ? '<span class="chip good">großes Unternehmen</span>' : ''}${r.beratung ? '<span class="chip warn">Beratung, viel Präsentieren</span>' : ''}${(r.plus || []).filter(x => x !== r.bereich).map(x => `<span class="chip good">${esc(x)}</span>`).join('')}${(r.minus || []).map(x => `<span class="chip warn">${esc(x)}</span>`).join('')}</div>
+        <div class="radar-chips"><span class="chip acc">${esc(r.bereich)}</span>${r.gross ? '<span class="chip good">großes Unternehmen</span>' : ''}${r.beratung ? '<span class="chip warn">Beratung, viel Präsentieren</span>' : ''}${fahrtChip(r)}${(r.plus || []).filter(x => x !== r.bereich).map(x => `<span class="chip good">${esc(x)}</span>`).join('')}${(r.minus || []).map(x => `<span class="chip warn">${esc(x)}</span>`).join('')}</div>
         ${r.wahl === 'ja' ? `<p class="radar-hint">Wird beim nächsten Lauf (täglich 6:40 Uhr) als Bewerbung mit Analyse, Anschreiben und Lebenslauf angelegt.</p>` : ''}</div>
       <div class="radar-act">${/^https?:\/\//.test(r.link || '') ? `<a class="btn sm" href="${esc(r.link)}" target="_blank" rel="noopener">${ic('ext')}Anzeige</a>` : ''}
         <button class="btn sm ${r.wahl === 'ja' ? 'primary' : ''}" type="button" data-radar="ja" aria-pressed="${r.wahl === 'ja'}">${r.wahl === 'ja' ? 'Vorgemerkt' : 'Interessant'}</button>
@@ -2801,6 +2835,9 @@ function renderDrawerBody(reset = false) {
         ${fld('gmax', 'bis', 'gehaltMax', a.gehaltMax, {type:'number', ph:'65000', attrs:'inputmode="numeric" step="1000" min="0"'})}
         ${fld('gwunsch', 'Meine Forderung', 'gehaltWunsch', a.gehaltWunsch, {type:'number', ph:String(P().gehalt || 62000), attrs:'inputmode="numeric" step="1000" min="0"'})}
       </div><p class="desc" id="gwunschGrund" style="margin-top:6px">${gehaltHinweis(a)}</p></fieldset>
+      ${a.art === 'initiativ' && !a.anfahrt ? '' : `<fieldset class="span-2"><legend>Anfahrt</legend><p class="desc" id="fahrtText" style="margin:0 0 8px">${fahrtHTML(a)}</p><div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+        ${fld('btage', 'Bürotage pro Woche', 'buerotage', a.buerotage, {type:'number', ph: Number.isFinite(a.anfahrt?.tage) ? zahlDe(a.anfahrt.tage) : '', attrs:'inputmode="decimal" step="0.5" min="0" max="5"'})}
+      </div><p class="desc" id="fahrtStunden" style="margin-top:6px">${fahrtStundenHTML(a)}</p></fieldset>`}
       <div class="fld span-2"><span class="lbl" id="lbl-int">Wie sehr willst du diese Stelle?</span><div class="stars" role="radiogroup" aria-labelledby="lbl-int">${[1,2,3,4,5].map(n => `<button type="button" role="radio" aria-checked="${a.interesse === n}" aria-label="${n} von 5" class="${n <= a.interesse ? 'on' : ''}" data-stars="${n}">${STAR}</button>`).join('')}</div></div>
       <fieldset class="span-2"><legend>Ansprechperson</legend><div class="form-grid">
         ${fld('kname', 'Name', 'kontakt.name', a.kontakt.name, {ph:'Frau Dr. Meier'})}
@@ -3718,12 +3755,14 @@ $('#drawer').addEventListener('input', e => {
   const a = state.apps[state.openId];
   let v = e.target.value;
   if (['gehaltMin','gehaltMax','gehaltWunsch'].includes(f)) v = v === '' ? null : Number(v);
+  if (f === 'buerotage') v = v === '' || !Number.isFinite(Number(v.replace(',', '.'))) ? null : Math.min(5, Math.max(0, Number(v.replace(',', '.'))));
   if (f === 'gehaltWunsch') { a.gehaltPerson = v != null; if (v == null) { a.gehaltBegruendung = ''; a.gehaltAuto = false; } }
   const parts = f.split('.');
   if (parts.length === 2) a[parts[0]] = {...a[parts[0]], [parts[1]]: v}; else a[f] = v;
   if (f === 'beworbenAm' && v && a.status === 'gemerkt') { /* Datum gesetzt, Status bleibt bewusst manuell */ }
   saveApp(state.openId);
   if (f === 'gehaltWunsch' && $('#gwunschGrund')) $('#gwunschGrund').innerHTML = gehaltHinweis(a);
+  if (f === 'buerotage' && $('#fahrtStunden')) $('#fahrtStunden').innerHTML = fahrtStundenHTML(a);
   if (f === 'firma') $('#drFirma').textContent = v || 'Neue Bewerbung';
   if (f === 'position') $('#drPos').textContent = v;
   if (f === 'link') { const o = $('#d-link-open'); const okL = /^https?:\/\//.test(v); o.hidden = !okL; o.href = okL ? v : '#'; }

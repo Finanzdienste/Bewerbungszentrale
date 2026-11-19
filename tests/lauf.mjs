@@ -164,6 +164,36 @@ test('gehalt', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('anfahrt', async () => {
+  const { seite, gh, fehler } = await appStarten();
+  const a = json(gh, 'apps/test-portal.json');
+  gh.dateien.set('apps/test-portal.json', Buffer.from(JSON.stringify({ ...a, anfahrt: { min: 40, art: 'oepnv', weg: 'Bus 1 bis Testplatz, dann 3 min zu Fuß', oepnv: 40, rad: 55, auto: 45,
+    tage: 3, tageGrund: 'laut Anzeige: 2 Tage Homeoffice', stunden: 4, genau: true } }, null, 1) + '\n'));
+  await seite.waitForSelector('#bereitPanel, #v-liste', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.goto('http://app.test/Bewerbungszentrale/#liste');
+  await seite.waitForFunction(() => /4 Std\. Fahrt pro Woche/.test(document.querySelector('#v-liste [data-open="test-portal"]')?.textContent || ''), null, { timeout: 10000 });
+  const punkte = () => seite.evaluate(() => parseInt(document.querySelector('#v-liste [data-open="test-portal"] .radar-score')?.textContent || '', 10));
+  assert.equal(await punkte(), 78, 'Gesamt 80 minus 2 für 4 Stunden Fahrt');
+  await zuAkte(seite, 'test-portal');
+  await seite.waitForSelector('#fahrtText', { timeout: 10000 });
+  assert.match(await seite.textContent('#fahrtText'), /40 min einfach mit ÖPNV und Rad: Bus 1 bis Testplatz/);
+  assert.match(await seite.textContent('#fahrtText'), /Auto 45 min/);
+  assert.match(await seite.textContent('#fahrtStunden'), /2 Tage Homeoffice\. Rund 4 Stunden pro Woche.*2 Punkte/);
+  await seite.fill('#d-btage', '5');
+  for (let i = 0; i < 40 && json(gh, 'apps/test-portal.json').buerotage !== 5; i++) await warte(250);
+  assert.equal(json(gh, 'apps/test-portal.json').buerotage, 5, 'eigene Bürotage werden gespeichert');
+  assert.match(await seite.textContent('#fahrtStunden'), /Deine Angabe\. Rund 6,5 Stunden pro Woche.*6 Punkte/);
+  await seite.fill('#d-btage', '0');
+  await seite.waitForFunction(() => /Kein Pendeln/.test(document.querySelector('#fahrtStunden')?.textContent || ''), null, { timeout: 5000 });
+  await seite.fill('#d-btage', '5');
+  for (let i = 0; i < 40 && json(gh, 'apps/test-portal.json').buerotage !== 5; i++) await warte(250);
+  await seite.goto('http://app.test/Bewerbungszentrale/#liste');
+  await seite.waitForSelector('#v-liste [data-open="test-portal"]', { timeout: 10000 });
+  assert.equal(await punkte(), 74, 'mit 5 Bürotagen minus 6');
+  assert.deepEqual(fehler, []);
+});
+
 test('suche-autofill', async () => {
   const { seite, fehler } = await appStarten();
   await seite.goto('http://app.test/Bewerbungszentrale/#liste');
