@@ -650,7 +650,7 @@ const STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5
 const STUFEN = [
   {key:'gemerkt',        label:'Gemerkt',       stamp:'Vorgemerkt'},
   {key:'beworben',       label:'Beworben',      stamp:'Versendet'},
-  {key:'rueckmeldung',   label:'In Prüfung',    stamp:'Eingang bestätigt'},
+  {key:'rueckmeldung',   label:'Rückmeldung',   stamp:'Hat sich gemeldet'}, // echte Rückmeldung einer Person (Rückfrage, Direktansprache), keine Eingangsbestätigung
   {key:'interview',      label:'Gespräch',      stamp:'Eingeladen'},
   {key:'angebot',        label:'Angebot',       stamp:'Angebot liegt vor'},
   {key:'zusage',         label:'Zusage',        stamp:'Angenommen'},
@@ -1149,6 +1149,7 @@ function cardHTML(a) {
   if (a.status === 'gemerkt' && a.fristBis) { const n = dayDiff(new Date(), parseD(a.fristBis)); chips.push(`<span class="chip ${n < 0 ? '' : n <= 3 ? 'bad' : ''}">${ic('flag')}${n < 0 ? 'Frist vorbei' : 'Frist ' + fmtDs(a.fristBis)}</span>`); }
   const gehalt = a.gehaltMin || a.gehaltMax ? `${kEur(a.gehaltMin) || '?'}–${kEur(a.gehaltMax) || '?'} €` : '';
   if (gehalt) chips.push(`<span class="chip">${gehalt}</span>`);
+  if (a.eingangAm && a.status === 'beworben') chips.push(`<span class="chip" title="Eingangsbestätigung vom ${fmtD(a.eingangAm)}">${ic('check')}Eingang bestätigt</span>`);
   const offen = a.aufgaben.filter(k => !k.erledigt).length;
   const when = a.status === 'gemerkt' ? `angelegt ${relTage((a.erstellt || '').slice(0, 10))}` : a.beworbenAm ? `beworben ${relTage(a.beworbenAm)}` : '';
   return `<div class="card" draggable="true" data-id="${a.id}" data-open="${a.id}" tabindex="0" style="--stage:${stageVar(a.status)}" role="button" aria-label="${esc(a.firma)}, ${esc(a.position)}, ${S[a.status].label}">
@@ -2186,6 +2187,7 @@ async function lokalAbgleich(plan, dateien, allgemein) {
     if (e?.name === 'NotAllowedError') ORDNER.dir = null;
   }
 }
+window.bzMappen = () => ({drive: {info: DRIVE.info, fehler: DRIVE.fehler, fertig: !!DRIVE.sig, wartet: DRIVE.wartet, an: driveAn()}, ordner: {info: ORDNER.info, fehler: ORDNER.fehler}}); // Stand für werkzeug/drive-abgleich.mjs
 async function driveAbgleich(plan, dateien, allgemein) { // Google Drive: Ordner „Bewerbungsmappen“, je Stelle ein Unterordner, Stand in appProperties
   const enc = s => new TextEncoder().encode(s), zeig = t => { DRIVE.info = t; ordnerZeileNeu(); };
   const inOrdner = id => GDRIVE.liste(`'${id}' in parents and trashed=false`);
@@ -4083,9 +4085,10 @@ $('#drawer').addEventListener('submit', e => {
     const text = $('#v-text').value.trim(); if (!text) { $('#v-text').focus(); return; }
     const typ = $('#v-typ').value;
     a.verlauf.push({id:uid(), datum:$('#v-datum').value || today(), typ, text});
-    if (typ !== 'notiz' && typ !== 'nachgefasst' && a.status === 'beworben' && !a.antwortAm) a.antwortAm = $('#v-datum').value || today();
+    if (typ === 'eingang') a.eingangAm ||= $('#v-datum').value || today(); // Eingangsbestätigung: nur vermerken, die Karte bleibt bei „Beworben“
+    else if (typ !== 'notiz' && typ !== 'nachgefasst' && a.status === 'beworben' && !a.antwortAm) a.antwortAm = $('#v-datum').value || today();
     saveApp(id); renderDrawerHead(); renderDrawerBody();
-    const next = {eingang:'rueckmeldung', einladung:'interview', angebot:'angebot', absage:'absage'}[typ];
+    const next = {einladung:'interview', angebot:'angebot', absage:'absage'}[typ];
     if (next && a.status !== next && (RANG[next] == null || (RANG[a.status] ?? 9) < RANG[next])) toast(`Status auf „${S[next].label}“ setzen?`, {action:{label:'Ja', fn:() => setStatus(id, next, {quiet:true})}});
   }
   if (e.target.id === 'tForm') {

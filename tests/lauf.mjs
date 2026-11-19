@@ -650,6 +650,36 @@ test('schaetzung', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('drive-lauf', async () => {
+  // Abgleich ohne offene App (GitHub Action im Daten-Repo): App ohne Fenster, Zugriffstoken von außen, sonst derselbe Abgleich
+  const { driveLauf } = await import('../werkzeug/drive-abgleich.mjs');
+  const { stand, fehler, app } = await driveLauf({ daten: path.join(WURZEL, 'tests/daten'), token: 'ya29.test-lauf', clientId: GOOGLE_ID, echt: false, maxMin: 2,
+    vorher: async ({ gh }) => { const a = json(gh, 'apps/test-mail.json'); gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...a, kontakt: { ...a.kontakt, email: '' } }, null, 1) + '\n')); } });
+  assert.ok(stand?.drive?.fertig, JSON.stringify(stand));
+  assert.match(stand.drive.info, /^1 Stelle, Stand/);
+  const w = [...app.drive.dateien.values()].find((f) => f.appProperties?.bz === 'wurzel');
+  assert.ok(w, 'Hauptordner angelegt');
+  const kinder = app.drive.kinder(w.id).map((f) => f.name);
+  assert.ok(kinder.some((n) => /^\d{2} Klima/.test(n)) && kinder.includes('Allgemein'), kinder.join(', '));
+  assert.deepEqual(fehler, []);
+});
+
+test('eingang', async () => {
+  // Eingangsbestätigung verschiebt die Karte nicht: sie bleibt bei „Beworben“ mit Hinweis, „Rückmeldung“ ist für echte Antworten
+  const { seite, gh, fehler } = await appStarten({ breite: 1280 });
+  const a = json(gh, 'apps/test-mail.json');
+  gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...a, status: 'beworben', beworbenAm: '2026-11-18', eingangAm: '2026-11-18', maxStufe: 1 }, null, 1) + '\n'));
+  await seite.waitForSelector('#bereitPanel, #v-liste', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.goto('http://app.test/Bewerbungszentrale/#pipeline');
+  await seite.waitForSelector('.card[data-id="test-mail"]', { timeout: 10000 });
+  assert.match(await seite.textContent('.card[data-id="test-mail"]'), /Eingang bestätigt/);
+  assert.match(await seite.getAttribute('.card[data-id="test-mail"]', 'aria-label'), /Beworben$/);
+  assert.ok(await seite.locator('text=Rückmeldung').count() > 0, 'Spalte heißt Rückmeldung');
+  assert.equal(await seite.locator('text=In Prüfung').count(), 0);
+  assert.deepEqual(fehler, []);
+});
+
 test('gmail-merken', async () => {
   // die Erlaubnis zum Senden gilt eine Stunde: nach dem Neuladen ohne neue Anmeldung, mit dem Gmail-Konto aus dem Profil als Vorauswahl
   const { seite, gmail, fehler } = await appStarten({ google: true });

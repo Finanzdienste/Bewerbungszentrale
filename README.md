@@ -36,6 +36,9 @@ App fürs Handy, für Tobi.
   angelegt hat). Braucht im Google-Cloud-Projekt der Gmail-Anmeldung zusätzlich die Google Drive API.
   Der Stand je Ordner steht in dessen `appProperties`; erledigte Ordner gehen in den Papierkorb. Die
   Anmeldung hält eine Stunde, am PC erneuert sie sich danach beim nächsten Klick still.
+  Ohne offene App gleicht `werkzeug/drive-abgleich.mjs` ab: Es startet die App ohne Fenster mit einem
+  ausgecheckten Daten-Repo und einem Zugriffstoken von außen und macht denselben Abgleich. Das Daten-Repo
+  ruft es als GitHub Action auf (`.github/workflows/mappen.yml`, fünfmal am Tag).
 - **Teilen**: „Per WhatsApp teilen“ und „Per Mail-App senden“ geben die
   Bewerbungsmappe (PDF) über das Teilen-Menü des Handys weiter.
 - `karte/`: Kartenpakete (OpenStreetMap über Protomaps, Raum Hamburg) und

@@ -28,7 +28,7 @@ export async function schliessen() { if (browser) await browser.close(); browser
  * speicher: localStorage vor dem Start (z. B. Zugang). ki: (prompt) => Antworttext.
  * google: Google-Anmeldung und Gmail-API nachbilden; gesendete Mails landen in gmail.
  */
-export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false, graphql = true, google = false, gmailFehler = 0, nurLesen = false, driveStart = [], driveAbbruch = 0 } = {}) {
+export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false, graphql = true, google = false, gmailFehler = 0, nurLesen = false, driveStart = [], driveAbbruch = 0, driveEcht = false } = {}) {
   const b = await browserStarten();
   const ctx = await b.newContext({ viewport: { width: breite, height: hoehe }, serviceWorkers: 'block', acceptDownloads: true, permissions: ['clipboard-read', 'clipboard-write'] });
   const gh = githubAttrappe(ladeOrdner(daten), { graphql, nurLesen });
@@ -56,7 +56,7 @@ export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), spe
     }
     if (u.hostname === 'api.github.com') return gh.handler(route);
     if (u.hostname === 'api.anthropic.com') return kia.handler(route);
-    if (u.hostname === 'www.googleapis.com' && /^\/(upload\/)?drive\/v3\//.test(u.pathname)) return drive.handler(route);
+    if (u.hostname === 'www.googleapis.com' && /^\/(upload\/)?drive\/v3\//.test(u.pathname)) return driveEcht ? route.continue() : drive.handler(route); // echt: Abgleich ohne offene App (werkzeug/drive-abgleich.mjs)
     if (u.hostname === 'gmail.googleapis.com') {
       const r = route.request(), roh = r.postData() || '';
       const mime = /json/.test(r.headers()['content-type'] || '') ? Buffer.from(JSON.parse(roh).raw.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8') : roh;
