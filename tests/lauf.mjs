@@ -528,6 +528,68 @@ test('mail-antwort', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('ordner', async () => {
+  // Portal-Mappen automatisch in einen Ordner: einmal wählen, dann je Stelle ein Ordner mit Score davor; Erledigtes räumt die App weg, Fremdes nicht
+  const { seite, gh, fehler } = await appStarten();
+  const a = json(gh, 'apps/test-mail.json');
+  gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...a, kontakt: { ...a.kontakt, email: '' }, link: 'https://example.org/stelle/1', kennziffer: 'K-17' }, null, 1) + '\n'));
+  await seite.addInitScript(() => {
+    window.__pdf = 0; window.__manifest = 0;
+    const datei = (name, text = '') => ({ kind: 'file', name, daten: new TextEncoder().encode(text),
+      async getFile() { return new Blob([this.daten]); },
+      async createWritable() { const f = this, teile = []; return { async write(d) { teile.push(d); }, async close() { f.daten = new Uint8Array(await new Blob(teile).arrayBuffer()); if (f.name.endsWith('.pdf')) window.__pdf++; if (f.name === '.bewerbungszentrale.json') window.__manifest++; } }; } });
+    const ordner = (name) => { const kinder = new Map(); return { kind: 'directory', name, kinder,
+      async getDirectoryHandle(n, o = {}) { let k = kinder.get(n); if (!k) { if (!o.create) throw new DOMException('fehlt', 'NotFoundError'); k = ordner(n); kinder.set(n, k); } return k; },
+      async getFileHandle(n, o = {}) { let k = kinder.get(n); if (!k) { if (!o.create) throw new DOMException('fehlt', 'NotFoundError'); k = datei(n); kinder.set(n, k); } return k; },
+      async removeEntry(n) { if (!kinder.delete(n)) throw new DOMException('fehlt', 'NotFoundError'); },
+      async queryPermission() { return 'granted'; }, async requestPermission() { return 'granted'; } }; };
+    const w = ordner('Bewerbungen');
+    w.kinder.set('99 Alte Firma - Erledigt', ordner('99 Alte Firma - Erledigt'));
+    w.kinder.set('Eigene Notizen', ordner('Eigene Notizen'));
+    w.kinder.set('.bewerbungszentrale.json', datei('.bewerbungszentrale.json', JSON.stringify({ ordner: { '99 Alte Firma - Erledigt': 'x' } })));
+    window.__wurzel = w;
+    window.showDirectoryPicker = async () => w;
+  });
+  await seite.reload();
+  await seite.waitForSelector('#bereitPanel [data-act="ordner-waehlen"]', { timeout: 20000 });
+  assert.equal(await seite.locator('[data-act="ordner-export"]').count(), 0, 'kein Export-Knopf');
+  await seite.click('#bereitPanel [data-act="ordner-waehlen"]');
+  await seite.waitForFunction(() => window.__manifest >= 1, null, { timeout: 60000 });
+  const stand = await seite.evaluate(async () => {
+    const w = window.__wurzel, aus = {};
+    for (const [n, k] of w.kinder) aus[n] = k.kind === 'file' ? new TextDecoder().decode(k.daten.slice(0, 4000)) : Object.fromEntries([...k.kinder].map(([m, f]) => [m, new TextDecoder().decode(f.daten.slice(0, 4000))]));
+    return aus;
+  });
+  const namen = Object.keys(stand);
+  const stelle = namen.find((n) => /Klima/.test(n));
+  assert.ok(stelle, 'Ordner der Stelle: ' + namen.join(', '));
+  assert.match(stelle, /^\d{2} Klima Beispiel GmbH - Energiecontroller$/, 'Score davor, ohne (m/w/d)');
+  const inhalt = stand[stelle];
+  const pdfs = Object.keys(inhalt).filter((n) => n.endsWith('.pdf')).sort();
+  assert.equal(pdfs.length, 3, 'Anschreiben, Lebenslauf, Mappe: ' + pdfs.join(', '));
+  assert.ok(pdfs.some((n) => n.startsWith('Anschreiben_')) && pdfs.some((n) => n.startsWith('Lebenslauf_')) && pdfs.some((n) => n.startsWith('Bewerbung_')));
+  for (const n of pdfs) assert.ok(inhalt[n].startsWith('%PDF'), n + ' ist ein PDF');
+  const info = inhalt['Portal-Infos.txt'];
+  assert.match(info, /Link zur Anzeige: https:\/\/example\.org\/stelle\/1\r\n/);
+  assert.match(info, /Kennziffer: K-17/);
+  assert.match(info, /Gehaltsvorstellung: /);
+  assert.match(info, /Sehr geehrte Damen und Herren,/, 'Anschreiben zum Einfügen, ohne Betreffzeile');
+  assert.doesNotMatch(info, /Bewerbung als Energiecontroller \(m\/w\/d\)\r\n\r\nSehr geehrte/);
+  assert.ok(namen.some((n) => /^Zeugnisse_.*\.pdf$/.test(n)), 'Zeugnisse einmal im Hauptordner');
+  assert.ok(!namen.includes('99 Alte Firma - Erledigt'), 'erledigter Ordner aus der eigenen Liste weg');
+  assert.ok(namen.includes('Eigene Notizen'), 'fremde Ordner bleiben');
+  assert.ok(!namen.some((n) => /Hafen Muster/.test(n)), 'nur freigegebene Bewerbungen');
+  assert.deepEqual(Object.keys(JSON.parse(stand['.bewerbungszentrale.json']).ordner), [stelle]);
+  await seite.waitForFunction(() => /liegen automatisch in „Bewerbungen“: 1 Stelle/.test(document.querySelector('#ordner-zeile')?.textContent || ''), null, { timeout: 10000 });
+  // nochmal abgleichen ohne Änderung: keine PDFs neu bauen
+  const pdfVorher = await seite.evaluate(() => window.__pdf);
+  await seite.evaluate(() => { location.hash = '#pipeline'; });
+  await warte(6000);
+  assert.equal(await seite.evaluate(() => window.__pdf), pdfVorher, 'unveränderte Stelle wird nicht neu gebaut');
+  assert.equal(await seite.evaluate(() => window.__manifest), 1, 'ohne Änderung kein Schreibzugriff');
+  assert.deepEqual(fehler, []);
+});
+
 test('gmail-merken', async () => {
   // die Erlaubnis zum Senden gilt eine Stunde: nach dem Neuladen ohne neue Anmeldung, mit dem Gmail-Konto aus dem Profil als Vorauswahl
   const { seite, gmail, fehler } = await appStarten({ google: true });

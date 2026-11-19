@@ -740,6 +740,7 @@ function norm(a) { // fehlende Felder auffüllen
 }
 const SUCHE0 = {aktiv:false, begriffe:'', orte:'', umkreis:30, remote:true, minGehalt:null, ausschluss:'', minScore:70, maxProTag:5, ordner:'Bewerbung'};
 const P = () => { const p = Object.assign({name:'', zielrolle:'', kurzprofil:'', skills:'', lebenslauf:'', gehalt:null, kuendigung:'', eintritt:'', ton:'modern', sprache:'Deutsch', wochenziel:5, nachfassTage:14}, state.profil || {}); p.suche = Object.assign({}, SUCHE0, (state.profil || {}).suche || {}); return p; };
+const ORDNER = {dir: null, wartet: null, laeuft: false, nochmal: false, timer: null, info: '', fehler: '', sig: ''};
 const list = () => Object.entries(state.apps).filter(([, a]) => !a.verworfen).map(([id, a]) => ({id, ...a}));
 const vorschlaege = () => list().filter(a => a.vorschlag && a.status === 'gemerkt').sort((x, y) => (wertungVon(y).wert ?? 0) - (wertungVon(x).wert ?? 0) || (y.gefundenAm || '').localeCompare(x.gefundenAm || ''));
 function laufText() {
@@ -855,6 +856,7 @@ function setStatus(id, neu, {quiet = false} = {}) {
 let renderQueued = false;
 function renderSoon() { if (renderQueued) return; renderQueued = true; requestAnimationFrame(() => { renderQueued = false; renderAll(); }); }
 function renderAll() {
+  ordnerPlanen();
   renderCounts();
   renderBanners();
   const v = state.view;
@@ -1990,6 +1992,111 @@ function pruefAktion(act) {
   } else return;
   saveApp(id); renderDrawerBody();
 }
+/* ---------- Portal-Mappen als Ordner auf dem PC (Edge/Chrome: File System Access) ----------
+   Je fertiger Portal-Bewerbung ein Unterordner „Score Firma - Stelle“ mit Anschreiben, Lebenslauf, ganzer Mappe und Portal-Infos.
+   Die Zeugnisse liegen einmal im Hauptordner. Ordner, die nicht mehr dran sind (beworben, aussortiert), räumt der nächste Export weg,
+   aber nur solche, die die App selbst angelegt hat (Liste in .bewerbungszentrale.json). */
+const istPortal = a => !(a.bewerbungsweg === 'email' && (a.kontakt?.email || '').trim());
+function ordnerName(a, sc) {
+  const t = [a.firma, a.art === 'initiativ' ? 'Initiativbewerbung' : a.position].filter(Boolean).map(x => String(x).replace(/\s*\((?:[mwdfxa*/ ]|all genders?|gn|d\/m\/w|f\/m\/d)+\)\s*/gi, ' ').trim()).join(' - ');
+  return `${String(sc ?? 0).padStart(2, '0')} ${t}`.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').slice(0, 90).replace(/[ .]+$/, '');
+}
+function portalInfos(a) {
+  const p = P(), an = a.anfahrt || {}, offen = (a.aufgaben || []).filter(k => !k.erledigt).map(k => '- ' + k.text);
+  const eintritt = /^\d{2}\.\d{2}\.\d{4}$/.test(p.eintritt || '') ? p.eintritt : (p.eintritt || '');
+  const z = [`${a.firma || ''}`, `${a.position || ''}`, '', `Link zur Anzeige: ${a.link || '–'}`, a.kennziffer ? `Kennziffer: ${a.kennziffer}` : '',
+    a.kontakt?.name ? `Ansprechperson: ${a.kontakt.name}${a.kontakt.rolle ? ` (${a.kontakt.rolle})` : ''}` : '', a.anschrift ? `Anschrift: ${a.anschrift}` : '', '',
+    `Gehaltsvorstellung: ${a.gehaltWunsch ? eur(a.gehaltWunsch) + ' brutto im Jahr' : '–'}`, `Frühester Eintritt: ${eintritt || '–'}${p.kuendigung ? ` (Kündigungsfrist ${p.kuendigung})` : ''}`,
+    `Arbeitszeit: ${p.arbeitszeit || 'Vollzeit'}`, an.min ? `Anfahrt: ${an.min} min pro Weg${Number.isFinite(pendelTage(a)) ? `, ${zahlDe(pendelTage(a))} Bürotage${pendelGeschaetzt(a) ? ' (geschätzt)' : ''}` : ''}` : '',
+    ...(offen.length ? ['', 'Offene Punkte:', ...offen] : []), '', 'Deine Angaben zum Ausfüllen:', `Name: ${p.name || ''}`, `Anschrift: ${p.adresse || ''}`, `Telefon: ${p.telefon || ''}`, `E-Mail: ${p.email || ''}`,
+    '', 'Anschreiben zum Einfügen in ein Textfeld:', '', String(a.anschreiben || '').split('\n').slice(2).join('\n').trim()];
+  return z.filter((x, i) => x !== '' || z[i - 1] !== '').join('\r\n') + '\r\n';
+}
+const ordnerIdb = (art, wert) => new Promise(res => { // Ordner-Handle merken, damit nach dem ersten Mal kein Klick mehr nötig ist
+  try {
+    const r = indexedDB.open('bz-ordner', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('h');
+    r.onsuccess = () => { try { const tx = r.result.transaction('h', art === 'get' ? 'readonly' : 'readwrite'), st = tx.objectStore('h'); const q = art === 'get' ? st.get('mappen') : st.put(wert, 'mappen'); q.onsuccess = () => res(art === 'get' ? q.result : true); q.onerror = () => res(null); } catch { res(null); } };
+    r.onerror = () => res(null);
+  } catch { res(null); }
+});
+const ordnerGeht = () => !!window.showDirectoryPicker && !window.bzPlattform?.nurLesen?.();
+function ordnerZeile(bereit) {
+  if (!ordnerGeht() || !bereit.some(istPortal)) return '';
+  if (ORDNER.dir) return `<p class="desc" id="ordner-zeile">${ic('down')} Portal-Mappen liegen automatisch in „${esc(ORDNER.dir.name)}“${ORDNER.info ? `: ${esc(ORDNER.info)}` : ''}${ORDNER.fehler ? ` <span class="err">${esc(ORDNER.fehler)}</span>` : ''} · <a href="#" data-act="ordner-waehlen">anderer Ordner</a></p>`;
+  if (ORDNER.wartet) return `<p class="desc" id="ordner-zeile">${ic('down')} Ordner „${esc(ORDNER.wartet.name)}“: Edge fragt beim nächsten Klick einmal nach. Wähl „Bei jedem Besuch zulassen“, dann läuft es danach still.</p>`;
+  return `<p class="desc" id="ordner-zeile">${ic('down')} Portal-Mappen automatisch als Ordner auf dem PC ablegen (je Stelle mit Score davor): <a href="#" data-act="ordner-waehlen">Ordner einmal wählen</a></p>`;
+}
+async function ordnerWaehlen() {
+  let dir;
+  try { dir = await window.showDirectoryPicker({id: 'bz-mappen', mode: 'readwrite', startIn: 'documents'}); } // im Klick, sonst lässt der Browser das Fenster nicht zu
+  catch (e) { if (e?.name !== 'AbortError') toast('Diesen Ordner gibt Edge nicht frei. Leg darin einen Unterordner an und wähl den.'); return; }
+  ORDNER.dir = dir; ORDNER.wartet = null; ORDNER.info = 'wird gefüllt …'; ORDNER.fehler = '';
+  await ordnerIdb('put', dir);
+  renderSoon(); ordnerSync();
+}
+async function ordnerStart() { // beim Laden: gemerkten Ordner wieder öffnen, ohne Klick, wenn Edge es dauerhaft erlaubt
+  if (!ordnerGeht()) return;
+  const h = await ordnerIdb('get'); if (!h?.queryPermission) return;
+  let p = 'prompt'; try { p = await h.queryPermission({mode: 'readwrite'}); } catch { return; }
+  if (p === 'granted') { ORDNER.dir = h; ordnerPlanen(500); renderSoon(); return; }
+  if (p === 'denied') return;
+  ORDNER.wartet = h; renderSoon();
+  const frag = async () => {
+    document.removeEventListener('click', frag, true);
+    try { if (await h.requestPermission({mode: 'readwrite'}) === 'granted') { ORDNER.dir = h; ORDNER.wartet = null; ordnerPlanen(300); } else ORDNER.wartet = null; } catch { ORDNER.wartet = null; }
+    renderSoon();
+  };
+  document.addEventListener('click', frag, true);
+}
+function ordnerPlanen(ms = 4000) { // nach Änderungen gebündelt abgleichen
+  if (!ORDNER.dir || ORDNER.timer || !state.loaded || !state.profilLoaded) return;
+  ORDNER.timer = setTimeout(() => { ORDNER.timer = null; ordnerSync(); }, ms);
+}
+async function ordnerSync() {
+  if (!ORDNER.dir || !state.loaded || !state.profilLoaded) return;
+  if (ORDNER.laeuft) { ORDNER.nochmal = true; return; }
+  ORDNER.laeuft = true; ORDNER.fehler = '';
+  const dir = ORDNER.dir, enc = s => new TextEncoder().encode(s);
+  const schreib = async (ordner, name, daten) => { const fh = await ordner.getFileHandle(name, {create: true}); const w = await fh.createWritable(); await w.write(daten); await w.close(); };
+  const lies = async (ordner, name) => { try { return await (await (await ordner.getFileHandle(name)).getFile()).text(); } catch { return ''; } };
+  const pause = () => new Promise(r => setTimeout(r, 30)); // die App bleibt bedienbar
+  let neuGebaut = 0, weg = 0;
+  try {
+    const belegt = firmenMitVersand(), profilStand = sha1Hex(pyJson(P())).slice(0, 12);
+    const liste = list().filter(a => istBereit(a) && istPortal(a) && !belegt.has(firmaGruppe(a.firma))).map(a => ({a, sc: wertungVon(a).wert ?? 0})).sort((x, y) => y.sc - x.sc)
+      .map(x => { const info = portalInfos(x.a); return {...x, name: ordnerName(x.a, x.sc), info, stand: `${fassungVon(x.a)}|${profilStand}#${sha1Hex(info).slice(0, 10)}`}; });
+    const sig = profilStand + '\n' + liste.map(x => x.name + '\t' + x.stand).join('\n');
+    if (sig === ORDNER.sig) return; // nichts geändert: Laufwerk nicht anfassen (das erste Mal nach dem Laden prüft immer)
+    let alt = {}; try { alt = JSON.parse(await lies(dir, '.bewerbungszentrale.json') || '{}'); } catch { alt = {}; }
+    const altO = alt.ordner || {}, neu = {}, namen = new Set(liste.map(x => x.name));
+    for (const n of Object.keys(altO)) if (!namen.has(n)) { try { await dir.removeEntry(n, {recursive: true}); weg++; } catch { /* schon weg oder gerade offen */ } }
+    if (liste.length && alt.profil !== profilStand) { const z = await mappeBauen(liste[0].a, {teil: 'anlagen'}); if (alt.zeugnisse && alt.zeugnisse !== z.filename) { try { await dir.removeEntry(alt.zeugnisse); } catch { /* weg */ } } await schreib(dir, z.filename, z.bytes); alt.zeugnisse = z.filename; }
+    for (const {a, name, info, stand} of liste) {
+      if (ORDNER.dir !== dir) return;
+      const [pdfAlt, infoAlt] = String(altO[name] || '').split('#'), [pdfNeu, infoNeu] = stand.split('#');
+      let ordner = null; try { ordner = await dir.getDirectoryHandle(name); } catch { /* fehlt (neu oder von Hand gelöscht) */ }
+      if (!ordner || pdfAlt !== pdfNeu) {
+        ordner = ordner || await dir.getDirectoryHandle(name, {create: true});
+        for (const teil of ['brief', 'cv', 'alles']) { const r = await mappeBauen(a, {teil}); await schreib(ordner, r.filename, r.bytes); await pause(); }
+        await schreib(ordner, 'Portal-Infos.txt', enc(info)); neuGebaut++;
+      } else if (infoAlt !== infoNeu) await schreib(ordner, 'Portal-Infos.txt', enc(info));
+      neu[name] = stand;
+    }
+    const manifest = {hinweis: 'Von der Bewerbungszentrale angelegt. Ordner aus dieser Liste räumt sie selbst weg, wenn die Stelle erledigt ist.', profil: profilStand, zeugnisse: alt.zeugnisse || '', ordner: neu};
+    if (JSON.stringify({...alt, stand: undefined}) !== JSON.stringify(manifest)) await schreib(dir, '.bewerbungszentrale.json', enc(JSON.stringify({...manifest, stand: new Date().toISOString()}, null, 1)));
+    ORDNER.sig = sig;
+    ORDNER.info = `${liste.length} ${liste.length === 1 ? 'Stelle' : 'Stellen'}, Stand ${new Date().toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'})}`;
+    if (neuGebaut || weg) toast(`Mappen-Ordner: ${[neuGebaut && `${neuGebaut} aktualisiert`, weg && `${weg} erledigte entfernt`].filter(Boolean).join(', ')}`);
+  } catch (e) {
+    ORDNER.fehler = e?.name === 'NotAllowedError' ? 'Edge hat den Zugriff entzogen, bitte Ordner neu wählen.' : `Abgleich hakt: ${e?.message || 'unbekannter Fehler'}`;
+    if (e?.name === 'NotAllowedError') ORDNER.dir = null;
+  } finally {
+    ORDNER.laeuft = false;
+    const z = $('#ordner-zeile'); if (z) z.outerHTML = ordnerZeile(list().filter(istBereit));
+    if (ORDNER.nochmal) { ORDNER.nochmal = false; ordnerPlanen(1000); }
+  }
+}
 function bereitPanel() {
   const offen = list().filter(a => a.status === 'gemerkt' && !a.verworfen && !a.beispiel && a.anschreiben?.trim());
   if (!offen.some(a => a.pruefung || a.ueberarbeiten)) return '';
@@ -2004,6 +2111,7 @@ function bereitPanel() {
   const n = state.zeigBereitAlle ? bereit.length : 8;
   return `<section class="panel" id="bereitPanel"><div class="panel-head"><h2 style="display:flex;gap:8px;align-items:center">${ic('check')}Bereit zum Abschicken</h2><span class="sub">${esc([`${bereit.length} gegengelesen und freigegeben`, perMail.length ? `${perMail.length} per Mail` : '', arbeit ? `${arbeit} in Arbeit` : ''].filter(Boolean).join(' · '))}</span></div>
     ${bereit.length ? `<ul class="todo">${bereit.slice(0, n).map(a => zeile(a)).join('')}</ul>` : `<div class="empty-mini">${ic('clock')}Noch nichts freigegeben. Der Morgenlauf liest jeden Morgen gegen.</div>`}
+    ${ordnerZeile(bereit)}
     <div class="ki-row" style="margin-top:8px">${bereit.length > 8 ? `<button class="btn sm" type="button" data-act="bereit-alle">${state.zeigBereitAlle ? 'Weniger zeigen' : `Alle ${bereit.length} zeigen`}</button>` : ''}${perMail.length && !window.bzPlattform?.nurLesen?.() ? `<button class="btn sm primary" type="button" data-act="sammel-mail">${ic('mail')}${perMail.length === 1 ? 'Die Mail-Bewerbung senden' : `Alle ${perMail.length} Mail-Bewerbungen senden`}</button>` : ''}</div>
     ${blick.length ? `<h3 style="margin-top:14px;font-size:var(--t-sm)">Brauchen deinen Blick (${blick.length})</h3><ul class="todo">${blick.slice(0, 5).map(a => zeile(a, true)).join('')}</ul>` : ''}
   </section>`;
@@ -3722,6 +3830,7 @@ document.addEventListener('click', async e => {
     if (act === 'mark-beworben' && state.openId) { setStatus(state.openId, 'beworben'); renderDrawerBody(); return; }
     if (act === 'pr-frei' || act === 'pr-neu' || act === 'pr-vorversion') return pruefAktion(act);
     if (act === 'bereit-alle') { state.zeigBereitAlle = !state.zeigBereitAlle; renderSoon(); return; }
+    if (act === 'ordner-waehlen') return ordnerWaehlen();
     if (act === 'zurueckholen') { const rid = t.closest('[data-rid]')?.dataset.rid; if (rid) zurueckholen(rid); return; }
     if (act === 'sammel-mail') return sammelMailModal();
     if (act === 'gmail-api' && state.openId) return sammelMailModal([state.openId]);
@@ -3902,6 +4011,7 @@ async function init() {
   db.doc('system/lauf').onSnapshot(snap => { state.lauf = snap.exists ? clone(snap.data()) : null; if (state.view !== 'profil') renderAll(); }, () => {});
 }
 init();
+ordnerStart();
 })();
 </script>
 
