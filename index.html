@@ -1177,11 +1177,22 @@ const INI_FUN = [['Daten & Automatisierung', /data|daten|analyst|analytics|busin
   ['Logistik & Supply Chain', /logistik|supply|einkauf|einkäufer|procurement|beschaffung|disposition|demand|bedarfs|transport|spedition|warehouse|planner|s&op|category/i],
   ['Finanzen & Controlling', /controll|finanz|finance|financial|treasury|kredit|credit|forderung|buchhalt|accounting|fp&a|kosten|rechnungswesen/i]];
 const normFirma = n => String(n || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/\b(gmbh|ag|se|kg|co|ohg|e\.?v|mbh|aor|kgaa|ug|haftungsbeschrankt|und)\b/g, ' ').replace(/[^a-z0-9]+/g, '');
+// Firmendaten zu einer Akte. Wird beim Sortieren der Liste sehr oft gebraucht, deshalb mit Zwischenspeicher:
+// die normalisierten Firmennamen einmal je Firmenliste, das Ergebnis je Firma und Schlüssel.
+let _ifSrc = null, _ifNamen = [], _ifErg = new Map();
 function iniFirma(a) {
   const fs = state.radarPakete?.firmen?.items || []; const fk = a.wertung?.fk;
-  if (fk) return fs.find(f => f.key === fk) || null;
-  const n = normFirma(a.firma); if (n.length < 8) return null;
-  return fs.filter(f => { const m = normFirma(f.name); return m.length >= 8 && (m.startsWith(n) || n.startsWith(m)); }).sort((x, y) => (y.n || 0) - (x.n || 0))[0] || null;
+  if (fs !== _ifSrc) { _ifSrc = fs; _ifNamen = fs.map(f => [normFirma(f.name), f]).filter(([m]) => m.length >= 8); _ifErg = new Map(); }
+  const k = (fk || '') + '\u0001' + (a.firma || '');
+  if (_ifErg.has(k)) return _ifErg.get(k);
+  let r = null;
+  if (fk) r = firmenMap().get(fk) || null;
+  else {
+    const n = normFirma(a.firma);
+    if (n.length >= 8) r = _ifNamen.filter(([m]) => m.startsWith(n) || n.startsWith(m)).map(([, f]) => f).sort((x, y) => (y.n || 0) - (x.n || 0))[0] || null;
+  }
+  _ifErg.set(k, r);
+  return r;
 }
 function iniWertung(a) {
   const w = a.wertung || {}; const f = iniFirma(a); const mitDaten = !!(f && !f.agentur);
@@ -1256,7 +1267,8 @@ function renderListe() {
   if (state.listFilter.size) rows = rows.filter(a => state.listFilter.has(a.status));
   if (state.hideClosed) rows = rows.filter(a => !ZU.has(a.status) || a.status === 'zusage');
   const sortier = state.listSortier || 'score';
-  const wv = a => wertungVon(a).wert ?? -1;
+  const wvMap = new Map(rows.map(a => [a.id, wertungVon(a).wert ?? -1])); // einmal je Zeile statt in jedem Vergleich
+  const wv = a => wvMap.get(a.id) ?? -1;
   const cmp = {score: (x, y) => wv(y) - wv(x), neu: (x, y) => (y.gefundenAm || y.erstellt || '').localeCompare(x.gefundenAm || x.erstellt || ''), firma: (x, y) => (x.firma || '').localeCompare(y.firma || '', 'de'), status: (x, y) => (RANG[y.status] ?? -1) - (RANG[x.status] ?? -1) || wv(y) - wv(x)}[sortier] || ((x, y) => wv(y) - wv(x));
   rows.sort((x, y) => cmp(x, y) || (x.firma || '').localeCompare(y.firma || '', 'de'));
   const getrennt = false;
