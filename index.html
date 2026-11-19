@@ -90,6 +90,11 @@ svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .search input:focus{border-color:var(--accent);background:var(--sheet);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
 .top-actions{display:flex;gap:8px;align-items:center}
 .tabbar{display:flex;gap:2px;align-items:stretch}
+.mailfeld{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;margin:0 0 14px;border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));background:var(--accent-soft);border-radius:12px}
+.mailfeld span{display:flex;flex-direction:column;min-width:0}.mailfeld small{color:var(--muted);font-size:var(--t-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dash-filter{margin:0 0 12px}.dash-filter .fsep{flex:0 0 1px;align-self:stretch;background:var(--line);margin:0 4px}
+a.col-tab{text-decoration:none;color:inherit}
+a.col-tab:hover h3{text-decoration:underline}
 .stufen{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:4px 0 22px}
 .stufe{display:flex;flex-direction:column;gap:2px;padding:12px 14px 12px 16px;border:1px solid var(--line);border-left:4px solid var(--stage);border-radius:12px;background:var(--sheet);text-decoration:none;color:var(--ink);min-width:0}
 .stufe:hover{border-color:color-mix(in srgb,var(--stage) 45%,var(--line));background:var(--sheet-2)}
@@ -583,10 +588,6 @@ table.wirkung tr.grp th{padding-top:12px;font-size:var(--t-xs);text-transform:up
       <a href="#karte" data-tab="karte"><span class="ti"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3.5 6v14L9 18l6 2 5.5-2V4L15 6z"/><path d="M9 4v14M15 6v14"/></svg></span><span class="tl">Karte</span></a>
       <a href="#profil" data-tab="profil"><span class="ti"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c.8-3.8 3.8-5.8 7.5-5.8s6.7 2 7.5 5.8"/></svg></span><span class="tl">Profil</span></a>
     </nav>
-    <div class="top-actions">
-      <button class="btn ki" id="btnPaste" type="button" aria-label="Bewerbung aus Stellenanzeige anlegen" title="Aus Stellenanzeige anlegen"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3C12.6 9 15 11.4 21 12C15 12.6 12.6 15 12 21C11.4 15 9 12.6 3 12C9 11.4 11.4 9 12 3Z"/></svg><span class="lbl-long">Aus Stellenanzeige</span></button>
-      <button class="btn primary" id="btnNew" type="button" aria-label="Neue Bewerbung" title="Neue Bewerbung"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="lbl-long">Neue Bewerbung</span></button>
-    </div>
   </div>
 </header>
 
@@ -606,6 +607,7 @@ table.wirkung tr.grp th{padding-top:12px;font-size:var(--t-xs);text-transform:up
   <section class="view" id="v-pipeline" data-view="pipeline" hidden></section>
   <section class="view" id="v-liste" data-view="liste" hidden></section>
   <section class="view" id="v-radar" data-view="radar" hidden></section>
+  <section class="view" id="v-karte" data-view="karte" hidden></section>
   <section class="view" id="v-termine" data-view="termine" hidden></section>
   <section class="view" id="v-profil" data-view="profil" hidden></section>
 </main>
@@ -874,10 +876,11 @@ function renderAll() {
   else if (v === 'pipeline') renderPipeline();
   else if (v === 'liste') renderListe();
   else if (v === 'radar') renderRadar();
+  else if (v === 'karte') renderKarte();
   else if (v === 'termine') renderTermine();
   else if (v === 'profil') renderProfil(false);
 }
-const VIEWS = ['uebersicht','pipeline','liste','radar','termine','profil'];
+const VIEWS = ['uebersicht','pipeline','liste','karte','termine','profil']; // die Radar-Ansicht ist nicht mehr erreichbar (Wunsch: nur, was sich abschicken lässt)
 function route() {
   // Ein Link aus Tobis Widget-App (#bildschirmzeit=…) in der offenen App: js/bildschirmzeit.js nimmt ihn
   // gleich heraus (es hört nach uns). Man bleibt, wo man war – danach auch wieder in der Adresse.
@@ -888,10 +891,8 @@ function route() {
     return;
   }
   const [h0, h1] = (location.hash || '').slice(1).split('/');
-  if (h0 === 'karte') state.radarAnsicht = 'karte';
-  else if (h0 === 'radar' && state.radarAnsicht === 'karte') state.radarAnsicht = 'liste';
   if (h0 === 'liste' && h1) { state.listBereit = h1 === 'bereit'; state.listFilter = new Set(h1 === 'bereit' || h1 === 'alle' ? [] : [h1]); if (h1 === 'absage') state.hideClosed = false; } // aus den Kacheln im Dashboard
-  const v = h0 === 'karte' ? 'radar' : VIEWS.includes(h0) ? h0 : 'uebersicht';
+  const v = VIEWS.includes(h0) ? h0 : 'uebersicht';
   state.view = v;
   $$('[data-view]').forEach(s => s.hidden = s.dataset.view !== v);
   const vorher = state.view_vorher; state.view_vorher = v;
@@ -904,9 +905,9 @@ function route() {
   renderCounts(); renderBanners();
 }
 window.addEventListener('hashchange', route);
-/** Drei Reiter: Dashboard (mit allen Unterseiten), Karte (Radar als Karte), Profil. Unterseiten haben einen Zurück-Link. */
+/** Drei Reiter: Dashboard (mit allen Unterseiten), Karte (Bewerbungen, die bereit zum Abschicken sind), Profil. Unterseiten haben einen Zurück-Link. */
 function reiterMarkieren() {
-  const v = state.view, karte = v === 'radar' && state.radarAnsicht === 'karte';
+  const v = state.view, karte = v === 'karte';
   const reiter = v === 'profil' ? 'profil' : karte ? 'karte' : 'uebersicht';
   $$('.tabbar a').forEach(a => { if (a.dataset.tab === reiter) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   const z = $('#zurueck'); if (z) z.hidden = v === 'uebersicht' || v === 'profil' || karte;
@@ -1013,12 +1014,7 @@ function renderUebersicht() {
     <div class="ov-head">
       <div><p class="eyebrow">KW ${kw(now)} · ${now.toLocaleDateString('de-DE', {weekday:'long', day:'numeric', month:'long'})}</p><h1>${esc(head)}</h1><p class="lede">${esc(lede)}</p></div>
     </div>
-    ${stufenKacheln()}
-    ${bereitPanel()}
-    <section class="panel"><div class="panel-head"><h2>Jetzt dran</h2><span class="sub">Termine, Fristen, Nachfragen · nächste 7 Tage</span></div>
-        ${att.length ? `<ul class="todo">${att.slice(0, 8).map(x => `<li data-open="${x.id}" style="--tone:${x.tone}" tabindex="0"><span class="ico">${ic(x.icon)}</span><span style="min-width:0"><div class="t">${esc(x.t)}</div><div class="d">${esc(x.d)}</div></span><span class="when ${x.urgent ? 'urgent' : ''}">${esc(x.when)}</span></li>`).join('')}</ul>${att.length > 8 ? `<p class="f-note"><a href="#termine">Alle ${att.length} Punkte ansehen</a></p>` : ''}`
-        : `<div class="empty-mini">${ic('check')}Nichts Dringendes. Gute Gelegenheit, neue Stellen zu sammeln.</div>`}
-    </section>
+    ${dashboardBoard()}
     <button class="btn mehr-btn" type="button" data-act="auswertung" aria-expanded="${!!state.zeigAuswertung}">${ic('chart')}${state.zeigAuswertung ? 'Auswertung ausblenden' : 'Auswertung und Strategie-Check zeigen'}</button>
     ${state.zeigAuswertung ? `<div class="kpis k2">
       <div class="kpi"><div class="lbl">Gesprächsquote</div><div class="val">${pct(st.gespraech.length, st.sent.length)}<small>%</small></div><div class="hint">${st.gespraech.length} ${st.gespraech.length === 1 ? 'Einladung' : 'Einladungen'}</div></div>
@@ -1043,12 +1039,43 @@ function renderUebersicht() {
   wireWeekChart();
 }
 /** Kacheln im Dashboard: je Stufe die Zahl, ein Tipp öffnet die Liste genau dieser Bewerbungen. */
+/** Pipeline direkt im Dashboard: erste Spalte nur, was sich abschicken lässt, dann die Stufen nach dem Abschicken.
+    Was der Morgenlauf noch vorbereitet, steht nur als Zahl darüber. Ein Tipp auf den Spaltenkopf öffnet die Liste. */
+const DASH_SPALTEN = [['bereit', 'Vorbereitet'], ['vorbereitung', 'In Vorbereitung'], ['beworben', 'Beworben'], ['rueckmeldung', 'Rückmeldung'], ['interview', 'Gespräch'], ['angebot', 'Angebot'], ['zusage', 'Zusage'], ['absage', 'Absage']];
+const dashFilter = (() => { try { const f = JSON.parse(localStorage.getItem('bz-dash') || 'null'); if (f && Array.isArray(f.aus)) return {aus: new Set(f.aus), weg: f.weg || ''}; } catch {} return {aus: new Set(['vorbereitung']), weg: ''}; })();
+const dashMerken = () => { try { localStorage.setItem('bz-dash', JSON.stringify({aus: [...dashFilter.aus], weg: dashFilter.weg})); } catch {} };
+/** Dashboard = eine Pipeline: Spalten nach Stand, Vorbereitete nach Score sortiert. Filter blenden Spalten aus oder zeigen nur Portal bzw. Mail.
+    Liegt mindestens eine Mail-Bewerbung bereit, steht oben das Feld „x per Mail schicken“. */
+function dashboardBoard() {
+  const alle = list().filter(a => !a.beispiel), belegt = firmenMitVersand();
+  const bereitSet = new Set(alle.filter(a => istBereit(a) && !belegt.has(firmaGruppe(a.firma))).map(a => a.id));
+  const sc = a => wertungVon(a).wert ?? 0;
+  const inSpalte = {
+    bereit: a => bereitSet.has(a.id), vorbereitung: a => a.status === 'gemerkt' && !bereitSet.has(a.id),
+    absage: a => a.status === 'absage' || a.status === 'zurueckgezogen',
+  };
+  const weg = a => dashFilter.weg === 'portal' ? istPortal(a) : dashFilter.weg === 'mail' ? !istPortal(a) : true;
+  const spalten = DASH_SPALTEN.map(([k, label]) => {
+    const items = alle.filter(inSpalte[k] || (a => a.status === k));
+    const sichtbar = items.filter(weg).sort(['bereit', 'vorbereitung'].includes(k) ? (x, y) => sc(y) - sc(x) || (x.fristBis || '9999').localeCompare(y.fristBis || '9999') : (x, y) => lastActivity(y).localeCompare(lastActivity(x)));
+    return {k, label, items, sichtbar};
+  }).filter(s => s.items.length || !['angebot', 'zusage'].includes(s.k));
+  const mail = mailBereit(), lesen = window.bzPlattform?.nurLesen?.();
+  const att = attentionItems(), termine = att.filter(x => x.kind === 'termin').length, rest = att.length - termine;
+  const chip = (attr, wert, label, n, an) => `<button type="button" class="fchip" ${attr}="${wert}" aria-pressed="${an}">${label}<span class="c">${n}</span></button>`;
+  const farbe = k => k === 'bereit' ? 'var(--accent)' : k === 'vorbereitung' ? stageVar('gemerkt') : stageVar(k);
+  const cols = spalten.filter(s => !dashFilter.aus.has(s.k)).map(s => `<div class="col" style="--stage:${farbe(s.k)}"><div class="col-tab"><h3>${s.label}</h3><span class="n">${s.sichtbar.length}</span></div>
+      <div class="col-body" data-drop="${['bereit', 'vorbereitung'].includes(s.k) ? 'gemerkt' : s.k}">${s.sichtbar.length ? s.sichtbar.map(cardHTML).join('') : `<div class="col-empty">${s.k === 'bereit' ? 'Gerade nichts fertig' : '–'}</div>`}</div></div>`).join('');
+  return `${mail.length && !lesen ? `<div class="mailfeld" id="mailFeld"><span><b>${mail.length} per Mail schicken</b><small>${esc(mail.slice(0, 3).map(a => a.firma).join(', '))}${mail.length > 3 ? ' …' : ''}</small></span><button class="btn primary" type="button" data-act="sammel-mail">${ic('mail')}Jetzt senden</button></div>` : ''}
+    ${att.length ? `<p class="desc" style="margin:0 0 10px"><a href="#termine">${[termine ? `${termine} ${termine === 1 ? 'Termin' : 'Termine'}` : '', rest ? `${rest} ${rest === 1 ? 'Sache' : 'Sachen'} zu erledigen` : ''].filter(Boolean).join(' und ')} in den nächsten 7 Tagen</a></p>` : ''}
+    <div class="filters scroll dash-filter">${spalten.map(s => chip('data-dspalte', s.k, s.label, s.items.length, !dashFilter.aus.has(s.k))).join('')}<span class="fsep"></span>${chip('data-dweg', 'portal', 'Portal', alle.filter(a => bereitSet.has(a.id) && istPortal(a)).length, dashFilter.weg === 'portal')}${chip('data-dweg', 'mail', 'Per Mail', alle.filter(a => bereitSet.has(a.id) && !istPortal(a)).length, dashFilter.weg === 'mail')}</div>
+    <div class="board-wrap"><div class="board">${cols}</div></div>`;
+}
 function stufenKacheln() {
   const alle = list().filter(a => !a.beispiel), belegt = firmenMitVersand(), n = k => alle.filter(a => a.status === k).length;
   const bereit = alle.filter(a => istBereit(a) && !belegt.has(firmaGruppe(a.firma))).length;
   const heute = today();
   const termine = alle.reduce((s, a) => s + (a.termine || []).filter(t => (t.datum || '').slice(0, 10) >= heute).length, 0);
-  let radar = 0; try { radar = radarListe().filter(r => !r.wahl && r.gesamt >= RADAR_GUT).length; } catch { /* Radar noch nicht geladen */ }
   const k = (href, zahl, label, farbe, hinweis = '') => `<a class="stufe" href="${href}" style="--stage:${farbe}"><b>${zahl}</b><span>${label}</span>${hinweis ? `<small>${hinweis}</small>` : ''}</a>`;
   return `<nav class="stufen" aria-label="Bewerbungen nach Stand">
     ${k('#liste/bereit', bereit, 'Bereit zum Abschicken', 'var(--accent)')}
@@ -1060,7 +1087,6 @@ function stufenKacheln() {
     ${n('zusage') ? k('#liste/zusage', n('zusage'), 'Zusage', stageVar('zusage')) : ''}
     ${k('#liste/absage', n('absage'), 'Absage', stageVar('absage'))}
     ${k('#termine', termine, 'Termine', 'var(--warn)', 'und Aufgaben')}
-    ${k('#radar', radar, 'Radar', 'var(--muted)', 'passende offene Stellen')}
     ${k('#liste/alle', alle.length, 'Alle Bewerbungen', 'var(--line-2, var(--line))')}
   </nav>`;
 }
@@ -1168,7 +1194,7 @@ function cardHTML(a) {
   const nt = naechsterTermin(a);
   const chips = [];
   if (a.beispiel) chips.push(`<span class="chip bsp">Beispiel</span>`);
-  if (a.vorschlag && a.status === 'gemerkt') chips.push(`<span class="chip acc">${ic('spark')}Vorschlag${a.analyse?.score ? ' · ' + Number(a.analyse.score) : ''}</span>`);
+  if (a.status === 'gemerkt') { const w = wertungVon(a); if (w.wert != null) chips.push(`<span class="chip" style="color:${ringColor(w.wert)};font-family:var(--f-mono);font-weight:600" title="Score">${w.geschaetzt ? '≈' : ''}${w.wert}</span>`); }
   if (nt) chips.push(`<span class="chip acc">${ic('cal')}${WT[nt.d.getDay()]} ${fmtDs(isoDate(nt.d))}, ${fmtT(nt.d)}</span>`);
   if (nachfassFaellig(a)) chips.push(`<span class="chip warn">${ic('reply')}Nachfragen</span>`);
   if (a.status === 'gemerkt' && a.fristBis) { const n = dayDiff(new Date(), parseD(a.fristBis)); chips.push(`<span class="chip ${n < 0 ? '' : n <= 3 ? 'bad' : ''}">${ic('flag')}${n < 0 ? 'Frist vorbei' : 'Frist ' + fmtDs(a.fristBis)}</span>`); }
@@ -1628,15 +1654,30 @@ function karteJobs() {
   return {type: 'FeatureCollection', features: karteRows.map(r => ({type: 'Feature', properties: {id: r.id, g: Math.round(r.gesamt) || 0}, geometry: {type: 'Point', coordinates: [Number(r.lon), Number(r.lat)]}}))};
 }
 function karteDaten() { const s = karte && karteBereit && karte.getSource('jobs'); if (s) s.setData(karteJobs()); }
-function karteHTML(rows) {
+function karteHTML(rows, akten = false) {
   const ohne = rows.filter(r => !(r.lat && r.lon)).length;
   const auswahl = (state.karteAuswahl || []).map(id => rows.find(r => r.id === id)).filter(Boolean);
   return `<div class="karte-wrap"><div id="karteSlot" class="karte"></div>
       <div class="karte-legende"><span><i class="kl-dot" style="background:var(--good)"></i>Gesamt ab 75</span><span><i class="kl-dot" style="background:var(--warn)"></i>50 bis 74</span><span><i class="kl-dot" style="background:var(--bad)"></i>unter 50</span><span><i class="kl-heim"></i>du</span><span class="kl-ringe">Ringe: 10, 20, 30, 45 km</span></div></div>
-    <p class="desc" style="margin:8px 0 0">${(rows.length - ohne).toLocaleString('de-DE')} Stellen auf der Karte${ohne ? `, ${ohne} komplett remote ohne Ort` : ''}. Tippe auf einen Punkt oder eine Zahl, dann erscheinen die Stellen darunter.</p>
+    <p class="desc" style="margin:8px 0 0">${akten ? `${rows.length - ohne} auf der Karte${ohne ? `, ${ohne} ohne Ort (remote oder noch nicht verortet)` : ''}. Tippe auf einen Punkt, dann erscheinen die Bewerbungen darunter.` : `${(rows.length - ohne).toLocaleString('de-DE')} Stellen auf der Karte${ohne ? `, ${ohne} komplett remote ohne Ort` : ''}. Tippe auf einen Punkt oder eine Zahl, dann erscheinen die Stellen darunter.`}</p>
+    ${akten && ohne ? `<details class="erklaer"><summary>Ohne Ort</summary><ul class="todo">${rows.filter(r => !(r.lat && r.lon)).map(karteAkte).join('')}</ul></details>` : ''}
     <div id="karteAuswahl">${auswahl.length ? karteListe(auswahl) : ''}</div>`;
 }
-function karteListe(rs) { return `<h3 class="karte-h">${rs.length} ${rs.length === 1 ? 'Stelle' : 'Stellen'} an dieser Stelle der Karte</h3><div class="radar-list">${[...rs].sort((x, y) => y.gesamt - x.gesamt).slice(0, 40).map(radarItem).join('')}</div>`; }
+/** Reiter Karte: nur Bewerbungen, die bereit zum Abschicken sind, am Arbeitsort (Ort aus der Fahrzeit-Rechnung). */
+function renderKarte() {
+  const el = $('#v-karte'); if (!el) return;
+  const belegt = firmenMitVersand();
+  const bereit = list().filter(a => !a.beispiel && istBereit(a) && !belegt.has(firmaGruppe(a.firma)));
+  const rows = bereit.map(a => ({id: a.id, akte: a, lat: a.anfahrt?.lat, lon: a.anfahrt?.lon, gesamt: wertungVon(a).wert ?? 0}));
+  el.innerHTML = `<div class="view-head"><div><h1>Karte</h1><p>${bereit.length ? `${bereit.length} ${bereit.length === 1 ? 'Bewerbung ist' : 'Bewerbungen sind'} bereit zum Abschicken.` : 'Gerade ist keine Bewerbung bereit zum Abschicken.'}</p></div></div>${karteHTML(rows, true)}`;
+  karteZeichnen(rows);
+}
+function karteAkte(r) {
+  const a = r.akte, an = a.anfahrt || {};
+  return `<li data-open="${a.id}" tabindex="0" style="--tone:${ringColor(r.gesamt)}"><span class="ico" style="font-family:var(--f-mono);font-size:12px;font-weight:600">${r.gesamt}</span><span style="min-width:0"><div class="t">${esc(a.position || '')} · ${esc(a.firma || '')}</div><div class="d">${esc([a.ort, an.min ? `${an.min} min` : '', istPortal(a) ? 'über Portal' : 'per Mail'].filter(Boolean).join(' · '))}</div></span></li>`;
+}
+function karteListe(rs) {
+  if (rs[0]?.akte) return `<h3 class="karte-h">${rs.length} ${rs.length === 1 ? 'Bewerbung' : 'Bewerbungen'} an dieser Stelle der Karte</h3><ul class="todo">${[...rs].sort((x, y) => y.gesamt - x.gesamt).map(karteAkte).join('')}</ul>`; return `<h3 class="karte-h">${rs.length} ${rs.length === 1 ? 'Stelle' : 'Stellen'} an dieser Stelle der Karte</h3><div class="radar-list">${[...rs].sort((x, y) => y.gesamt - x.gesamt).slice(0, 40).map(radarItem).join('')}</div>`; }
 function karteZeige(ids) {
   state.karteAuswahl = ids; const rs = ids.map(id => karteRows.find(r => r.id === id)).filter(Boolean);
   const el = $('#karteAuswahl'); if (!el) return;
@@ -1735,6 +1776,32 @@ function renderTermine() {
 }
 
 /* ================= Profil & Daten ================= */
+let wohnortMap = null;
+function wohnortSetzen(lat, lon) { // speichert nur im Profil (Daten-Repo), nichts geht an fremde Dienste
+  state.profil.heim = {lat: Math.round(lat * 10000) / 10000, lon: Math.round(lon * 10000) / 10000};
+  state.profil.heimStand = today();
+  saveProfil();
+  const st = $('#wohnortSt'); if (st) st.textContent = 'Gespeichert. Die Fahrzeiten zu allen Stellen rechnet Claude mit dem neuen Wohnort neu, sag dazu in der Sitzung Bescheid.';
+  const s = wohnortMap?.getSource?.('heim'); if (s) s.setData({type: 'Feature', properties: {}, geometry: {type: 'Point', coordinates: [state.profil.heim.lon, state.profil.heim.lat]}});
+  if (karte) { try { karte.remove(); } catch {} karte = null; karteBereit = false; } // die große Karte beim nächsten Öffnen mit dem neuen Punkt
+}
+window.bzWohnortSetzen = wohnortSetzen;
+async function wohnortKarte() {
+  const slot = $('#wohnortSlot'); if (!slot) return;
+  if (wohnortMap) { try { wohnortMap.remove(); } catch {} wohnortMap = null; }
+  try { await ladeKarteLib(); } catch { slot.innerHTML = '<div class="empty-mini" style="padding:20px">Die Karte konnte nicht geladen werden.</div>'; return; }
+  if (!document.body.contains(slot)) return;
+  try {
+    wohnortMap = new maplibregl.Map({container: slot, style: karteStil(istDunkel()), center: [HEIM.lon, HEIM.lat], zoom: 14, minZoom: 8, maxZoom: 17.5, maxBounds: [[9.05, 53.02], [11.07, 54.1]], attributionControl: {compact: true}, dragRotate: false, pitchWithRotate: false, touchPitch: false});
+  } catch { slot.innerHTML = '<div class="empty-mini" style="padding:20px">Dein Browser kann die Karte nicht darstellen.</div>'; return; }
+  wohnortMap.touchZoomRotate.disableRotation();
+  wohnortMap.addControl(new maplibregl.NavigationControl({showCompass: false}), 'top-right');
+  wohnortMap.on('load', () => {
+    wohnortMap.addSource('heim', {type: 'geojson', data: {type: 'Feature', properties: {}, geometry: {type: 'Point', coordinates: [HEIM.lon, HEIM.lat]}}});
+    wohnortMap.addLayer({id: 'heim', type: 'circle', source: 'heim', paint: {'circle-radius': 8, 'circle-color': tok('--bad', '#B3322A'), 'circle-stroke-width': 3, 'circle-stroke-color': tok('--sheet', '#fff')}});
+  });
+  wohnortMap.on('click', e => wohnortSetzen(e.lngLat.lat, e.lngLat.lng));
+}
 function renderProfil(force) {
   const el = $('#v-profil');
   if (!force && el.contains(document.activeElement) && document.activeElement.matches('input,textarea,select')) return;
@@ -1742,6 +1809,12 @@ function renderProfil(force) {
   const bsp = list().filter(a => a.beispiel).length;
   const txt = (id, l, ph = '', help = '') => `<label class="fld" for="p-${id}"><span>${l}${help ? ` <span class="help">${help}</span>` : ''}</span><input class="in" id="p-${id}" data-p="${id}" value="${esc(p[id])}" placeholder="${esc(ph)}"></label>`;
   el.innerHTML = `<div class="view-head"><div><h1>Profil &amp; Daten</h1><p>Je mehr hier steht, desto besser passen Anschreiben, Analysen und Gesprächsvorbereitung. Alles wird automatisch gespeichert.</p></div></div>
+  <section class="panel" id="wohnortPanel"><div class="panel-head"><h2>Wohnort</h2><span class="sub">für Fahrzeiten und die Karte, bleibt privat in deinem Daten-Repo</span></div>
+    <p class="desc" style="margin:0 0 8px">Tippe auf der Karte genau auf dein Haus. Der rote Punkt ist der gespeicherte Wohnort.</p>
+    <div id="wohnortSlot" class="karte" style="height:320px"></div>
+    <span class="ki-status" id="wohnortSt" style="margin-top:8px">${p.heim ? `Gespeichert: ${Number(p.heim.lat).toFixed(4)}, ${Number(p.heim.lon).toFixed(4)}${p.heimStand ? `, geändert am ${fmtD(p.heimStand)}` : ''}` : 'Noch kein Wohnort gespeichert.'}</span>
+  </section>
+  ${(() => { const z = ordnerZeile(list().filter(istBereit)); return z ? `<section class="panel" id="mappenPanel"><div class="panel-head"><h2>Bewerbungsmappen</h2><span class="sub">als Ordner auf dem PC und in Google Drive</span></div>${z}</section>` : ''; })()}
   <div class="grid-2 wide-left">
     <section class="panel"><div class="panel-head"><h2>Dein Bewerberprofil</h2><span class="sub">nur für die KI-Funktionen</span></div>
       <div class="form-grid">
@@ -1799,6 +1872,7 @@ function renderProfil(force) {
       ${bildschirmzeitPanel()}
     </div>
   </div>`;
+  wohnortKarte();
 }
 document.addEventListener('input', e => {
   const ks = e.target.dataset?.ps;
@@ -2261,7 +2335,7 @@ async function driveAbgleich(plan, dateien, allgemein) { // Google Drive: Ordner
     DRIVE.fehler = /has not been used|is disabled/i.test(e?.message || '') ? 'Im Google-Cloud-Projekt die „Google Drive API“ einschalten (APIs & Dienste → Bibliothek), dann neu laden.' : `Drive hakt: ${e?.message || 'unbekannter Fehler'}`;
   }
 }
-function bereitPanel() {
+function bereitPanel(opt = {}) {
   const offen = list().filter(a => a.status === 'gemerkt' && !a.verworfen && !a.beispiel && a.anschreiben?.trim());
   if (!offen.some(a => a.pruefung || a.ueberarbeiten)) return '';
   const stand = new Map(offen.map(a => [a.id, pruefStand(a)]));
@@ -2273,10 +2347,10 @@ function bereitPanel() {
   const zeile = (a, warn) => { const sc = wertungVon(a).wert; const tage = a.fristBis ? dayDiff(new Date(), parseD(a.fristBis)) : null;
     return `<li data-open="${a.id}" tabindex="0" style="--tone:${warn ? 'var(--warn)' : sc ? ringColor(sc) : 'var(--accent)'}"><span class="ico" style="font-family:var(--f-mono);font-size:12px;font-weight:600">${warn ? ic('alert') : sc ?? '?'}</span><span style="min-width:0"><div class="t">${esc(a.position)} · ${esc(a.firma)}</div><div class="d">${esc([a.bewerbungsweg === 'email' ? 'per Mail' : 'über Portal', a.pruefung?.note != null ? `Note ${a.pruefung.note}` : '', (a.pruefung?.fragen || []).length ? `${a.pruefung.fragen.length} ${a.pruefung.fragen.length === 1 ? 'Frage' : 'Fragen'} offen` : ''].filter(Boolean).join(' · '))}</div></span><span class="when ${tage != null && tage <= 3 ? 'urgent' : ''}">${a.fristBis ? 'bis ' + fmtDs(a.fristBis) : a.bewerbungsweg === 'email' ? 'Mail' : 'Portal'}</span></li>`; };
   const n = state.zeigBereitAlle ? bereit.length : 8;
-  return `<section class="panel" id="bereitPanel"><div class="panel-head"><h2 style="display:flex;gap:8px;align-items:center">${ic('check')}Bereit zum Abschicken</h2><span class="sub">${esc([`${bereit.length} gegengelesen und freigegeben`, perMail.length ? `${perMail.length} per Mail` : '', arbeit ? `${arbeit} in Arbeit` : ''].filter(Boolean).join(' · '))}</span></div>
-    ${bereit.length ? `<ul class="todo">${bereit.slice(0, n).map(a => zeile(a)).join('')}</ul>` : `<div class="empty-mini">${ic('clock')}Noch nichts freigegeben. Der Morgenlauf liest jeden Morgen gegen.</div>`}
+  return `<section class="panel" id="bereitPanel"><div class="panel-head"><h2 style="display:flex;gap:8px;align-items:center">${ic('check')}${opt.ohneListe ? 'Abschicken' : 'Bereit zum Abschicken'}</h2><span class="sub">${esc([`${bereit.length} gegengelesen und freigegeben`, perMail.length ? `${perMail.length} per Mail` : '', arbeit ? `${arbeit} in Arbeit` : ''].filter(Boolean).join(' · '))}</span></div>
+    ${opt.ohneListe ? '' : bereit.length ? `<ul class="todo">${bereit.slice(0, n).map(a => zeile(a)).join('')}</ul>` : `<div class="empty-mini">${ic('clock')}Noch nichts freigegeben. Der Morgenlauf liest jeden Morgen gegen.</div>`}
     ${ordnerZeile(bereit)}
-    <div class="ki-row" style="margin-top:8px">${bereit.length > 8 ? `<button class="btn sm" type="button" data-act="bereit-alle">${state.zeigBereitAlle ? 'Weniger zeigen' : `Alle ${bereit.length} zeigen`}</button>` : ''}${perMail.length && !window.bzPlattform?.nurLesen?.() ? `<button class="btn sm primary" type="button" data-act="sammel-mail">${ic('mail')}${perMail.length === 1 ? 'Die Mail-Bewerbung senden' : `Alle ${perMail.length} Mail-Bewerbungen senden`}</button>` : ''}</div>
+    <div class="ki-row" style="margin-top:8px">${bereit.length > 8 && !opt.ohneListe ? `<button class="btn sm" type="button" data-act="bereit-alle">${state.zeigBereitAlle ? 'Weniger zeigen' : `Alle ${bereit.length} zeigen`}</button>` : ''}${perMail.length && !window.bzPlattform?.nurLesen?.() ? `<button class="btn sm primary" type="button" data-act="sammel-mail">${ic('mail')}${perMail.length === 1 ? 'Die Mail-Bewerbung senden' : `Alle ${perMail.length} Mail-Bewerbungen senden`}</button>` : ''}</div>
     ${blick.length ? `<h3 style="margin-top:14px;font-size:var(--t-sm)">Brauchen deinen Blick (${blick.length})</h3><ul class="todo">${blick.slice(0, 5).map(a => zeile(a, true)).join('')}</ul>` : ''}
   </section>`;
 }
@@ -3965,6 +4039,8 @@ document.addEventListener('click', async e => {
   const rbz = t.closest('[data-rbereich]'); if (rbz) { state.radarBereich = rbz.dataset.rbereich; state.radarZeig = RADAR_SEITE; renderRadar(); return; }
   const la = t.closest('[data-lart]'); if (la) { state.listArt = la.dataset.lart; renderListe(); return; }
   const bwb = t.closest('[data-bw]'); if (bwb) { location.hash = '#' + bwb.dataset.bw; return; }
+  const dsp = t.closest('[data-dspalte]'); if (dsp) { const k = dsp.dataset.dspalte; dashFilter.aus.has(k) ? dashFilter.aus.delete(k) : dashFilter.aus.add(k); dashMerken(); return renderUebersicht(); }
+  const dwg = t.closest('[data-dweg]'); if (dwg) { dashFilter.weg = dashFilter.weg === dwg.dataset.dweg ? '' : dwg.dataset.dweg; dashMerken(); return renderUebersicht(); }
   const ra = t.closest('[data-rans]'); if (ra) { state.radarAnsicht = ra.dataset.rans; state.karteAuswahl = []; try { history.replaceState(history.state, '', `${location.pathname}${location.search}#${ra.dataset.rans === 'karte' ? 'karte' : 'radar'}`); } catch {} reiterMarkieren(); renderRadar(); return; }
   const fw = t.closest('[data-fwahl]'); if (fw) { const it = fw.closest('[data-fk]'); if (it) firmaWahl(it.dataset.fk, fw.dataset.fwahl); return; }
   const rfk = t.closest('[data-act="radar-firma"]'); if (rfk) { state.radarFirma = rfk.dataset.fk; state.radarAnsicht = 'liste'; state.radarFilter = 'gut'; state.radarBereich = ''; state.radarZeig = RADAR_SEITE; const g = radarGefiltert(); if (!g.rows.length) state.radarFilter = 'weitere'; renderRadar(); $('#v-radar')?.scrollIntoView({block: 'start'}); return; }
@@ -4158,8 +4234,7 @@ $('#q').addEventListener('input', e => {
   state.search = e.target.value.trim(); if (state.view === 'uebersicht' && state.search) location.hash = '#pipeline'; else renderAll();
 });
 setTimeout(() => { const q = $('#q'); if (q && autoFuellung(q)) { q.value = ''; if (state.search) { state.search = ''; renderAll(); } } }, 1500);
-$('#btnNew').onclick = () => newModal('manuell');
-$('#btnPaste').onclick = () => newModal(kiState === 'ok' ? 'ki' : 'manuell');
+// Die Knöpfe „Neue Bewerbung“ und „Aus Stellenanzeige“ oben sind weg (Wunsch: schlanke Oberfläche). Neue Akten legt der Morgenlauf an.
 
 /* ================= Start ================= */
 function onApps(snap) {
