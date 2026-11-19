@@ -502,6 +502,32 @@ test('gmail-probe', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('mail-antwort', async () => {
+  // vorbereitete Antwort aus der Akte per Gmail senden: ohne Anhang, im selben Verlauf, Aufgabe „antworten“ wird erledigt
+  const { seite, gh, gmail, fehler } = await appStarten({ google: true });
+  const a = json(gh, 'apps/test-mail.json');
+  gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...a, status: 'rueckmeldung', gmailThreadId: 'thread-alt',
+    mail: { typ: 'antwort', text: 'Betreff: Re: Bewerbung als Testposition\n\nHallo Testteam,\n\ndrei Bürotage sind grundsätzlich möglich.\n\nViele Grüße\nMax Muster' },
+    aufgaben: [...(a.aufgaben || []), { id: 'antw1', text: 'Testfirma antworten: Bürotage', faellig: '2026-11-20', erledigt: false }] }, null, 1) + '\n'));
+  await seite.goto(`http://app.test/Bewerbungszentrale/#google=${GOOGLE_ID}`);
+  await seite.reload();
+  await zuAkte(seite, 'test-mail');
+  await seite.click('[data-tab="ki"]');
+  await seite.waitForSelector('[data-act="mail-gmail"]:not([hidden])', { timeout: 10000 });
+  await seite.click('[data-act="mail-gmail"]');
+  await seite.waitForSelector('#mg-send', { timeout: 5000 });
+  assert.equal(await seite.inputValue('#mg-betreff'), 'Re: Bewerbung als Testposition');
+  await seite.click('#mg-send');
+  assert.ok(await bis(() => gmail.length === 1, 30000), 'Mail gesendet');
+  const g = gmail[0];
+  assert.equal(JSON.parse(g.roh).threadId, 'thread-alt', 'Antwort im selben Gmail-Verlauf');
+  assert.match(g.mime, /^To: bewerbung@example\.org\r\n/);
+  assert.match(g.mime, /Content-Type: text\/plain; charset=UTF-8/);
+  assert.doesNotMatch(g.mime, /multipart/);
+  assert.ok(await bis(() => (json(gh, 'apps/test-mail.json').aufgaben || []).find(k => k.id === 'antw1')?.erledigt === true, 15000), 'Aufgabe erledigt');
+  assert.deepEqual(fehler, []);
+});
+
 test('gmail-merken', async () => {
   // die Erlaubnis zum Senden gilt eine Stunde: nach dem Neuladen ohne neue Anmeldung, mit dem Gmail-Konto aus dem Profil als Vorauswahl
   const { seite, gmail, fehler } = await appStarten({ google: true });

@@ -609,13 +609,15 @@
     const b64 = (by) => { let t = ''; for (let i = 0; i < by.length; i += 0x8000) t += String.fromCharCode.apply(null, by.subarray(i, i + 0x8000)); return btoa(t); };
     const zeilen = (t) => (t.match(/.{1,76}/g) || ['']).join('\r\n');
     const kopf = (t) => /^[\x20-\x7e]*$/.test(t) ? t : (t.match(/[\s\S]{1,12}/gu) || ['']).map((x) => `=?UTF-8?B?${b64(utf8(x))}?=`).join('\r\n ');
-    async function senden({ an, betreff, text, anhang }) {
+    async function senden({ an, betreff, text, anhang, threadId }) { // ohne anhang: einfache Textmail, threadId: als Antwort im selben Gmail-Verlauf
       an = String(an || '').trim();
       if (!/^[^\s@<>",;:]+@[^\s@<>",;:]+\.[^\s@<>",;:]+$/.test(an)) throw fehler('bad_request', 'Die Empfängeradresse sieht nicht richtig aus.');
       if (!angemeldet()) throw fehler('needs_reauth', 'Bitte neu bei Google anmelden.');
       const grenze = 'bz-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-      const name = String(anhang.name || 'Bewerbung.pdf'), ascii = name.replace(/[^\x20-\x7e]|["\\]/g, '_');
-      const mime = [`To: ${an}`, `Subject: ${kopf(String(betreff || '').replace(/[\r\n]+/g, ' '))}`, 'MIME-Version: 1.0', `Content-Type: multipart/mixed; boundary="${grenze}"`, '',
+      const koerper = zeilen(b64(utf8(String(text || '').replace(/\r?\n/g, '\r\n'))));
+      const name = String(anhang?.name || 'Bewerbung.pdf'), ascii = name.replace(/[^\x20-\x7e]|["\\]/g, '_');
+      const mime = !anhang ? [`To: ${an}`, `Subject: ${kopf(String(betreff || '').replace(/[\r\n]+/g, ' '))}`, 'MIME-Version: 1.0', 'Content-Type: text/plain; charset=UTF-8',
+        'Content-Transfer-Encoding: base64', '', koerper, ''].join('\r\n') : [`To: ${an}`, `Subject: ${kopf(String(betreff || '').replace(/[\r\n]+/g, ' '))}`, 'MIME-Version: 1.0', `Content-Type: multipart/mixed; boundary="${grenze}"`, '',
         `--${grenze}`, 'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', zeilen(b64(utf8(String(text || '').replace(/\r?\n/g, '\r\n')))),
         `--${grenze}`, `Content-Type: ${anhang.typ || 'application/pdf'}; name="${ascii}"`, `Content-Disposition: attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`,
         'Content-Transfer-Encoding: base64', '', zeilen(b64(anhang.bytes)), `--${grenze}--`, ''].join('\r\n');
@@ -626,7 +628,7 @@
       try {
         r = await fetch(gross ? 'https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media' : 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
           method: 'POST', headers: { Authorization: `Bearer ${zugriff.token}`, 'Content-Type': gross ? 'message/rfc822' : 'application/json' },
-          body: gross ? mime : JSON.stringify({ raw: b64(utf8(mime)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') }),
+          body: gross ? mime : JSON.stringify({ raw: b64(utf8(mime)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''), ...(threadId ? { threadId } : {}) }),
         });
       } catch (e) { throw fehler('unklar', e?.message); } // kann trotzdem angekommen sein
       if (r.ok) return r.json().catch(() => ({}));

@@ -673,7 +673,7 @@ const VTYP = {
 const UNTERLAGEN = [['anschreiben','Anschreiben'],['lebenslauf','Lebenslauf'],['arbeitszeugnisse','Arbeitszeugnisse'],['abschluss','Abschlusszeugnisse'],['zertifikate','Zertifikate & Weiterbildungen'],['arbeitsproben','Arbeitsproben / Portfolio'],['referenzen','Referenzen'],['deckblatt','Deckblatt / Foto']];
 const MAILTYPEN = [
   ['nachfassen','Nachfragen zum Stand'],['dank','Dank nach dem Gespräch'],['termin','Termin bestätigen'],
-  ['feedback','Auf Absage antworten, Feedback erbitten'],['verhandlung','Angebot nachverhandeln'],['annehmen','Angebot annehmen'],['absagen','Höflich absagen / zurückziehen'],
+  ['antwort','Auf eine Rückfrage antworten'],['feedback','Auf Absage antworten, Feedback erbitten'],['verhandlung','Angebot nachverhandeln'],['annehmen','Angebot annehmen'],['absagen','Höflich absagen / zurückziehen'],
 ];
 
 /* ================= Datum ================= */
@@ -2903,8 +2903,21 @@ function renderDrawerBody(reset = false) {
   b.scrollTop = reset ? 0 : keep;
 }
 
+function mailKarteHTML(a) { // auch ohne KI-Schlüssel sichtbar, wenn schon eine Mail vorbereitet ist (Kopieren, per Gmail senden)
+  const job = k => kiJobs.has(`${state.openId}:${k}`);
+  const status = (k, idle = '') => job(k) ? `<span class="ki-status" id="st-${k}"><span class="pulse"></span>Claude arbeitet …</span><button class="btn sm" type="button" data-kistop="${k}">${ic('stop')}Stopp</button>` : `<span class="ki-status" id="st-${k}">${idle}</span>`;
+  return `<section class="ki-card"><h3>${ic('mail')}E-Mail-Assistent</h3>
+    <p class="desc">Fertige Mail mit Betreffzeile, passend zum Stand dieser Bewerbung${a.kontakt.name ? ` und an ${esc(a.kontakt.name)} adressiert` : ''}.</p>
+    <div class="ki-row"><label class="sr" for="mailTyp">Anlass</label><select class="in" id="mailTyp" style="width:auto;max-width:100%">${MAILTYPEN.map(([k, l]) => `<option value="${k}" ${a.mail.typ === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <button class="btn ki" type="button" data-ki="mail" ${job('mail') || kiState !== 'ok' ? 'disabled' : ''}>${ic('spark')}Mail schreiben</button>${status('mail')}
+      <span style="flex:1"></span><button class="btn sm" type="button" data-copy="ki-mail" ${a.mail.text ? '' : 'hidden'}>${ic('copy')}Kopieren</button>${(MCP || GMAIL?.eingerichtet()) && a.kontakt.email ? `<button class="btn sm primary" type="button" data-act="mail-gmail" ${a.mail.text ? '' : 'hidden'}>${ic('mail')}Per Gmail senden</button>` : ''}</div>
+    ${a.kontakt.email ? `<p class="muted" style="font-size:var(--t-xs)">Empfänger: <span style="user-select:all;font-family:var(--f-mono)">${esc(a.kontakt.email)}</span></p>` : ''}
+    <label class="sr" for="ki-mail">E-Mail-Entwurf</label>
+    <textarea class="in letter" id="ki-mail" data-f="mail.text" style="min-height:220px" ${a.mail.text || job('mail') ? '' : 'hidden'}>${esc(a.mail.text)}</textarea>
+  </section>`;
+}
 function kiTabHTML(a) {
-  if (kiState === 'aus') return `<div class="banner warn"><span class="grow">Für die KI-Knöpfe fehlt ein KI-Schlüssel.</span><a class="btn sm" href="#einrichten">Schlüssel eintragen</a></div>`;
+  if (kiState === 'aus') return `<div class="banner warn"><span class="grow">Für die KI-Knöpfe fehlt ein KI-Schlüssel.</span><a class="btn sm" href="#einrichten">Schlüssel eintragen</a></div>${a.mail?.text ? mailKarteHTML(a) : ''}`;
   const p = P();
   const warn = [];
   if (!a.stellenText) warn.push(`Kein Anzeigentext hinterlegt. <button class="btn sm" type="button" data-tab="anzeige">Anzeige einfügen</button>`);
@@ -2946,15 +2959,7 @@ function kiTabHTML(a) {
     <div class="ki-row"><button class="btn ki ${vb ? '' : 'primary'}" type="button" data-ki="vorbereitung" ${job('vorbereitung') || kiState !== 'ok' ? 'disabled' : ''}>${ic('spark')}${vb ? 'Neu vorbereiten' : 'Gespräch vorbereiten'}</button>${status('vorbereitung')}</div>
     <div id="out-vorbereitung">${vb ? prepHTML(vb) : ''}</div>
   </section>
-  <section class="ki-card"><h3>${ic('mail')}E-Mail-Assistent</h3>
-    <p class="desc">Fertige Mail mit Betreffzeile, passend zum Stand dieser Bewerbung${a.kontakt.name ? ` und an ${esc(a.kontakt.name)} adressiert` : ''}.</p>
-    <div class="ki-row"><label class="sr" for="mailTyp">Anlass</label><select class="in" id="mailTyp" style="width:auto;max-width:100%">${MAILTYPEN.map(([k, l]) => `<option value="${k}" ${a.mail.typ === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
-      <button class="btn ki" type="button" data-ki="mail" ${job('mail') || kiState !== 'ok' ? 'disabled' : ''}>${ic('spark')}Mail schreiben</button>${status('mail')}
-      <span style="flex:1"></span><button class="btn sm" type="button" data-copy="ki-mail" ${a.mail.text ? '' : 'hidden'}>${ic('copy')}Kopieren</button>${MCP && a.kontakt.email ? `<button class="btn sm primary" type="button" data-act="mail-gmail" ${a.mail.text ? '' : 'hidden'}>${ic('mail')}Per Gmail senden</button>` : ''}</div>
-    ${a.kontakt.email ? `<p class="muted" style="font-size:var(--t-xs)">Empfänger: <span style="user-select:all;font-family:var(--f-mono)">${esc(a.kontakt.email)}</span></p>` : ''}
-    <label class="sr" for="ki-mail">E-Mail-Entwurf</label>
-    <textarea class="in letter" id="ki-mail" data-f="mail.text" style="min-height:220px" ${a.mail.text || job('mail') ? '' : 'hidden'}>${esc(a.mail.text)}</textarea>
-  </section>`;
+  ${mailKarteHTML(a)}`;
 }
 function ringColor(s) { return s >= 75 ? 'var(--good)' : s >= 50 ? 'var(--warn)' : 'var(--bad)'; }
 function analyseHTML(an) {
@@ -3226,7 +3231,8 @@ function wirkungHTML(st) {
 
 /* ================= Mail per Gmail (Nachfassen, Terminantwort …) ================= */
 function mailGmailModal(id) {
-  const a = state.apps[id]; if (!a || !MCP) return;
+  const a = state.apps[id]; if (!a || !(MCP || GMAIL?.eingerichtet())) return;
+  if (!MCP) GMAIL.vorbereiten().catch(() => {}); // Google-Skript vorab laden, damit die Anmeldung im Klick nicht blockiert wird
   const roh = String(a.mail?.text || '').replace(/\r/g, '');
   const m1 = roh.match(/^\s*Betreff:\s*(.+)\n/i);
   const betreff0 = m1 ? m1[1].trim() : (a.betreff ? 'Re: ' + a.betreff : '');
@@ -3246,11 +3252,17 @@ function mailGmailModal(id) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(an)) { $('#mg-st', m).textContent = 'Bitte eine gültige Adresse eintragen.'; return; }
     if (/\[[^\]]+\]/.test(text)) { $('#mg-st', m).textContent = 'Im Text steht noch ein [Platzhalter]. Bitte ausfüllen.'; return; }
     const btn = $('#mg-send', m); btn.disabled = true; $$('[data-mclose]', m).forEach(b => b.disabled = true);
+    if (!MCP) { // eigener Gmail-Zugang der App: Anmeldung direkt im Klick
+      try { await GMAIL.anmelden(P().gmailKonto || ''); }
+      catch (e) { $('#mg-st', m).textContent = e?.code === 'abgebrochen' ? 'Anmeldung abgebrochen.' : 'Ohne die Google-Anmeldung kann die App nicht senden.'; $('#mg-st', m).classList.add('err'); btn.disabled = false; $$('[data-mclose]', m).forEach(b => b.disabled = false); return; }
+    }
     $('#mg-st', m).innerHTML = '<span class="pulse"></span>Wird gesendet …';
     try {
       const cur0 = state.apps[id] || a;
-      await MCP.callTool('Gmail', 'send_message', {to: [an], subject: betreff, body: text, ...(cur0.gmailThreadId ? {replyThreadId: cur0.gmailThreadId} : {})});
+      if (MCP) await MCP.callTool('Gmail', 'send_message', {to: [an], subject: betreff, body: text, ...(cur0.gmailThreadId ? {replyThreadId: cur0.gmailThreadId} : {})});
+      else await GMAIL.senden({an, betreff, text, threadId: cur0.gmailThreadId || undefined});
       const cur = state.apps[id] || a;
+      if (cur.mail?.typ === 'antwort') cur.aufgaben = (cur.aufgaben || []).map(k => /antworten/i.test(k.text) && !k.erledigt ? {...k, erledigt: true} : k);
       const nach = cur.mail?.typ === 'nachfassen';
       cur.verlauf.push({id: uid(), datum: today(), typ: nach ? 'nachgefasst' : 'mail', text: `${nach ? 'Nachgefragt per Gmail' : 'Mail per Gmail gesendet'}: „${betreff}“ an ${an}`});
       if (nach) cur.aufgaben = (cur.aufgaben || []).map(k => /nachfrag|nachfass/i.test(k.text) ? {...k, erledigt: true} : k);
@@ -3258,7 +3270,7 @@ function mailGmailModal(id) {
       if (state.openId === id) { renderDrawerHead(); renderDrawerBody(); }
       toast('Mail gesendet');
     } catch (e) {
-      const f = gmailFehler(e);
+      const f = MCP ? gmailFehler(e) : {t: GMAIL_FEHLER[e?.code] || (e?.code === 'unklar' ? 'Unklar, ob sie raus ist. Bitte in Gmail unter „Gesendet“ nachsehen.' : 'Nicht gesendet.'), sicher: e?.code !== 'unklar'};
       $('#mg-st', m).textContent = f.t + (e?.code ? ` (${e.code})` : ''); $('#mg-st', m).classList.add('err');
       $$('[data-mclose]', m).forEach(b => b.disabled = false);
       if (f.sicher) btn.disabled = false;

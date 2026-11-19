@@ -58,7 +58,7 @@ export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), spe
     if (u.hostname === 'gmail.googleapis.com') {
       const r = route.request(), roh = r.postData() || '';
       const mime = /json/.test(r.headers()['content-type'] || '') ? Buffer.from(JSON.parse(roh).raw.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8') : roh;
-      gmail.push({ url: u.href, methode: r.method(), kopf: r.headers(), mime });
+      gmail.push({ url: u.href, methode: r.method(), kopf: r.headers(), mime, roh: /json/.test(r.headers()['content-type'] || '') ? roh : '' });
       if (gmailFehler) return route.fulfill({ status: gmailFehler, contentType: 'application/json', body: JSON.stringify({ error: { code: gmailFehler, message: 'Gmail API has not been used in project 123 before or it is disabled.', status: 'PERMISSION_DENIED' } }) });
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'msg-' + gmail.length, threadId: 'thread-' + gmail.length, labelIds: ['SENT'] }) });
     }
