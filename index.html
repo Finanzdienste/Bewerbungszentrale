@@ -93,6 +93,7 @@ svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .mailfeld{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;margin:0 0 14px;border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));background:var(--accent-soft);border-radius:12px}
 .mailfeld span{display:flex;flex-direction:column;min-width:0}.mailfeld small{color:var(--muted);font-size:var(--t-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dash-kopf{display:flex;flex-direction:column;gap:8px;margin:0 0 14px}
+.dash-kopf .search{flex:none;width:100%} /* sonst wird die Breiten-Regel der Suche in der Spalte zur Höhe */
 .bereiche{display:flex;flex-direction:column;gap:10px}
 .bereich{border:1px solid var(--line);border-left:4px solid var(--stage);border-radius:12px;background:var(--sheet)}
 .bereich>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;cursor:pointer;list-style:none}

@@ -707,6 +707,8 @@ test('dashboard', async () => {
   assert.notEqual(await seite.getAttribute('#dash [data-bereich="bereit"]', 'open'), null);
   await seite.click('#dash [data-bereich="beworben"] summary');
   await seite.waitForSelector('#dash [data-bereich="beworben"] [data-open="test-mail"]', { state: 'visible', timeout: 5000 });
+  const hoehe = await seite.evaluate(() => document.querySelector('.dash-kopf .search').getBoundingClientRect().height);
+  assert.ok(hoehe < 70, `Suchfeld ist ${hoehe}px hoch`);
   await seite.fill('#dashQ', 'Hafen Muster');
   await seite.waitForFunction(() => !document.querySelector('#dash [data-open="test-mail"]') && document.querySelector('#dash [data-open="test-portal"]'), null, { timeout: 5000 });
   assert.equal(await seite.isVisible('#dash [data-open="test-portal"]'), true, 'Suche klappt die Bereiche mit Treffern auf');
