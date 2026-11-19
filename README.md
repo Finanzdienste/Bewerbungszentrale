@@ -27,7 +27,8 @@ App fürs Handy, für Tobi.
 - **Mappen-Ordner** (Edge/Chrome am PC): Unter „Bereit zum Abschicken“ einmal einen Ordner
   wählen, dann legt die App jede freigegebene Portal-Bewerbung von selbst als Unterordner
   „Score Firma - Stelle“ ab, mit allem für den Upload in jedem Ordner (Anschreiben, Lebenslauf,
-  Zeugnisse, ganze Mappe, `Portal-Infos.txt`). Der Ordner-Zugriff liegt in IndexedDB; mit „Bei jedem Besuch zulassen“
+  Zeugnisse, ganze Mappe, `Portal-Infos.txt`). Dazu ein Ordner „Allgemein“ mit dem allgemeinen Lebenslauf und
+  den Zeugnissen, z. B. für Profile bei Jobbörsen. Der Ordner-Zugriff liegt in IndexedDB; mit „Bei jedem Besuch zulassen“
   fragt Edge danach nicht mehr. Ordner erledigter Stellen räumt sie weg, aber nur die aus ihrer
   eigenen Liste `.bewerbungszentrale.json`. Ohne Änderung fasst sie das Laufwerk nicht an.
 - **Mappen fürs Handy** (Google Drive): Dieselben Ordner legt die App in Google Drive unter

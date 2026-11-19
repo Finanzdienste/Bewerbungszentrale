@@ -579,6 +579,10 @@ test('ordner', async () => {
   assert.ok(!namen.some((n) => /^Zeugnisse_.*\.pdf$/.test(n)), 'keine Zeugnisse mehr im Hauptordner, auch die alte Kopie ist weg');
   assert.ok(!namen.includes('99 Alte Firma - Erledigt'), 'erledigter Ordner aus der eigenen Liste weg');
   assert.ok(namen.includes('Eigene Notizen'), 'fremde Ordner bleiben');
+  const allg = Object.keys(stand.Allgemein || {}).sort();
+  assert.equal(allg.length, 2, 'Allgemein: ' + allg.join(', '));
+  assert.ok(allg.some((n) => /^Lebenslauf_[A-Za-z_]+\.pdf$/.test(n)) && allg.some((n) => /^Zeugnisse_/.test(n)), 'allgemeiner Lebenslauf ohne Firma und Zeugnisse');
+  for (const n of allg) assert.ok(stand.Allgemein[n].startsWith('%PDF'), n);
   assert.ok(!namen.some((n) => /Hafen Muster/.test(n)), 'nur freigegebene Bewerbungen');
   assert.deepEqual(Object.keys(JSON.parse(stand['.bewerbungszentrale.json']).ordner), [stelle]);
   await seite.waitForFunction(() => /liegen automatisch in „Bewerbungen“: 1 Stelle/.test(document.querySelector('#ordner-zeile')?.textContent || ''), null, { timeout: 10000 });
@@ -617,6 +621,10 @@ test('drive', async () => {
   assert.equal(drive.log.filter((x) => x === 'abgebrochen').length, 2, 'zwei Netzaussetzer, trotzdem durchgelaufen');
   assert.equal(drive.dateien.get('alt1').trashed, true, 'erledigter Ordner in den Papierkorb');
   assert.equal(drive.dateien.get('eig1').trashed, false, 'fremder Ordner bleibt');
+  const ag = drive.kinder('w1').filter((f) => f.appProperties?.bz === 'allgemein');
+  assert.equal(ag.length, 1, 'ein Ordner Allgemein');
+  assert.equal(ag[0].name, 'Allgemein');
+  assert.deepEqual(drive.kinder(ag[0].id).map((f) => f.name.split('_')[0]).sort(), ['Lebenslauf', 'Zeugnisse']);
   assert.equal([...drive.dateien.values()].filter((f) => f.appProperties?.bz === 'wurzel').length, 1, 'vorhandener Hauptordner wird weiterbenutzt');
   await seite.waitForFunction(() => /Bewerbungsmappen“: 1 Stelle/.test(document.querySelector('#ordner-zeile')?.textContent || ''), null, { timeout: 10000 });
   const uploads = drive.log.filter((x) => x.includes('upload')).length;

@@ -2111,7 +2111,8 @@ function mappenPlan() { // was in die Ordner gehört: freigegebene Portal-Bewerb
       const info = portalInfos(x.a);
       return {...x, name, info, stand: `m2|${fassungVon(x.a)}|${profilStand}#${sha1Hex(info).slice(0, 10)}`}; // m2: Zeugnisse in jedem Ordner
     });
-  return {liste, profilStand, sig: profilStand + '\n' + liste.map(x => x.name + '\t' + x.stand).join('\n')};
+  const allgemein = 'a1|' + profilStand; // „Allgemein“: allgemeiner Lebenslauf und Zeugnisse, z. B. fürs Profil bei Jobbörsen
+  return {liste, profilStand, allgemein, sig: allgemein + '\n' + liste.map(x => x.name + '\t' + x.stand).join('\n')};
 }
 async function ordnerSync() {
   if ((!ORDNER.dir && !driveAn()) || !state.loaded || !state.profilLoaded) return;
@@ -2119,7 +2120,8 @@ async function ordnerSync() {
   ORDNER.laeuft = true;
   try {
     const plan = mappenPlan(), pause = () => new Promise(r => setTimeout(r, 30)); // die App bleibt bedienbar
-    let zeugnisse = null; const zg = async () => zeugnisse || (zeugnisse = await mappeBauen(plan.liste[0].a, {teil: 'anlagen'})); // einmal bauen, überall ablegen
+    let zeugnisse = null; const zg = async () => zeugnisse || (zeugnisse = await mappeBauen(plan.liste[0]?.a || {}, {teil: 'anlagen'})); // einmal bauen, überall ablegen
+    let allg = null; const allgemein = () => allg || (allg = (async () => { const cv = await mappeBauen({}, {nurCv: true, layout: 'modern'}), z = await zg(); return [{name: cv.filename, bytes: cv.bytes, typ: 'application/pdf'}, ...(z.seiten ? [{name: z.filename, bytes: z.bytes, typ: 'application/pdf'}] : [])]; })());
     const gebaut = new Map(); // PDFs je Stelle nur einmal bauen, auch wenn PC-Ordner und Drive sie brauchen
     const dateien = x => { if (!gebaut.has(x.name)) gebaut.set(x.name, (async () => {
       const aus = [];
@@ -2127,9 +2129,9 @@ async function ordnerSync() {
       const z = await zg(); if (z.seiten) aus.push({name: z.filename, bytes: z.bytes, typ: 'application/pdf'});
       return aus;
     })()); return gebaut.get(x.name); };
-    if (ORDNER.dir && plan.sig !== ORDNER.sig) await lokalAbgleich(plan, dateien);
+    if (ORDNER.dir && plan.sig !== ORDNER.sig) await lokalAbgleich(plan, dateien, allgemein);
     if (driveAn() && plan.sig !== DRIVE.sig) {
-      if (GDRIVE.angemeldet()) await driveAbgleich(plan, dateien);
+      if (GDRIVE.angemeldet()) await driveAbgleich(plan, dateien, allgemein);
       else { DRIVE.wartet = true; driveAufKlickWarten(); }
     }
   } finally {
@@ -2137,7 +2139,7 @@ async function ordnerSync() {
     if (ORDNER.nochmal) { ORDNER.nochmal = false; ordnerPlanen(1000); }
   }
 }
-async function lokalAbgleich(plan, dateien) {
+async function lokalAbgleich(plan, dateien, allgemein) {
   const dir = ORDNER.dir, enc = s => new TextEncoder().encode(s);
   const schreib = async (ordner, name, daten) => { const fh = await ordner.getFileHandle(name, {create: true}); const w = await fh.createWritable(); await w.write(daten); await w.close(); };
   const lies = async (ordner, name) => { try { return await (await (await ordner.getFileHandle(name)).getFile()).text(); } catch { return ''; } };
@@ -2149,6 +2151,8 @@ async function lokalAbgleich(plan, dateien) {
     const altO = alt.ordner || {}, neu = {}, namen = new Set(plan.liste.map(x => x.name));
     for (const n of Object.keys(altO)) if (!namen.has(n)) { try { await dir.removeEntry(n, {recursive: true}); weg++; } catch { /* schon weg oder gerade offen */ } }
     if (alt.zeugnisse) { try { await dir.removeEntry(alt.zeugnisse); } catch { /* weg */ } } // früher einmal im Hauptordner, jetzt in jedem Stellen-Ordner
+    { let ao = null; try { ao = await dir.getDirectoryHandle('Allgemein'); } catch { /* fehlt */ }
+      if (!ao || alt.allgemein !== plan.allgemein) { zeig('Ordner „Allgemein“ …'); ao = ao || await dir.getDirectoryHandle('Allgemein', {create: true}); for (const d of await allgemein()) await schreib(ao, d.name, d.bytes); } }
     for (const [i, x] of plan.liste.entries()) {
       if (ORDNER.dir !== dir) return;
       const [pdfAlt, infoAlt] = String(altO[x.name] || '').split('#'), [pdfNeu, infoNeu] = x.stand.split('#');
@@ -2161,7 +2165,7 @@ async function lokalAbgleich(plan, dateien) {
       } else if (infoAlt !== infoNeu) await schreib(ordner, 'Portal-Infos.txt', enc(x.info));
       neu[x.name] = x.stand;
     }
-    const manifest = {hinweis: 'Von der Bewerbungszentrale angelegt. Ordner aus dieser Liste räumt sie selbst weg, wenn die Stelle erledigt ist.', profil: plan.profilStand, ordner: neu};
+    const manifest = {hinweis: 'Von der Bewerbungszentrale angelegt. Ordner aus dieser Liste räumt sie selbst weg, wenn die Stelle erledigt ist.', profil: plan.profilStand, allgemein: plan.allgemein, ordner: neu};
     if (JSON.stringify({...alt, stand: undefined}) !== JSON.stringify(manifest)) await schreib(dir, '.bewerbungszentrale.json', enc(JSON.stringify({...manifest, stand: new Date().toISOString()}, null, 1)));
     ORDNER.sig = plan.sig;
     ORDNER.info = `${plan.liste.length} ${plan.liste.length === 1 ? 'Stelle' : 'Stellen'}, Stand ${new Date().toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'})}`;
@@ -2171,7 +2175,7 @@ async function lokalAbgleich(plan, dateien) {
     if (e?.name === 'NotAllowedError') ORDNER.dir = null;
   }
 }
-async function driveAbgleich(plan, dateien) { // Google Drive: Ordner „Bewerbungsmappen“, je Stelle ein Unterordner, Stand in appProperties
+async function driveAbgleich(plan, dateien, allgemein) { // Google Drive: Ordner „Bewerbungsmappen“, je Stelle ein Unterordner, Stand in appProperties
   const enc = s => new TextEncoder().encode(s), zeig = t => { DRIVE.info = t; ordnerZeileNeu(); };
   const inOrdner = id => GDRIVE.liste(`'${id}' in parents and trashed=false`);
   let neuGebaut = 0, weg = 0; DRIVE.fehler = ''; DRIVE.wartet = false;
@@ -2184,6 +2188,14 @@ async function driveAbgleich(plan, dateien) { // Google Drive: Ordner „Bewerbu
     const kinder = (await inOrdner(DRIVE.wurzel)).filter(f => f.appProperties?.bz === 'stelle'), namen = new Set(plan.liste.map(x => x.name)), gesehen = new Set();
     for (const f of kinder) if (!namen.has(f.name) || gesehen.has(f.name)) { await GDRIVE.aendern(f.id, {trashed: true}); weg++; } else gesehen.add(f.name); // erledigt oder doppelt: in den Papierkorb
     const vorhanden = new Map(kinder.filter(f => namen.has(f.name)).map(f => [f.name, f]));
+    { const alle = (await inOrdner(DRIVE.wurzel)).filter(f => f.appProperties?.bz === 'allgemein'), ag = alle[0];
+      for (const f of alle.slice(1)) await GDRIVE.aendern(f.id, {trashed: true});
+      if (!ag || ag.appProperties?.stand !== plan.allgemein) {
+        if (ag) await GDRIVE.aendern(ag.id, {trashed: true});
+        const o = await GDRIVE.ordner('Allgemein', DRIVE.wurzel, {bz: 'allgemein', stand: ''});
+        for (const d of await allgemein()) await GDRIVE.hochladen({name: d.name, parent: o.id, bytes: d.bytes, typ: d.typ});
+        await GDRIVE.aendern(o.id, {appProperties: {stand: plan.allgemein}});
+      } }
     for (const [i, x] of plan.liste.entries()) {
       if (!driveAn()) return;
       const f = vorhanden.get(x.name), [pdfAlt, infoAlt] = String(f?.appProperties?.stand || '').split('#'), [pdfNeu, infoNeu] = x.stand.split('#');
