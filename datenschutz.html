@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datenschutz · Bewerbungszentrale</title>
+<meta name="theme-color" content="#2C42B0">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+  :root { --bg: #F6F7FA; --sheet: #FFFFFF; --ink: #161B26; --muted: #5B6475; --line: #E2E5EC; --accent: #2C42B0; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #12151C; --sheet: #1A1E27; --ink: #E9ECF2; --muted: #A3ABBA; --line: #2B3140; --accent: #8E9DFF; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 16px 48px; }
+  article { background: var(--sheet); border: 1px solid var(--line); border-radius: 14px; padding: 24px 22px; }
+  h1 { font-size: 26px; line-height: 1.2; margin: 0 0 6px; }
+  h2 { font-size: 17px; margin: 24px 0 6px; }
+  p, li { color: var(--ink); }
+  .sub { color: var(--muted); margin: 0 0 8px; }
+  ul { padding-left: 20px; margin: 6px 0; }
+  a { color: var(--accent); }
+  code { font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+<article>
+  <h1>Datenschutz</h1>
+  <p class="sub">Bewerbungszentrale, Stand 19.11.2026</p>
+
+  <p>Die Bewerbungszentrale ist eine private Web-App, mit der eine einzelne Person ihre eigenen Bewerbungen verwaltet. Sie ist kein öffentlicher Dienst. Es gibt keinen eigenen Server: Die App läuft im Browser, ihre Daten liegen in einem privaten GitHub-Repository der Person.</p>
+
+  <h2>Anmeldung mit Google</h2>
+  <p>Die App fragt bei Google nur diese Rechte an:</p>
+  <ul>
+    <li><code>gmail.send</code>: Mails senden, die die Person in der App selbst prüft und abschickt. Die App kann damit keine Mails lesen.</li>
+    <li><code>drive.file</code>: in Google Drive nur die Dateien sehen und ändern, die die App selbst anlegt (die Bewerbungsmappen). Andere Dateien in Drive sieht sie nicht.</li>
+  </ul>
+  <p>Das Zugriffstoken bleibt im Browser und läuft nach einer Stunde ab. Für den automatischen Abgleich der Bewerbungsmappen liegt ein Zugang als verschlüsseltes Secret im privaten Repository der Person. Die Nutzung von Daten aus Google-APIs hält sich an die <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, einschließlich der Anforderungen zur eingeschränkten Nutzung (Limited Use).</p>
+
+  <h2>Weitere Dienste</h2>
+  <ul>
+    <li>GitHub: Speicherort der Daten (privates Repository) und Hosting der App über GitHub Pages.</li>
+    <li>Anthropic (Claude-API): Für Textvorschläge sendet die App die nötigen Inhalte mit einem eigenen Schlüssel der Person an die API.</li>
+  </ul>
+
+  <h2>Keine Weitergabe</h2>
+  <p>Die App gibt keine Daten an Dritte weiter, zeigt keine Werbung und hat kein Tracking.</p>
+
+  <h2>Zugriff entziehen</h2>
+  <p>Den Zugriff auf das Google-Konto kann man jederzeit unter <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a> entziehen.</p>
+
+  <h2>Kontakt</h2>
+  <p>Über die Support-Adresse, die Google im Anmeldefenster der App anzeigt.</p>
+</article>
+</main>
+</body>
+</html>
