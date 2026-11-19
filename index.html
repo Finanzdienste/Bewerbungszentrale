@@ -1021,9 +1021,6 @@ function renderUebersicht() {
   const lede = `Diese Woche ${wkCount} von ${p.wochenziel} geplanten Bewerbungen verschickt. ${(n => n === 0 ? 'Keine Nachfass-Erinnerungen offen.' : n === 1 ? 'Bei einer Firma ist Nachfragen fällig.' : `Bei ${n} Firmen ist Nachfragen fällig.`)(att.filter(x => x.kind === 'nachfassen').length)}`;
 
   el.innerHTML = `
-    <div class="ov-head">
-      <div><p class="eyebrow">KW ${kw(now)} · ${now.toLocaleDateString('de-DE', {weekday:'long', day:'numeric', month:'long'})}</p><h1>${esc(head)}</h1><p class="lede">${esc(lede)}</p></div>
-    </div>
     ${dashboardBoard()}
     <button class="btn mehr-btn" type="button" data-act="auswertung" aria-expanded="${!!state.zeigAuswertung}">${ic('chart')}${state.zeigAuswertung ? 'Auswertung ausblenden' : 'Auswertung und Strategie-Check zeigen'}</button>
     ${state.zeigAuswertung ? `<div class="kpis k2">
@@ -1059,12 +1056,10 @@ const dashMerken = () => { try { localStorage.setItem('bz-dash-offen', JSON.stri
     jeder mit seiner Zahl und zum Aufklappen. Vorbereitete stehen nach Score sortiert. */
 function dashboardBoard() {
   const mail = mailBereit(), lesen = window.bzPlattform?.nurLesen?.();
-  const att = attentionItems(), termine = att.filter(x => x.kind === 'termin').length, rest = att.length - termine;
   const alle = list().filter(a => !a.beispiel), belegt = firmenMitVersand();
   const bereit = alle.filter(a => istBereit(a) && !belegt.has(firmaGruppe(a.firma)));
   const chip = (wert, label, n) => `<button type="button" class="fchip" data-dweg="${wert}" aria-pressed="${dashWeg === wert}">${label}<span class="c">${n}</span></button>`;
   return `${mail.length && !lesen ? `<div class="mailfeld" id="mailFeld"><span><b>${mail.length} per Mail schicken</b><small>${esc(mail.slice(0, 3).map(a => a.firma).join(', '))}${mail.length > 3 ? ' …' : ''}</small></span><button class="btn primary" type="button" data-act="sammel-mail">${ic('mail')}Jetzt senden</button></div>` : ''}
-    ${att.length ? `<p class="desc" style="margin:0 0 10px"><a href="#termine">${[termine ? `${termine} ${termine === 1 ? 'Termin' : 'Termine'}` : '', rest ? `${rest} ${rest === 1 ? 'Sache' : 'Sachen'} zu erledigen` : ''].filter(Boolean).join(' und ')} in den nächsten 7 Tagen</a></p>` : ''}
     <div class="dash-kopf"><label class="search" for="dashQ"><span class="sr">Bewerbungen durchsuchen</span>${ic('search')}<input id="dashQ" type="search" placeholder="Firma, Stelle, Ort suchen" autocomplete="off" value="${esc(state.dashSuche || '')}"></label>
       <div class="filters">${chip('portal', 'Über Portal', bereit.filter(istPortal).length)}${chip('mail', 'Per Mail', bereit.filter(a => !istPortal(a)).length)}</div></div>
     <div class="bereiche" id="dash">${dashBereicheHTML()}</div>`;
