@@ -347,6 +347,7 @@ test('teilen', async () => {
 test('mail-teilen', async () => {
   const { seite, fehler } = await appStarten({ teilen: true });
   await zuAkte(seite, 'test-mail');
+  await seite.click('details.manuell summary');
   await seite.click('[data-act="mail-teilen"]');
   await seite.waitForFunction(() => { const e = document.querySelector('#wa-anhang'); return e && !e.querySelector('.pulse'); }, null, { timeout: 60000 });
   assert.equal((await seite.textContent('#wa-an')).trim(), 'bewerbung@example.org');
@@ -372,7 +373,7 @@ test('ohne-teilen', async () => {
 test('ki', async () => {
   const { seite, ki, fehler } = await appStarten({ ki: async () => 'Bewerbung als Datenanalyst (m/w/d)\n\nSehr geehrte Damen und Herren,\n\nErfundener Testbrief.\n\nMit freundlichen Grüßen\nMax Muster' });
   await zuAkte(seite, 'test-leer');
-  await seite.click('[data-act="ki-tab"]').catch(() => seite.click('[data-tab="ki"]'));
+  await seite.click('#m-ki summary');
   await seite.waitForSelector('[data-ki="anschreiben"]:not([disabled])', { timeout: 10000 });
   await seite.click('[data-ki="anschreiben"]');
   await seite.waitForFunction(() => /Erfundener Testbrief/.test(document.querySelector('#ki-anschreiben')?.value || ''), null, { timeout: 15000 });
@@ -386,7 +387,7 @@ test('ki', async () => {
 test('ohne-ki', async () => {
   const { seite, gh } = await appStarten({ speicher: { 'bewerbungszentrale.zugang.v1': JSON.stringify({ token: 'github_pat_test_0000000000000000000000' }) } });
   await zuAkte(seite, 'test-leer');
-  await seite.click('[data-act="ki-tab"]').catch(() => seite.click('[data-tab="ki"]'));
+  await seite.click('#m-ki summary');
   await seite.waitForSelector('a[href="#einrichten"]', { timeout: 10000 });
   assert.ok(gh.token);
 });
@@ -516,7 +517,9 @@ test('mail-antwort', async () => {
   await seite.goto(`http://app.test/Bewerbungszentrale/#google=${GOOGLE_ID}`);
   await seite.reload();
   await zuAkte(seite, 'test-mail');
-  await seite.click('[data-tab="ki"]');
+  await seite.click('[data-tab="verlauf"]');
+  assert.match(await seite.textContent('#duBistDran'), /Testfirma antworten/, 'oben steht, was zu tun ist');
+  assert.match(await seite.textContent('#mailKarte h3'), /Antwortvorschlag/);
   await seite.waitForSelector('[data-act="mail-gmail"]:not([hidden])', { timeout: 10000 });
   await seite.click('[data-act="mail-gmail"]');
   await seite.waitForSelector('#mg-send', { timeout: 5000 });
@@ -719,6 +722,20 @@ test('dashboard', async () => {
   await seite.waitForSelector('#dash [data-bereich="antwort"] [data-open="test-mail"]', { timeout: 10000 });
   assert.match(await seite.textContent('#dash [data-bereich="antwort"]'), /Warten auf deine Antwort\s*1.*zurückrufen/s);
   assert.equal(await seite.locator('#mailFeld').count(), 0, 'keine Mail-Bewerbung bereit');
+  // „Alle“: jede Akte außer Aussortierten und Beispielen
+  assert.match(await seite.textContent('#dash [data-bereich="alle"] summary'), /Alle\s*\d+/);
+  // Akte: nur „Infos“ und „Verlauf“; im Verlauf steht oben, was zu tun ist
+  await seite.click('#dash [data-bereich="antwort"] [data-open="test-mail"]');
+  await seite.waitForSelector('#drHead [data-tab]', { timeout: 5000 });
+  assert.deepEqual(await seite.$$eval('#drHead [data-tab]', (bs) => bs.map((x) => x.textContent.trim())), ['Infos', 'Verlauf']);
+  await seite.waitForSelector('.fakten', { timeout: 5000 });
+  await seite.click('[data-tab="verlauf"]');
+  await seite.waitForSelector('#duBistDran', { timeout: 5000 });
+  assert.match(await seite.textContent('#duBistDran'), /zurückrufen/);
+  assert.ok(await seite.evaluate(() => document.querySelector('#duBistDran').getBoundingClientRect().top < document.querySelector('.timeline, .empty-mini').getBoundingClientRect().top), 'Aufgabe steht über dem Verlauf');
+  await seite.selectOption('#drStatus', 'interview');
+  await seite.waitForFunction(() => /Gespräch/.test(document.querySelector('.timeline')?.textContent || ''), null, { timeout: 5000 });
+  await seite.click('[data-act="close"]');
   await seite.click('.tabbar a[data-tab="karte"]');
   await seite.waitForFunction(() => !document.querySelector('#v-karte').hidden, null, { timeout: 10000 });
   assert.match(await seite.textContent('#v-karte'), /bereit zum Abschicken/);

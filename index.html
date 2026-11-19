@@ -479,6 +479,28 @@ fieldset legend{font-size:var(--t-xs);font-weight:600;color:var(--muted);padding
 .dr-body{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:18px;overscroll-behavior:contain}
 .dr-body h3{font-size:var(--t-md);font-weight:700}
 .sec-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.dr-leiste{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:12px}
+.dr-leiste .dr-tabs{margin-top:0}
+.st-wahl{margin-bottom:6px;flex:none}
+.st-wahl select.in{width:auto;height:32px;padding:0 10px;font-weight:600;border-color:var(--stage);color:var(--stage);background-color:color-mix(in srgb,var(--stage) 8%,var(--sheet))}
+.dran-punkt{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warn);margin-left:3px;vertical-align:middle}
+.fakten{display:grid;margin:0;border:1px solid var(--line);border-radius:var(--r-lg);background:var(--sheet)}
+.fz{display:grid;grid-template-columns:92px minmax(0,1fr);gap:12px;padding:10px 14px;border-top:1px solid var(--line)}
+.fz:first-child{border-top:none}
+.fz dt{color:var(--muted);font-size:var(--t-sm)}
+.fz dd{margin:0;font-size:var(--t-sm);min-width:0;overflow-wrap:anywhere}
+.fz dd p{margin:0}
+.fz-txt{margin-top:4px}
+.fz-in{max-width:190px;margin:8px 0 6px}
+.mehr{border:1px solid var(--line);border-radius:var(--r-lg);background:var(--sheet)}
+.mehr>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 14px;cursor:pointer;list-style:none;font-weight:600;font-size:var(--t-sm)}
+.mehr>summary::-webkit-details-marker{display:none}
+.mehr>summary::after{content:'';flex:none;width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);margin:-4px 2px 0 0;transition:transform .15s}
+.mehr[open]>summary::after{transform:rotate(-135deg);margin-top:4px}
+.mehr-in{padding:0 14px 14px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.ki-card.dran{border-color:color-mix(in srgb,var(--warn) 55%,var(--line));background:color-mix(in srgb,var(--warn) 6%,var(--sheet))}
+.ki-card.abschicken{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.v-kopf{margin-bottom:10px}
 .danger-zone{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-top:14px;border-top:1px dashed var(--line-strong);font-size:var(--t-sm);color:var(--muted)}
 
 .timeline{list-style:none;margin:0;padding:0 0 0 18px;position:relative;display:flex;flex-direction:column;gap:14px}
@@ -727,7 +749,7 @@ const state = {
   mode: 'pending', // pending | db | local | gast
   view: 'uebersicht', search: '',
   listSort: {key:'aktivitaet', dir:'desc'}, listFilter: new Set(), listBereit: false, hideClosed: false,
-  openId: null, drawerTab: 'details',
+  openId: null, drawerTab: 'details', drOffen: new Set(),
   coach: {text:'', running:false, err:''},
   lauf: null,
   listArt: '', listSortier: 'score', zeigAuswertung: (() => { try { return !!localStorage.getItem('bz-auswertung'); } catch { return false; } })(), radarSuche: '', radar: {}, radarPakete: {}, radarWahl: {}, firmenWahl: {}, radarLoaded: false, radarFilter: 'gut', radarBereich: '', radarRemote: false, radarSort: 'gesamt', radarZeig: 60, radarAnsicht: 'liste', radarFirma: '', firmenZeig: 60, firmenVermittler: false, firmenNein: false, karteAuswahl: [],
@@ -870,7 +892,7 @@ function setStatus(id, neu, {quiet = false} = {}) {
   if (alt === 'beworben' && !a.antwortAm && neu !== 'gemerkt' && neu !== 'zurueckgezogen') a.antwortAm = today();
   a.verlauf.push({id:vid, datum:today(), typ:'status', text:`${S[alt].label} → ${S[neu].label}`});
   saveApp(id);
-  if (state.openId === id) renderDrawerHead();
+  if (state.openId === id) { renderDrawerHead(); renderDrawerBody(); }
   if (!quiet) toast(`${a.firma || 'Bewerbung'}: ${S[neu].label}`, {action:{label:'Rückgängig', fn:() => { a.verlauf = a.verlauf.filter(v => v.id !== vid); Object.assign(a, prev); saveApp(id); if (state.openId === id) { renderDrawerHead(); renderDrawerBody(); } }}});
 }
 
@@ -1048,7 +1070,7 @@ function renderUebersicht() {
 /** Kacheln im Dashboard: je Stufe die Zahl, ein Tipp öffnet die Liste genau dieser Bewerbungen. */
 /** Pipeline direkt im Dashboard: erste Spalte nur, was sich abschicken lässt, dann die Stufen nach dem Abschicken.
     Was der Morgenlauf noch vorbereitet, steht nur als Zahl darüber. Ein Tipp auf den Spaltenkopf öffnet die Liste. */
-const DASH_BEREICHE = [['antwort', 'Warten auf deine Antwort'], ['bereit', 'Vorbereitet'], ['vorbereitung', 'In Vorbereitung'], ['beworben', 'Beworben'], ['rueckmeldung', 'Rückmeldung'], ['interview', 'Gespräch'], ['angebot', 'Angebot'], ['zusage', 'Zusage'], ['absage', 'Absage']];
+const DASH_BEREICHE = [['antwort', 'Warten auf deine Antwort'], ['bereit', 'Vorbereitet'], ['vorbereitung', 'In Vorbereitung'], ['beworben', 'Beworben'], ['rueckmeldung', 'Rückmeldung'], ['interview', 'Gespräch'], ['angebot', 'Angebot'], ['zusage', 'Zusage'], ['absage', 'Absage'], ['alle', 'Alle']];
 const dashOffen = (() => { try { const o = JSON.parse(localStorage.getItem('bz-dash-offen') || 'null'); if (Array.isArray(o)) return new Set(o); } catch {} return new Set(['antwort', 'bereit']); })();
 let dashWeg = (() => { try { return localStorage.getItem('bz-dash-weg') || ''; } catch { return ''; } })();
 const dashMerken = () => { try { localStorage.setItem('bz-dash-offen', JSON.stringify([...dashOffen])); localStorage.setItem('bz-dash-weg', dashWeg); } catch {} };
@@ -1073,7 +1095,7 @@ function dashBereicheHTML() {
   const alle = list().filter(a => !a.beispiel), belegt = firmenMitVersand(), q = (state.dashSuche || '').trim();
   const bereitSet = new Set(alle.filter(a => istBereit(a) && !belegt.has(firmaGruppe(a.firma))).map(a => a.id));
   const sc = a => wertungVon(a).wert ?? 0;
-  const gehoert = {antwort: wartetAufDich, bereit: a => bereitSet.has(a.id), vorbereitung: a => a.status === 'gemerkt' && !bereitSet.has(a.id), absage: a => a.status === 'absage' || a.status === 'zurueckgezogen'};
+  const gehoert = {antwort: wartetAufDich, bereit: a => bereitSet.has(a.id), vorbereitung: a => a.status === 'gemerkt' && !bereitSet.has(a.id), absage: a => a.status === 'absage' || a.status === 'zurueckgezogen', alle: () => true};
   const passt = a => (dashWeg === 'portal' ? istPortal(a) : dashWeg === 'mail' ? !istPortal(a) : true) && (!q || matches(a, q));
   const zeile = (a, k) => { const w = wertungVon(a), an = a.anfahrt || {}, nt = naechsterTermin(a);
     const d = [a.ort, an.min ? `${an.min} min` : '', a.status === 'gemerkt' ? (istPortal(a) ? 'über Portal' : 'per Mail') : '', a.fristBis && a.status === 'gemerkt' ? `Frist ${fmtDs(a.fristBis)}` : '', nt ? `${WT[nt.d.getDay()]} ${fmtDs(isoDate(nt.d))}, ${fmtT(nt.d)}` : '', a.eingangAm && a.status === 'beworben' ? 'Eingang bestätigt' : '', a.status !== 'gemerkt' && a.beworbenAm ? `beworben ${relTage(a.beworbenAm)}` : ''].filter(Boolean).join(' · ');
@@ -1082,8 +1104,8 @@ function dashBereicheHTML() {
   const html = DASH_BEREICHE.map(([k, label]) => {
     const alleDrin = alle.filter(gehoert[k] || (a => a.status === k));
     if (!alleDrin.length && ['antwort', 'angebot', 'zusage'].includes(k)) return '';
-    const items = alleDrin.filter(passt).sort(['bereit', 'vorbereitung'].includes(k) ? (x, y) => sc(y) - sc(x) || (x.fristBis || '9999').localeCompare(y.fristBis || '9999') : (x, y) => lastActivity(y).localeCompare(lastActivity(x)));
-    const offen = q ? items.length > 0 : dashOffen.has(k);
+    const items = alleDrin.filter(passt).sort(['bereit', 'vorbereitung', 'alle'].includes(k) ? (x, y) => sc(y) - sc(x) || (x.fristBis || '9999').localeCompare(y.fristBis || '9999') : (x, y) => lastActivity(y).localeCompare(lastActivity(x)));
+    const offen = q ? items.length > 0 && (k !== 'alle' || dashOffen.has(k)) : dashOffen.has(k);
     const farbe = k === 'antwort' ? 'var(--warn)' : k === 'bereit' ? 'var(--accent)' : k === 'vorbereitung' ? stageVar('gemerkt') : stageVar(k);
     return `<details class="bereich" data-bereich="${k}" style="--stage:${farbe}" ${offen ? 'open' : ''}><summary><span class="b-titel">${label}</span><span class="b-n">${items.length}</span></summary>
       ${items.length ? `<ul class="todo">${items.map(a => zeile(a, k)).join('')}</ul>` : `<div class="empty-mini">${q || dashWeg ? 'Nichts passt zu Suche und Filter.' : k === 'bereit' ? 'Gerade ist nichts fertig zum Abschicken.' : 'Gerade nichts.'}</div>`}</details>`;
@@ -1403,6 +1425,7 @@ function renderListe() {
 }
 const RAUS_ART = {ort: 'Ort', anue: 'Zeitarbeit', gehalt: 'Gehalt', niveau: 'Niveau unter dem Abschluss', befristet: 'Befristung', fach: 'Fachlich zu weit weg', beratung: 'Arbeitsweise', klima: 'Arbeitsklima', weg: 'Nicht mehr offen', doppelt: 'Doppelt', firma: 'Eine Bewerbung je Firma', gegenlesen: 'Beim Gegenlesen', recherche: 'Bei der Recherche'};
 document.addEventListener('toggle', e => { if (e.target?.id === 'aussortiert') state.rausOffen = e.target.open; }, true);
+document.addEventListener('toggle', e => { const d = e.target; if (d?.tagName !== 'DETAILS' || !d.id || !d.closest?.('#drBody')) return; d.open ? state.drOffen.add(d.id) : state.drOffen.delete(d.id); }, true);
 document.addEventListener('toggle', e => { const k = e.target?.dataset?.bereich; if (!k || (state.dashSuche || '').trim()) return; e.target.open ? dashOffen.add(k) : dashOffen.delete(k); dashMerken(); }, true);
 document.addEventListener('input', e => { if (e.target?.id !== 'dashQ') return; state.dashSuche = e.target.value; const d = $('#dash'); if (d) d.innerHTML = dashBereicheHTML(); });
 const aussortierte = () => Object.entries(state.apps).filter(([, a]) => a.verworfen && a.aussortiert && a.status === 'gemerkt' && !a.beispiel).map(([id, a]) => ({id, ...a}));
@@ -1930,12 +1953,15 @@ document.addEventListener('input', e => {
 function openDrawer(id, tab) {
   if (!state.apps[id]) return;
   const wasOpen = !!state.openId;
-  state.openId = id; state.drawerTab = tab || (wasOpen ? state.drawerTab : 'details');
+  if (state.openId !== id) state.drOffen = new Set();
+  const [t, teil] = TAB_ZIEL[tab] || [tab || (wasOpen ? state.drawerTab : 'details')];
+  state.openId = id; state.drawerTab = t === 'verlauf' ? 'verlauf' : 'details'; if (teil) state.drOffen.add(teil);
   const d = $('#drawer'), s = $('#scrim');
   d.innerHTML = `<div class="dr-head" id="drHead"></div><div class="dr-body" id="drBody"></div>`;
   d.hidden = false; s.hidden = false; d.setAttribute('aria-hidden', 'false');
   requestAnimationFrame(() => { d.classList.add('open'); s.classList.add('open'); });
   renderDrawerHead(); renderDrawerBody(true);
+  if (teil) setTimeout(() => $('#' + teil)?.scrollIntoView({block: 'start'}), 0);
   document.body.style.overflow = 'hidden';
   if (!wasOpen) setTimeout(() => $('#drClose')?.focus({preventScroll:true}), 60);
 }
@@ -1949,24 +1975,29 @@ function closeDrawer() {
   setTimeout(() => { if (!state.openId) { d.hidden = true; s.hidden = true; d.innerHTML = ''; } }, 300);
   renderAll();
 }
+/* Akte: nur zwei Reiter. Was früher eigene Reiter waren, liegt aufgeklappt oder zugeklappt in „Infos“ oder „Verlauf“. */
+const TAB_ZIEL = {ki: ['details', 'm-ki'], unterlagen: ['details', 'm-ki'], anzeige: ['details', 'm-anzeige'], termine: ['verlauf'], training: ['verlauf', 'v-training'], mail: ['verlauf', 'v-neu']};
+const STATUS_REIHE = ['gemerkt', 'beworben', 'rueckmeldung', 'interview', 'angebot', 'zusage', 'absage', 'zurueckgezogen'];
+function zeigeTab(tab) {
+  const [t, teil] = TAB_ZIEL[tab] || [tab];
+  state.drawerTab = t; if (teil) state.drOffen.add(teil);
+  renderDrawerHead(); renderDrawerBody(true);
+  if (teil) $('#' + teil)?.scrollIntoView({block: 'start'});
+}
 function renderDrawerHead() {
   const id = state.openId; const a = state.apps[id]; const h = $('#drHead'); if (!a || !h) return;
   h.style.setProperty('--stage', stageVar(a.status));
-  const tabs = [['details', 'Details'], ['verlauf', 'Verlauf', a.verlauf.length], ['termine', 'Termine & Aufgaben', a.termine.length + a.aufgaben.filter(k => !k.erledigt).length], ['unterlagen', 'Unterlagen', `${UNTERLAGEN.filter(([k]) => a.unterlagen[k]).length}/${UNTERLAGEN.length}`], ['ki', 'KI-Assistent'], ['training', 'Training', a.training?.runden?.length || ''], ['anzeige', 'Stellenanzeige']];
-  const cur = a.status;
+  const cur = a.status, dran = wartetAufDich(a);
+  const tabs = [['details', 'Infos'], ['verlauf', 'Verlauf']];
   h.innerHTML = `
     <div class="dr-top">
-      <div style="min-width:0"><p class="eyebrow">Akte${a.kennziffer ? ' · ' + esc(a.kennziffer) : ''} · angelegt ${fmtD((a.erstellt || '').slice(0, 10))}${a.beispiel ? ' · Beispiel' : ''}</p>
-        <h2 id="drFirma">${esc(a.firma || 'Neue Bewerbung')}</h2><div class="pos" id="drPos">${esc(a.position || '')}</div></div>
-      <div class="stamp-slot"><span class="stamp big" style="--stage:${stageVar(cur)}">${esc(S[cur].stamp)}</span></div>
+      <div style="min-width:0"><h2 id="drFirma">${esc(a.firma || 'Neue Bewerbung')}</h2><div class="pos" id="drPos">${esc(a.position || '')}</div></div>
       <button class="btn icon ghost" id="drClose" data-act="close" type="button" aria-label="Akte schließen">${ic('x')}</button>
     </div>
-    <div class="stepper" role="group" aria-label="Status setzen">
-      ${['gemerkt','beworben','rueckmeldung','interview','angebot','zusage'].map(k => `<button type="button" class="step ${k === cur ? 'cur' : ''} ${RANG[k] <= (a.maxStufe ?? 0) && k !== cur ? 'done' : ''}" style="--stage:${stageVar(k)}" data-status="${k}" aria-pressed="${k === cur}">${S[k].label}</button>`).join('')}
-      <button type="button" class="step end ${cur === 'absage' ? 'cur' : ''}" style="--stage:var(--s-absage)" data-status="absage" aria-pressed="${cur === 'absage'}"><span>${ic('x')}Absage</span></button>
-      <button type="button" class="step end ${cur === 'zurueckgezogen' ? 'cur' : ''}" style="--stage:var(--s-zurueckgezogen)" data-status="zurueckgezogen" aria-pressed="${cur === 'zurueckgezogen'}"><span>Zurückgezogen</span></button>
-    </div>
-    <div class="dr-tabs" role="tablist">${tabs.map(([k, l, c]) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${state.drawerTab === k}">${k === 'ki' ? ic('spark') : k === 'training' ? ic('phone') : ''}${l}${c ? ` <span class="cnt">${c}</span>` : ''}</button>`).join('')}</div>`;
+    <div class="dr-leiste">
+      <div class="dr-tabs" role="tablist">${tabs.map(([k, l]) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${state.drawerTab === k}">${l}${k === 'verlauf' && dran ? ' <span class="dran-punkt" title="Du bist dran"></span>' : ''}</button>`).join('')}</div>
+      <label class="st-wahl" for="drStatus" style="--stage:${stageVar(cur)}"><span class="sr">Status</span><select class="in" id="drStatus">${STATUS_REIHE.map(k => `<option value="${k}" ${k === cur ? 'selected' : ''}>${esc(S[k].label)}</option>`).join('')}</select></label>
+    </div>`;
 }
 function betreffFuer(a) { // Mailbetreff: Stelle, Kennziffer und Name, damit die Mail im Postfach der Personalabteilung auffindbar ist
   const b = a.betreff || `${a.sprache === 'en' ? 'Application for' : 'Bewerbung als'} ${a.position || '[Position]'}${a.kennziffer ? (a.sprache === 'en' ? ', reference ' : ', Kennziffer ') + a.kennziffer : ''}`;
@@ -1988,26 +2019,25 @@ function bereitHTML(a) {
   const mailto = mail ? `mailto:${encodeURIComponent(mail)}?subject=${encodeURIComponent(betreff)}&body=${encodeURIComponent(text.replace(/\n/g, '\r\n'))}` : '';
   const ohneAnschreiben = !a.anschreiben?.trim();
   const mappeBtn = `<button class="btn" type="button" data-act="mappe" ${ohneAnschreiben ? 'disabled' : ''}>${ic('down')}Bewerbungsmappe als PDF</button>`;
-  const manuell = mail ? `<details class="manuell"><summary>Lieber selbst aus deiner Mail-App senden</summary>
-        <div class="ki-row" style="margin-top:8px">${mappeBtn}<a class="btn" href="${esc(mailto)}">${ic('mail')}In Mail-App öffnen</a></div>
+  const manuell = mail ? `<details class="manuell"><summary>Andere Wege: Mail-App, WhatsApp, PDF</summary>
+        <div class="ki-row" style="margin-top:8px">${MCP ? '' : `<button class="btn" type="button" data-act="mail-teilen">${ic('share')}Per Mail-App senden</button>`}<button class="btn" type="button" data-act="wa-teilen">${ic('share')}Per WhatsApp teilen</button>${mappeBtn}<a class="btn" href="${esc(mailto)}">${ic('mail')}In Mail-App öffnen</a></div>
         <div class="copyline"><span>An</span><code id="cp-an">${esc(mail)}</code><button class="btn sm" type="button" data-copy="cp-an" aria-label="Empfänger kopieren">${ic('copy')}</button></div>
         <div class="copyline"><span>Betreff</span><code id="cp-betreff">${esc(betreff)}</code><button class="btn sm" type="button" data-copy="cp-betreff" aria-label="Betreff kopieren">${ic('copy')}</button></div>
         <label class="sr" for="d-mailtext">Mailtext</label><textarea class="in" id="d-mailtext" data-f="mailtext" rows="7" style="margin-top:6px">${esc(text)}</textarea>
         <div class="ki-row" style="margin-top:6px"><button class="btn sm" type="button" data-copy="d-mailtext">${ic('copy')}Mailtext kopieren</button><button class="btn sm" type="button" data-act="mark-beworben">${ic('check')}Als beworben markieren</button></div>
       </details>` : '';
-  return `<section class="ki-card" style="border-color:color-mix(in srgb,var(--accent) 45%,var(--line))">
-    <div class="sec-head"><h3>${ic('spark')}${a.vorschlag ? `Von Claude gefunden${a.gefundenAm ? ` am ${fmtD(a.gefundenAm)}` : ''}` : 'Bewerbung abschicken'}</h3><span style="display:flex;gap:6px;flex-wrap:wrap">${atsHTML(a, true)}${(w => w.wert == null ? '' : `<span class="chip" style="color:${ringColor(w.wert)}" title="${w.art === 'Gesamt' ? `Gesamt aus Reiz ${w.reiz ?? '–'}, Eignung ${w.eignung ?? '–'}, Firma ${w.firma ?? '–'}` : w.art === 'Firma' ? 'Wertung des Unternehmens' + (w.geschaetzt ? ', grob geschätzt' : '') : 'Eignung laut Analyse'}">${w.art} ${w.wert}</span>`)(wertungVon(a))}</span></div>
-    ${a.analyse?.fazit ? `<p style="font-size:var(--t-sm)">${esc(a.analyse.fazit)}</p>` : ''}
+  return `<section class="ki-card abschicken">
+    <h3>${ic('mail')}Abschicken</h3>
     ${pruefungHTML(a)}
     ${ohneAnschreiben
       ? `<div class="ki-row"><button class="btn primary" type="button" data-act="ki-tab">${ic('spark')}Erst Anschreiben erstellen</button></div>`
       : mail
-        ? `<div class="ki-row">${MCP ? `<button class="btn primary" type="button" data-act="gmail-senden">${ic('mail')}Jetzt per Gmail bewerben</button>` : `<button class="btn primary" type="button" data-act="gmail-api">${ic('mail')}Per Gmail senden</button><button class="btn" type="button" data-act="mail-teilen">${ic('share')}Per Mail-App senden</button>`}<button class="btn" type="button" data-act="ki-tab">${ic('doc')}Anschreiben ansehen</button><button class="btn" type="button" data-act="wa-teilen">${ic('share')}Per WhatsApp teilen</button>${a.vorschlag ? `<button class="btn ghost" type="button" data-act="verwerfen">${ic('x')}Nicht interessant</button>` : ''}</div>
-           <p class="desc">${MCP ? `Geht an <b>${esc(mail)}</b>, mit Anschreiben, Lebenslauf und Zeugnissen als eine PDF. Vor dem Senden siehst du alles noch einmal.` : `„Per Gmail senden“ schickt sie direkt von deinem Google-Konto, nach einer Kontrolle. „Per Mail-App senden“ gibt die Mappe an deine Gmail-App weiter, mit Mailtext und Betreff. Empfänger: <b>${esc(mail)}</b> (zum Kopieren unten).`}</p>
+        ? `<div class="ki-row">${MCP ? `<button class="btn primary" type="button" data-act="gmail-senden">${ic('mail')}Jetzt per Gmail bewerben</button>` : `<button class="btn primary" type="button" data-act="gmail-api">${ic('mail')}Per Gmail senden</button>`}<button class="btn" type="button" data-act="ki-tab">${ic('doc')}Anschreiben ansehen</button>${a.vorschlag ? `<button class="btn ghost" type="button" data-act="verwerfen">${ic('x')}Nicht interessant</button>` : ''}</div>
+           <p class="desc">Geht an <b>${esc(mail)}</b>, Anschreiben, Lebenslauf und Zeugnisse als eine PDF. Vor dem Senden siehst du alles noch einmal.</p>
            <span class="ki-status" id="mappeStatus"></span>
            ${manuell}`
         : `<div class="ki-row">${mappeBtn}${link ? `<a class="btn primary" href="${esc(link)}" target="_blank" rel="noopener">${ic('ext')}Zum Bewerbungsportal</a>` : ''}<button class="btn" type="button" data-act="ki-tab">${ic('doc')}Anschreiben ansehen</button><button class="btn" type="button" data-act="wa-teilen">${ic('share')}Per WhatsApp teilen</button></div>
-           <p class="desc">Diese Firma nimmt Bewerbungen über ihr Portal an. Lade die Mappe herunter und lad sie dort hoch. Die Eingangsbestätigung erkennt der Morgenlauf und trägt die Bewerbung ein.${link ? '' : ' Trag in den Details den Link zur Anzeige ein.'}</p>
+           <p class="desc">Mappe herunterladen und im Portal hochladen. Die Eingangsbestätigung trägt der Morgenlauf ein.${link ? '' : ' Den Link zur Anzeige kannst du unter „Angaben bearbeiten“ eintragen.'}</p>
            <span class="ki-status" id="mappeStatus"></span>
            <div class="ki-row"><button class="btn sm" type="button" data-act="mark-beworben">${ic('check')}Schon beworben</button>${a.vorschlag ? `<button class="btn sm ghost" type="button" data-act="verwerfen">${ic('x')}Nicht interessant</button>` : ''}</div>
            ${portalHTML(a)}`}
@@ -3187,111 +3217,137 @@ function gehaltHinweis(a) {
   if (anders.length) teile.push(`<b>Im Anschreiben oder in der Mail steht noch ${eur(anders[0])}.</b> Pass die Zahl dort an, bevor du sendest.`);
   return teile.join(' ');
 }
-function renderDrawerBody(reset = false) {
-  const id = state.openId; const a = state.apps[id]; const b = $('#drBody'); if (!a || !b) return;
-  const t = state.drawerTab;
-  let html = '';
-  if (t === 'details') {
-    html = `${bereitHTML(a)}<div class="form-grid">
+/** Infos: das Wichtigste auf einen Blick, darunter Abschicken (nur vor dem Versand), Notizen und
+    zugeklappt alles Weitere (Unterlagen und KI, Stellenanzeige, Angaben bearbeiten). */
+function infosHTML(a) {
+  const w = wertungVon(a), k = a.kontakt || {};
+  const link = /^https?:\/\//.test(a.link || '') ? a.link : '', mail = (k.email || '').trim();
+  const z = (l, inhalt) => inhalt ? `<div class="fz"><dt>${l}</dt><dd>${inhalt}</dd></div>` : '';
+  const score = w.wert == null ? '' : `<b style="color:${ringColor(w.wert)}">${w.geschaetzt ? '≈ ' : ''}${w.wert}</b> <span class="muted">${w.geschaetzt ? 'grob geschätzt' : w.art === 'Gesamt' ? `Reiz ${w.reiz ?? '–'} · Eignung ${w.eignung ?? '–'} · Firma ${w.firma ?? '–'}${w.fahrt ? ` · minus ${w.fahrt} für die Fahrt` : ''}` : esc(w.art)}</span>${a.analyse?.fazit ? `<div class="fz-txt">${esc(a.analyse.fazit)}</div>` : ''}`;
+  const weg = `${mail ? `Per Mail an <span style="user-select:all">${esc(mail)}</span>` : istPortal(a) ? 'Über das Portal der Firma' : ''}${link ? `${mail || istPortal(a) ? ' · ' : ''}<a href="${esc(link)}" target="_blank" rel="noopener">Anzeige öffnen</a>` : ''}`;
+  const anzeigeGehalt = (a.gehaltMin || a.gehaltMax) ? `${[a.gehaltMin, a.gehaltMax].filter(Boolean).map(eur).join(' bis ')} laut Anzeige` : 'Die Anzeige nennt kein Gehalt.';
+  const kontakt = [k.name ? `${esc(k.name)}${k.rolle ? ` <span class="muted">(${esc(k.rolle)})</span>` : ''}` : '', k.telefon ? `<a href="tel:${esc(String(k.telefon).replace(/[^\d+]/g, ''))}">${esc(k.telefon)}</a>` : '', !mail && k.email ? esc(k.email) : ''].filter(Boolean).join(' · ');
+  const beworben = a.status !== 'gemerkt' && a.beworbenAm ? `${fmtD(a.beworbenAm)}${a.eingangAm ? ` · Eingang bestätigt ${fmtDs(a.eingangAm)}` : ''}` : '';
+  const anfahrt = a.art === 'initiativ' && !a.anfahrt ? '' : `<p id="fahrtText">${fahrtHTML(a)}</p>
+      <div class="fz-in" ${a.anfahrt?.min ? '' : 'hidden'}>${fld('btage', 'Bürotage pro Woche', 'buerotage', a.buerotage, {type:'number', ph: Number.isFinite(a.anfahrt?.tage) ? zahlDe(a.anfahrt.tage) : '', attrs:'inputmode="decimal" step="0.5" min="0" max="5"'})}</div>
+      <p class="desc" id="fahrtStunden">${fahrtStundenHTML(a)}</p>`;
+  const gehalt = `${anzeigeGehalt}<div class="fz-in">${fld('gwunsch', 'Meine Forderung', 'gehaltWunsch', a.gehaltWunsch, {type:'number', ph:String(P().gehalt || 62000), attrs:'inputmode="numeric" step="1000" min="0"'})}</div><p class="desc" id="gwunschGrund">${gehaltHinweis(a)}</p>`;
+  return `<dl class="fakten">
+      ${z('Score', score)}
+      ${z('Ort', esc([a.ort, a.arbeitsmodell].filter(Boolean).join(' · ')))}
+      ${z('Anfahrt', anfahrt)}
+      ${z('Gehalt', gehalt)}
+      ${z('Bewerbung', weg)}
+      ${z('Frist', a.status === 'gemerkt' && a.fristBis ? fmtD(a.fristBis) : '')}
+      ${z('Beworben', beworben)}
+      ${z('Kennziffer', esc(a.kennziffer || ''))}
+      ${z('Kontakt', kontakt)}
+    </dl>
+    ${bereitHTML(a)}
+    <label class="fld" for="d-notizen"><span>Notizen</span><textarea class="in" id="d-notizen" data-f="notizen" rows="${Math.min(10, Math.max(3, String(a.notizen || '').split('\n').length + 1))}" placeholder="Eindrücke, offene Fragen fürs Gespräch …">${esc(a.notizen)}</textarea></label>
+    <details class="mehr" id="m-ki"><summary>Anschreiben, Lebenslauf und Analyse</summary><div class="mehr-in">${kiTabHTML(a, {ohneMail: true})}</div></details>
+    <details class="mehr" id="m-anzeige"><summary>Stellenanzeige${a.stellenText ? '' : ' (fehlt)'}</summary><div class="mehr-in">
+      ${kiState === 'ok' ? `<div class="ki-row"><button class="btn sm ki" type="button" data-act="fill-from-ad">${ic('spark')}Felder daraus übernehmen</button><span class="ki-status" id="fillStatus"></span></div>` : ''}
+      <label class="fld" for="d-stelle"><span class="sr">Anzeigentext</span><textarea class="in" id="d-stelle" data-f="stellenText" rows="14" placeholder="Anzeigentext hier einfügen">${esc(a.stellenText)}</textarea></label></div></details>
+    <details class="mehr" id="m-angaben"><summary>Angaben bearbeiten</summary><div class="mehr-in"><div class="form-grid">
       ${fld('firma', 'Unternehmen', 'firma', a.firma, {ph:'z. B. Muster GmbH'})}
       ${fld('position', 'Position', 'position', a.position, {ph:'z. B. Data Analyst (m/w/d)'})}
       ${fld('ort', 'Ort', 'ort', a.ort, {ph:'Stadt'})}
       ${sel('modell', 'Arbeitsmodell', 'arbeitsmodell', a.arbeitsmodell, MODELLE)}
-      ${sel('quelle', 'Gefunden über', 'quelle', a.quelle, QUELLEN)}
-      <label class="fld" for="d-layout"><span>Design der Unterlagen</span><select class="in" id="d-layout" data-f="layout"><option value="modern" ${a.layout !== 'klassisch' ? 'selected' : ''}>Modern (einspaltig)</option><option value="klassisch" ${a.layout === 'klassisch' ? 'selected' : ''}>Klassisch (Bank, Versicherung, Amt)</option></select></label>
-      <label class="fld" for="d-akzent"><span>Akzentfarbe</span><select class="in" id="d-akzent" data-f="akzent">${AKZENT_NAMEN.map(([v, l]) => `<option value="${v}" ${(a.akzent || 'petrol') === v ? 'selected' : ''}>${l}</option>`).join('')}${a.akzent && !AKZENT_NAMEN.some(([v]) => v === a.akzent) ? `<option value="${esc(a.akzent)}" selected>Firmenfarbe ${esc(a.akzent)}</option>` : ''}</select></label>
-      <label class="fld" for="d-sprache"><span>Sprache der Unterlagen <span class="help">wie die Anzeige</span></span><select class="in" id="d-sprache" data-f="sprache"><option value="de" ${a.sprache !== 'en' ? 'selected' : ''}>Deutsch</option><option value="en" ${a.sprache === 'en' ? 'selected' : ''}>Englisch${P().cv_en ? '' : ' (englischer Lebenslauf fehlt im Profil)'}</option></select></label>
-      <label class="fld span-2" for="d-anschrift"><span>Anschrift der Firma <span class="help">für das Anschreiben</span></span><input class="in" id="d-anschrift" data-f="anschrift" value="${esc(a.anschrift || '')}" placeholder="Straße Nr., PLZ Ort"></label>
-      ${fld('kennziffer', 'Kennziffer / Referenz', 'kennziffer', a.kennziffer, {ph:'aus der Anzeige'})}
-      <label class="fld span-2" for="d-link"><span>Link zur Anzeige</span><div class="inline"><input class="in" id="d-link" data-f="link" type="url" value="${esc(a.link)}" placeholder="https://…"><a class="btn icon" id="d-link-open" href="${esc(/^https?:\/\//.test(a.link) ? a.link : '#')}" target="_blank" rel="noopener" aria-label="Anzeige öffnen" ${/^https?:\/\//.test(a.link) ? '' : 'hidden'}>${ic('ext')}</a></div></label>
-      ${fld('beworben', 'Beworben am', 'beworbenAm', a.beworbenAm, {type:'date'})}
+      <label class="fld span-2" for="d-anschrift"><span>Anschrift der Firma</span><input class="in" id="d-anschrift" data-f="anschrift" value="${esc(a.anschrift || '')}" placeholder="Straße Nr., PLZ Ort"></label>
+      <label class="fld span-2" for="d-link"><span>Link zur Anzeige</span><div class="inline"><input class="in" id="d-link" data-f="link" type="url" value="${esc(a.link)}" placeholder="https://…"><a class="btn icon" id="d-link-open" href="${esc(link || '#')}" target="_blank" rel="noopener" aria-label="Anzeige öffnen" ${link ? '' : 'hidden'}>${ic('ext')}</a></div></label>
+      ${fld('kennziffer', 'Kennziffer', 'kennziffer', a.kennziffer, {ph:'aus der Anzeige'})}
       ${fld('frist', 'Bewerbungsfrist', 'fristBis', a.fristBis, {type:'date'})}
-      <fieldset class="span-2"><legend>Gehalt · € brutto pro Jahr</legend><div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-        ${fld('gmin', 'Laut Anzeige von', 'gehaltMin', a.gehaltMin, {type:'number', ph:'55000', attrs:'inputmode="numeric" step="1000" min="0"'})}
-        ${fld('gmax', 'bis', 'gehaltMax', a.gehaltMax, {type:'number', ph:'65000', attrs:'inputmode="numeric" step="1000" min="0"'})}
-        ${fld('gwunsch', 'Meine Forderung', 'gehaltWunsch', a.gehaltWunsch, {type:'number', ph:String(P().gehalt || 62000), attrs:'inputmode="numeric" step="1000" min="0"'})}
-      </div><p class="desc" id="gwunschGrund" style="margin-top:6px">${gehaltHinweis(a)}</p></fieldset>
-      ${a.art === 'initiativ' && !a.anfahrt ? '' : `<fieldset class="span-2"><legend>Anfahrt</legend><p class="desc" id="fahrtText" style="margin:0 0 8px">${fahrtHTML(a)}</p><div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-        ${fld('btage', 'Bürotage pro Woche', 'buerotage', a.buerotage, {type:'number', ph: Number.isFinite(a.anfahrt?.tage) ? zahlDe(a.anfahrt.tage) : '', attrs:'inputmode="decimal" step="0.5" min="0" max="5"'})}
-      </div><p class="desc" id="fahrtStunden" style="margin-top:6px">${fahrtStundenHTML(a)}</p></fieldset>`}
-      <div class="fld span-2"><span class="lbl" id="lbl-int">Wie sehr willst du diese Stelle?</span><div class="stars" role="radiogroup" aria-labelledby="lbl-int">${[1,2,3,4,5].map(n => `<button type="button" role="radio" aria-checked="${a.interesse === n}" aria-label="${n} von 5" class="${n <= a.interesse ? 'on' : ''}" data-stars="${n}">${STAR}</button>`).join('')}</div></div>
-      <fieldset class="span-2"><legend>Ansprechperson</legend><div class="form-grid">
-        ${fld('kname', 'Name', 'kontakt.name', a.kontakt.name, {ph:'Frau Dr. Meier'})}
-        ${fld('krolle', 'Rolle', 'kontakt.rolle', a.kontakt.rolle, {ph:'Recruiting, Teamleitung …'})}
-        ${fld('kmail', 'E-Mail', 'kontakt.email', a.kontakt.email, {type:'email'})}
-        ${fld('ktel', 'Telefon', 'kontakt.telefon', a.kontakt.telefon, {type:'tel'})}
-      </div></fieldset>
-      <label class="fld span-2" for="d-notizen"><span>Notizen</span><textarea class="in" id="d-notizen" data-f="notizen" rows="5" placeholder="Eindrücke, Fragen, Recherche zur Firma …">${esc(a.notizen)}</textarea></label>
+      ${fld('beworben', 'Beworben am', 'beworbenAm', a.beworbenAm, {type:'date'})}
+      ${sel('quelle', 'Gefunden über', 'quelle', a.quelle, QUELLEN)}
+      ${fld('gmin', 'Gehalt laut Anzeige von', 'gehaltMin', a.gehaltMin, {type:'number', ph:'55000', attrs:'inputmode="numeric" step="1000" min="0"'})}
+      ${fld('gmax', 'bis', 'gehaltMax', a.gehaltMax, {type:'number', ph:'65000', attrs:'inputmode="numeric" step="1000" min="0"'})}
+      ${fld('kname', 'Ansprechperson', 'kontakt.name', k.name, {ph:'Name'})}
+      ${fld('krolle', 'Rolle', 'kontakt.rolle', k.rolle, {ph:'Recruiting, Teamleitung …'})}
+      ${fld('kmail', 'E-Mail', 'kontakt.email', k.email, {type:'email'})}
+      ${fld('ktel', 'Telefon', 'kontakt.telefon', k.telefon, {type:'tel'})}
+      <label class="fld" for="d-layout"><span>Design der Unterlagen</span><select class="in" id="d-layout" data-f="layout"><option value="modern" ${a.layout !== 'klassisch' ? 'selected' : ''}>Modern</option><option value="klassisch" ${a.layout === 'klassisch' ? 'selected' : ''}>Klassisch</option></select></label>
+      <label class="fld" for="d-akzent"><span>Akzentfarbe</span><select class="in" id="d-akzent" data-f="akzent">${AKZENT_NAMEN.map(([v, l]) => `<option value="${v}" ${(a.akzent || 'petrol') === v ? 'selected' : ''}>${l}</option>`).join('')}${a.akzent && !AKZENT_NAMEN.some(([v]) => v === a.akzent) ? `<option value="${esc(a.akzent)}" selected>Firmenfarbe ${esc(a.akzent)}</option>` : ''}</select></label>
+      <label class="fld" for="d-sprache"><span>Sprache der Unterlagen</span><select class="in" id="d-sprache" data-f="sprache"><option value="de" ${a.sprache !== 'en' ? 'selected' : ''}>Deutsch</option><option value="en" ${a.sprache === 'en' ? 'selected' : ''}>Englisch${P().cv_en ? '' : ' (englischer Lebenslauf fehlt im Profil)'}</option></select></label>
+      <div class="fld"><span class="lbl" id="lbl-int">Wie sehr willst du die Stelle?</span><div class="stars" role="radiogroup" aria-labelledby="lbl-int">${[1,2,3,4,5].map(n => `<button type="button" role="radio" aria-checked="${a.interesse === n}" aria-label="${n} von 5" class="${n <= a.interesse ? 'on' : ''}" data-stars="${n}">${STAR}</button>`).join('')}</div></div>
     </div>
-    <div class="danger-zone" id="delZone"><span style="flex:1">Akte endgültig löschen, inklusive Verlauf und Anschreiben.</span><button class="btn sm danger" type="button" data-act="del-ask">${ic('trash')}Löschen</button></div>`;
-  } else if (t === 'verlauf') {
-    const vs = [...a.verlauf].map((v, i) => ({...v, i})).sort((x, y) => (y.datum || '').localeCompare(x.datum || '') || y.i - x.i);
-    html = `<div class="sec-head"><h3>Verlauf</h3><span class="muted" style="font-size:var(--t-sm)">Jeder Statuswechsel wird automatisch notiert.</span></div>
+    <div class="danger-zone" id="delZone"><span style="flex:1">Akte endgültig löschen, mit Verlauf und Anschreiben.</span><button class="btn sm danger" type="button" data-act="del-ask">${ic('trash')}Löschen</button></div></div></details>`;
+}
+const DRAN_RX = /(?:^|\s)(?:antworten|zurückrufen|rückruf)\b/i;
+/** Verlauf: oben, was du als Nächstes tun sollst (Antwortvorschlag, Rückruf), dann Termine und offene Aufgaben,
+    dann der Verlauf selbst. Eintragen liegt zugeklappt darunter. */
+function verlaufHTML(a) {
+  const heute = today(), id = state.openId;
+  const auf = [...(a.aufgaben || [])].filter(k => !k.erledigt).sort((x, y) => (x.faellig || '9999').localeCompare(y.faellig || '9999'));
+  const dran = wartetAufDich(a) ? auf.filter(k => DRAN_RX.test(k.text || '')) : [];
+  const ruf = dran.find(k => /zurückrufen|rückruf/i.test(k.text || ''));
+  const mailOben = dran.length > 0 && (!!a.mail?.text || dran.some(k => /antworten/i.test(k.text || '')));
+  const kommend = [...(a.termine || [])].filter(x => (x.datum || '').slice(0, 10) >= heute).sort((x, y) => (x.datum || '').localeCompare(y.datum || ''));
+  const aufgabe = k => { const n = k.faellig ? dayDiff(new Date(), parseD(k.faellig)) : null; return `<li><input type="checkbox" class="cb" id="dk-${k.id}" data-task="${id}|${k.id}"><label class="tx" for="dk-${k.id}">${esc(k.text)}</label><span style="display:flex;gap:4px;align-items:center"><span class="due ${n != null && n < 0 ? 'over' : ''}">${k.faellig ? fmtDs(k.faellig) : ''}</span><button class="btn sm icon ghost" type="button" data-kdel="${esc(k.id)}" aria-label="Aufgabe löschen">${ic('x')}</button></span></li>`; };
+  const tel = String(a.kontakt?.telefon || '').trim();
+  const oben = dran.length ? `<section class="ki-card dran" id="duBistDran"><h3>${ic('reply')}Du bist dran</h3>
+      <ul class="tasks">${dran.map(aufgabe).join('')}</ul>
+      ${ruf && tel ? `<div class="ki-row"><a class="btn primary" href="tel:${esc(tel.replace(/[^\d+]/g, ''))}">${ic('phone')}${esc(tel)} anrufen</a></div>` : ''}
+      ${ruf && a.briefing ? `<details id="v-briefing-ruf" open><summary>Briefing für den Anruf</summary><div class="md" style="font-size:var(--t-sm)">${md(a.briefing)}</div></details>` : ''}
+    </section>${mailOben ? mailKarteHTML(a, {titel: 'Antwortvorschlag'}) : ''}` : '';
+  const termine = kommend.length ? `<section><h3 class="v-kopf">Termine</h3><div class="agenda">${kommend.map(x => { const d = parseDT(x.datum); return d ? `<div class="ag-day"><div class="ag-date"><div class="m">${MON[d.getMonth()]}</div><div class="d">${d.getDate()}</div><div class="w">${WT[d.getDay()]}</div></div><div class="ag-items"><div class="ag-item" style="--stage:${stageVar('interview')};cursor:default"><span class="tm">${fmtT(d)}</span><span class="tt">${esc(x.art)}</span><span class="ts">${esc(x.ort || '')}${x.notiz ? `<br>${esc(x.notiz)}` : ''}</span><span class="tl">${calLinks(a, x)}<button class="btn sm ghost" type="button" data-tdel="${esc(x.id)}">${ic('trash')}Entfernen</button></span></div></div></div>` : ''; }).join('')}</div></section>` : '';
+  const rest = auf.filter(k => !dran.includes(k));
+  const aufgaben = rest.length ? `<section><h3 class="v-kopf">Offen</h3><ul class="tasks">${rest.map(aufgabe).join('')}</ul></section>` : '';
+  const briefing = a.briefing && !ruf ? `<details class="mehr" id="v-briefing" ${kommend.length ? 'open' : ''}><summary>Briefing fürs Gespräch</summary><div class="mehr-in md" style="font-size:var(--t-sm)">${md(a.briefing)}</div></details>` : '';
+  const vs = [...a.verlauf].map((v, i) => ({...v, i})).sort((x, y) => (y.datum || '').localeCompare(x.datum || '') || y.i - x.i);
+  const timeline = vs.length ? `<ol class="timeline">${vs.map(v => `<li style="--tone:${VTYP[v.typ]?.tone || 'var(--line-strong)'}"><div class="h"><b>${esc(VTYP[v.typ]?.l || v.typ)}</b>${fmtD(v.datum)} · ${relTage(v.datum)}</div><button class="btn sm icon ghost x" type="button" data-vdel="${esc(v.id)}" aria-label="Eintrag löschen">${ic('x')}</button><div class="b">${esc(v.text)}</div></li>`).join('')}</ol>` : `<div class="empty-mini">Noch keine Einträge.</div>`;
+  const training = ['rueckmeldung', 'interview', 'angebot'].includes(a.status) ? `<details class="mehr" id="v-training"><summary>Gespräch üben</summary><div class="mehr-in">${trainingHTML(a)}</div></details>` : '';
+  const neu = `<details class="mehr" id="v-neu"><summary>Eintragen: Ereignis, Termin, Aufgabe, Mail</summary><div class="mehr-in">
       <form class="add-row" id="vForm">
         <label class="fld" for="v-typ"><span>Art</span><select class="in" id="v-typ">${Object.entries(VTYP).filter(([k]) => k !== 'status').map(([k, v]) => `<option value="${k}">${v.l}</option>`).join('')}</select></label>
-        <label class="fld" for="v-datum"><span>Datum</span><input class="in" id="v-datum" type="date" value="${today()}"></label>
-        <label class="fld" for="v-text"><span>Was ist passiert?</span><input class="in" id="v-text" placeholder="z. B. Recruiterin hat angerufen, Zweitgespräch folgt"></label>
+        <label class="fld" for="v-datum"><span>Datum</span><input class="in" id="v-datum" type="date" value="${heute}"></label>
+        <label class="fld" for="v-text"><span>Was ist passiert?</span><input class="in" id="v-text" placeholder="z. B. Recruiterin hat angerufen"></label>
         <button class="btn primary" type="submit">${ic('plus')}Eintragen</button>
       </form>
-      ${vs.length ? `<ol class="timeline">${vs.map(v => `<li style="--tone:${VTYP[v.typ]?.tone || 'var(--line-strong)'}"><div class="h"><b>${esc(VTYP[v.typ]?.l || v.typ)}</b>${fmtD(v.datum)} · ${relTage(v.datum)}</div><button class="btn sm icon ghost x" type="button" data-vdel="${esc(v.id)}" aria-label="Eintrag löschen">${ic('x')}</button><div class="b">${esc(v.text)}</div></li>`).join('')}</ol>` : `<div class="empty-mini">Noch keine Einträge.</div>`}`;
-  } else if (t === 'termine') {
-    const ts = [...a.termine].sort((x, y) => (x.datum || '').localeCompare(y.datum || ''));
-    const ks = [...a.aufgaben].sort((x, y) => (x.erledigt - y.erledigt) || (x.faellig || '9999').localeCompare(y.faellig || '9999'));
-    html = `${a.briefing ? `<section class="ki-card"><h3>${ic('spark')}Briefing fürs Gespräch</h3><div class="md" style="font-size:var(--t-sm)">${md(a.briefing)}</div></section>` : ''}<div class="sec-head"><h3>Termine</h3><button class="btn sm ki" type="button" data-act="einladung">${ic('spark')}Einladung einfügen</button></div>
       <form class="add-row t4" id="tForm">
-        <label class="fld" for="t-datum"><span>Datum &amp; Uhrzeit</span><input class="in" id="t-datum" type="datetime-local" required></label>
+        <label class="fld" for="t-datum"><span>Termin</span><input class="in" id="t-datum" type="datetime-local" required></label>
         <label class="fld" for="t-art"><span>Art</span><select class="in" id="t-art">${TERMINARTEN.map(x => `<option>${x}</option>`).join('')}</select></label>
-        <label class="fld" for="t-ort"><span>Ort oder Video-Link</span><input class="in" id="t-ort" placeholder="Teams-Link, Adresse …"></label>
+        <label class="fld" for="t-ort"><span>Ort oder Link</span><input class="in" id="t-ort" placeholder="Teams-Link, Adresse …"></label>
         <button class="btn primary" type="submit">${ic('plus')}Termin</button>
         <label class="fld" for="t-notiz" style="grid-column:1/-1"><span>Notiz</span><input class="in" id="t-notiz" placeholder="Mit wem? Was vorbereiten?"></label>
       </form>
-      ${ts.length ? `<div class="agenda">${ts.map(x => { const d = parseDT(x.datum); return d ? `<div class="ag-day"><div class="ag-date"><div class="m">${MON[d.getMonth()]}</div><div class="d">${d.getDate()}</div><div class="w">${WT[d.getDay()]}</div></div><div class="ag-items"><div class="ag-item" style="--stage:${stageVar('interview')};cursor:default"><span class="tm">${fmtT(d)}</span><span class="tt">${esc(x.art)}</span><span class="ts">${esc(x.ort || '')}${x.notiz ? `<br>${esc(x.notiz)}` : ''}</span><span class="tl">${calLinks(a, x)}<button class="btn sm ghost" type="button" data-tdel="${esc(x.id)}">${ic('trash')}Entfernen</button></span></div></div></div>` : ''; }).join('')}</div>` : `<div class="empty-mini">${ic('cal')}Noch kein Termin. Sobald eine Einladung kommt, trag sie hier ein. Mit einem Klick landet sie in deinem Kalender.</div>`}
-      <div class="sec-head" style="margin-top:8px"><h3>Aufgaben</h3></div>
+      <div class="ki-row"><button class="btn sm ki" type="button" data-act="einladung">${ic('spark')}Einladung einfügen</button></div>
       <form class="add-row t2" id="kForm">
         <label class="fld" for="k-text"><span>Aufgabe</span><input class="in" id="k-text" placeholder="z. B. Arbeitsprobe bis Freitag schicken" required></label>
         <label class="fld" for="k-faellig"><span>Fällig am</span><input class="in" id="k-faellig" type="date"></label>
         <button class="btn primary" type="submit">${ic('plus')}Aufgabe</button>
       </form>
-      ${ks.length ? `<ul class="tasks">${ks.map(k => { const n = k.faellig ? dayDiff(new Date(), parseD(k.faellig)) : null; return `<li class="${k.erledigt ? 'done' : ''}"><input type="checkbox" class="cb" id="dk-${k.id}" data-task="${id}|${k.id}" ${k.erledigt ? 'checked' : ''}><label class="tx" for="dk-${k.id}">${esc(k.text)}</label><span style="display:flex;gap:4px;align-items:center"><span class="due ${n != null && n < 0 && !k.erledigt ? 'over' : ''}">${k.faellig ? fmtDs(k.faellig) : ''}</span><button class="btn sm icon ghost" type="button" data-kdel="${esc(k.id)}" aria-label="Aufgabe löschen">${ic('x')}</button></span></li>`; }).join('')}</ul>` : `<div class="empty-mini">Keine Aufgaben.</div>`}`;
-  } else if (t === 'unterlagen') {
-    const n = UNTERLAGEN.filter(([k]) => a.unterlagen[k]).length;
-    html = `<div class="sec-head"><h3>Bewerbungsmappe</h3><span class="muted" style="font-size:var(--t-sm)">${n} von ${UNTERLAGEN.length} Unterlagen beigelegt</span></div>
-      <div class="progress"><i style="width:${n / UNTERLAGEN.length * 100}%"></i></div>
-      <div class="doc-list">${UNTERLAGEN.map(([k, l]) => `<label class="doc-item" for="u-${k}"><input type="checkbox" class="cb" id="u-${k}" data-unt="${k}" ${a.unterlagen[k] ? 'checked' : ''}>${ic('doc')}<span>${l}</span></label>`).join('')}</div>
-      <label class="fld" for="d-unotiz"><span>Welche Version hast du geschickt?</span><textarea class="in" id="d-unotiz" data-f="unterlagenNotiz" rows="3" placeholder="z. B. Lebenslauf_2026_DE_v3.pdf, Anschreiben angepasst auf Power BI">${esc(a.unterlagenNotiz)}</textarea></label>
-      <p class="muted" style="font-size:var(--t-sm)">Kein Anschreiben zur Hand? Im Reiter <button class="btn sm ki" type="button" data-tab="ki">${ic('spark')}KI-Assistent</button> entsteht eines aus deinem Profil und der Anzeige.</p>
-      ${atsHTML(a)}
-      <div class="ki-card"><h3>${ic('down')}Bewerbungsmappe als eine PDF</h3><p class="desc">Anschreiben und ${P().cv ? 'ein für diese Stelle gesetzter Lebenslauf im gleichen Design' : 'dein Lebenslauf'}, dahinter deine Zeugnisse aus „Profil &amp; Daten“ in der dort festgelegten Reihenfolge. Design: <b>${a.layout === 'klassisch' ? 'Klassisch' : 'Modern'}</b>, Farbe <b>${esc((AKZENT_NAMEN.find(([v]) => v === (a.akzent || 'petrol')) || [0, a.akzent])[1])}</b> (änderbar unter Details).</p><div class="ki-row"><button class="btn primary" type="button" data-act="mappe" ${a.anschreiben ? '' : 'disabled'}>${ic('down')}Mappe herunterladen</button><button class="btn" type="button" data-act="wa-teilen" ${a.anschreiben ? '' : 'disabled'}>${ic('share')}Per WhatsApp teilen</button>${P().cv ? `<button class="btn" type="button" data-act="cv-akte">${ic('doc')}Nur Lebenslauf</button>` : ''}<span class="ki-status" id="mappeStatus2">${a.anschreiben ? '' : 'Erst im KI-Assistenten ein Anschreiben erstellen.'}</span></div></div>`;
-  } else if (t === 'ki') {
-    html = kiTabHTML(a);
-  } else if (t === 'training') {
-    html = trainingHTML(a);
-  } else if (t === 'anzeige') {
-    html = `<div class="sec-head"><h3>Stellenanzeige</h3>${kiState === 'ok' ? `<button class="btn sm ki" type="button" data-act="fill-from-ad">${ic('spark')}Felder daraus übernehmen</button>` : ''}</div>
-      <p class="muted" style="font-size:var(--t-sm)">Kopier den vollständigen Anzeigentext hierher. Anzeigen verschwinden oft nach Ablauf der Frist, und die KI braucht den Text für Analyse, Anschreiben und Gesprächsvorbereitung.</p>
-      <span class="ki-status" id="fillStatus"></span>
-      <label class="fld" for="d-stelle"><span class="sr">Anzeigentext</span><textarea class="in" id="d-stelle" data-f="stellenText" rows="20" placeholder="Ihre Aufgaben …&#10;Ihr Profil …&#10;Wir bieten …">${esc(a.stellenText)}</textarea></label>`;
-  }
+      ${mailOben ? '' : mailKarteHTML(a)}
+    </div></details>`;
+  return `${oben}${termine}${aufgaben}${briefing}<section><h3 class="v-kopf">Verlauf</h3>${timeline}</section>${neu}${training}`;
+}
+function renderDrawerBody(reset = false) {
+  const id = state.openId; const a = state.apps[id]; const b = $('#drBody'); if (!a || !b) return;
+  const t = state.drawerTab;
+  let html = '';
+  if (t === 'verlauf') html = verlaufHTML(a);
+  else html = infosHTML(a);
   const keep = b.scrollTop;
   b.innerHTML = html;
+  for (const d of $$('details[id]', b)) if (state.drOffen.has(d.id)) d.open = true;
   b.scrollTop = reset ? 0 : keep;
 }
 
-function mailKarteHTML(a) { // auch ohne KI-Schlüssel sichtbar, wenn schon eine Mail vorbereitet ist (Kopieren, per Gmail senden)
+function mailKarteHTML(a, {titel = ''} = {}) { // auch ohne KI-Schlüssel sichtbar, wenn schon eine Mail vorbereitet ist (Kopieren, per Gmail senden)
   const job = k => kiJobs.has(`${state.openId}:${k}`);
   const status = (k, idle = '') => job(k) ? `<span class="ki-status" id="st-${k}"><span class="pulse"></span>Claude arbeitet …</span><button class="btn sm" type="button" data-kistop="${k}">${ic('stop')}Stopp</button>` : `<span class="ki-status" id="st-${k}">${idle}</span>`;
-  return `<section class="ki-card"><h3>${ic('mail')}E-Mail-Assistent</h3>
-    <p class="desc">Fertige Mail mit Betreffzeile, passend zum Stand dieser Bewerbung${a.kontakt.name ? ` und an ${esc(a.kontakt.name)} adressiert` : ''}.</p>
-    <div class="ki-row"><label class="sr" for="mailTyp">Anlass</label><select class="in" id="mailTyp" style="width:auto;max-width:100%">${MAILTYPEN.map(([k, l]) => `<option value="${k}" ${a.mail.typ === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
-      <button class="btn ki" type="button" data-ki="mail" ${job('mail') || kiState !== 'ok' ? 'disabled' : ''}>${ic('spark')}Mail schreiben</button>${status('mail')}
+  return `<section class="ki-card${titel ? ' dran' : ''}" id="mailKarte"><h3>${ic('mail')}${titel || 'Mail schreiben'}</h3>
+    ${titel ? '' : `<p class="desc">Fertige Mail mit Betreffzeile, passend zum Stand dieser Bewerbung${a.kontakt.name ? ` und an ${esc(a.kontakt.name)} adressiert` : ''}.</p>`}
+    <div class="ki-row">${titel ? `<input type="hidden" id="mailTyp" value="${esc(a.mail.text ? a.mail.typ : 'antwort')}">${a.mail.text && kiState !== 'ok' ? '' : `<button class="btn ${a.mail.text ? 'sm ghost' : 'ki'}" type="button" data-ki="mail" ${job('mail') || kiState !== 'ok' ? 'disabled' : ''}>${ic('spark')}${a.mail.text ? 'Neu schreiben' : 'Antwort schreiben lassen'}</button>`}` : `<label class="sr" for="mailTyp">Anlass</label><select class="in" id="mailTyp" style="width:auto;max-width:100%">${MAILTYPEN.map(([k, l]) => `<option value="${k}" ${a.mail.typ === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <button class="btn ki" type="button" data-ki="mail" ${job('mail') || kiState !== 'ok' ? 'disabled' : ''}>${ic('spark')}Mail schreiben</button>`}${status('mail')}
       <span style="flex:1"></span><button class="btn sm" type="button" data-copy="ki-mail" ${a.mail.text ? '' : 'hidden'}>${ic('copy')}Kopieren</button>${(MCP || GMAIL?.eingerichtet()) && a.kontakt.email ? `<button class="btn sm primary" type="button" data-act="mail-gmail" ${a.mail.text ? '' : 'hidden'}>${ic('mail')}Per Gmail senden</button>` : ''}</div>
     ${a.kontakt.email ? `<p class="muted" style="font-size:var(--t-xs)">Empfänger: <span style="user-select:all;font-family:var(--f-mono)">${esc(a.kontakt.email)}</span></p>` : ''}
     <label class="sr" for="ki-mail">E-Mail-Entwurf</label>
     <textarea class="in letter" id="ki-mail" data-f="mail.text" style="min-height:220px" ${a.mail.text || job('mail') ? '' : 'hidden'}>${esc(a.mail.text)}</textarea>
   </section>`;
 }
-function kiTabHTML(a) {
-  if (kiState === 'aus') return `<div class="banner warn"><span class="grow">Für die KI-Knöpfe fehlt ein KI-Schlüssel.</span><a class="btn sm" href="#einrichten">Schlüssel eintragen</a></div>${a.mail?.text ? mailKarteHTML(a) : ''}`;
+function kiTabHTML(a, {ohneMail = false} = {}) {
+  if (kiState === 'aus') return `<div class="banner warn"><span class="grow">Für die KI-Knöpfe fehlt ein KI-Schlüssel.</span><a class="btn sm" href="#einrichten">Schlüssel eintragen</a></div>${a.mail?.text && !ohneMail ? mailKarteHTML(a) : ''}`;
   const p = P();
   const warn = [];
   if (!a.stellenText) warn.push(`Kein Anzeigentext hinterlegt. <button class="btn sm" type="button" data-tab="anzeige">Anzeige einfügen</button>`);
@@ -3333,7 +3389,7 @@ function kiTabHTML(a) {
     <div class="ki-row"><button class="btn ki ${vb ? '' : 'primary'}" type="button" data-ki="vorbereitung" ${job('vorbereitung') || kiState !== 'ok' ? 'disabled' : ''}>${ic('spark')}${vb ? 'Neu vorbereiten' : 'Gespräch vorbereiten'}</button>${status('vorbereitung')}</div>
     <div id="out-vorbereitung">${vb ? prepHTML(vb) : ''}</div>
   </section>
-  ${mailKarteHTML(a)}`;
+  ${ohneMail ? '' : mailKarteHTML(a)}`;
 }
 function ringColor(s) { return s >= 75 ? 'var(--good)' : s >= 50 ? 'var(--warn)' : 'var(--bad)'; }
 function analyseHTML(an) {
@@ -3404,7 +3460,7 @@ async function trainingSchritt(aktion) {
   if (aktion === 'antwort' && !antwort) { const s = $('#st-training'); if (s) s.textContent = 'Schreib erst eine Antwort oder überspringe die Frage.'; return; }
   if (tr0 && antwort) tr0.entwurf = antwort;
   const ctl = new AbortController(); kiJobs.set(key, ctl);
-  const rer = () => { if (state.openId === id && state.drawerTab === 'training') renderDrawerBody(); };
+  const rer = () => { if (state.openId === id && state.drawerTab === 'verlauf') renderDrawerBody(); };
   rer();
   const kontext = () => { const a = app(); const rc = a.recherche || {}; return `${rc.kurzprofil ? `FIRMA: ${rc.kurzprofil} ${rc.kultur || ''}\n\n` : ''}${stelleText(a).slice(0, 9000)}\n\n${profilText()}\n\n${gespraechText()}`; };
   const fazitHolen = async tr => {
@@ -3714,7 +3770,7 @@ async function runKI(kind) {
   const key = `${id}:${kind}`; if (kiJobs.has(key)) return;
   const ctl = new AbortController(); kiJobs.set(key, ctl);
   const p = P();
-  const visible = () => state.openId === id && state.drawerTab === 'ki';
+  const visible = () => state.openId === id;
   const rer = () => { if (visible()) renderDrawerBody(); };
   rer();
   try {
@@ -4094,7 +4150,7 @@ document.addEventListener('click', async e => {
     if (act === 'nachgefasst' || act === 'mail-nachfassen') {
       const id = el.dataset.id; const a = state.apps[id]; if (!a) return;
       if (act === 'nachgefasst') { a.verlauf.push({id:uid(), datum:today(), typ:'nachgefasst', text:'Nachgefragt zum Stand der Bewerbung'}); saveApp(id); toast(`Nachfrage bei ${a.firma} notiert`); }
-      else { a.mail.typ = 'nachfassen'; openDrawer(id, 'ki'); setTimeout(() => $('#mailTyp') && ($('#mailTyp').value = 'nachfassen'), 50); }
+      else { a.mail.typ = 'nachfassen'; openDrawer(id, 'mail'); setTimeout(() => $('#mailTyp') && ($('#mailTyp').value = 'nachfassen'), 50); }
       return;
     }
     if (act === 'fill-from-ad') return fillFromAd();
@@ -4110,8 +4166,8 @@ document.addEventListener('click', async e => {
     if (act === 'wa-teilen' && state.openId) return waModal(state.openId);
     if (act === 'mail-teilen' && state.openId) return waModal(state.openId, 'mail');
     if (act === 'einladung') return einladungModal(state.openId || '');
-    if (act === 'ki-tab' && state.openId) { state.drawerTab = 'ki'; renderDrawerHead(); renderDrawerBody(true); return; }
-    if (act === 'mark-beworben' && state.openId) { setStatus(state.openId, 'beworben'); renderDrawerBody(); return; }
+    if (act === 'ki-tab' && state.openId) { zeigeTab('ki'); return; }
+    if (act === 'mark-beworben' && state.openId) { setStatus(state.openId, 'beworben'); return; }
     if (act === 'pr-frei' || act === 'pr-neu' || act === 'pr-vorversion') return pruefAktion(act);
     if (act === 'ordner-waehlen') return ordnerWaehlen();
     if (act === 'wohnort-gps') return wohnortGps();
@@ -4132,7 +4188,7 @@ document.addEventListener('click', async e => {
   }
   if (t.closest('#scrim')) return closeDrawer();
   const st = t.closest('[data-status]'); if (st && state.openId) { setStatus(state.openId, st.dataset.status); return; }
-  const tab = t.closest('[data-tab]'); if (tab && state.openId) { state.drawerTab = tab.dataset.tab; renderDrawerHead(); renderDrawerBody(true); return; }
+  const tab = t.closest('#drawer [data-tab]'); if (tab && state.openId) { zeigeTab(tab.dataset.tab); return; }
   const star = t.closest('[data-stars]'); if (star && state.openId) { const a = state.apps[state.openId]; a.interesse = Number(star.dataset.stars); saveApp(state.openId); $$('[data-stars]').forEach(b => { const n = Number(b.dataset.stars); b.classList.toggle('on', n <= a.interesse); b.setAttribute('aria-checked', n === a.interesse); }); return; }
   const ki = t.closest('[data-ki]'); if (ki) return runKI(ki.dataset.ki);
   const trb = t.closest('[data-tr]'); if (trb) return trainingSchritt(trb.dataset.tr);
@@ -4165,7 +4221,7 @@ document.addEventListener('change', e => {
   if (t.dataset.task) {
     const [aid, kid] = t.dataset.task.split('|'); const a = state.apps[aid]; const k = a?.aufgaben.find(x => x.id === kid); if (!k) return;
     k.erledigt = t.checked; saveApp(aid);
-    if (state.openId === aid) { renderDrawerHead(); if (state.drawerTab === 'termine') renderDrawerBody(); }
+    if (state.openId === aid) { renderDrawerHead(); if (state.drawerTab === 'verlauf') renderDrawerBody(); }
     return;
   }
   if (t.dataset.unt && state.openId) {
@@ -4174,6 +4230,7 @@ document.addEventListener('change', e => {
     const s = $('#drBody .sec-head span'); if (s) s.textContent = `${n} von ${UNTERLAGEN.length} Unterlagen beigelegt`;
     renderDrawerHead(); return;
   }
+  if (t.id === 'drStatus' && state.openId) { setStatus(state.openId, t.value); return; }
   if (t.id === 'mailTyp' && state.openId) { state.apps[state.openId].mail.typ = t.value; saveApp(state.openId, false); }
 });
 // Feldbindung in der Akte
