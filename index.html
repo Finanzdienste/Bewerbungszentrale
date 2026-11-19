@@ -1256,8 +1256,26 @@ function wertungBasis(a) {
     return iniWertung(a);
   }
   const g = an.gesamt ?? w.gesamt;
-  if (g != null) return {wert: Math.round(g), art: 'Gesamt', reiz: an.reiz ?? w.reiz, eignung: an.score ?? w.eignung, firma: an.firma ?? w.firma};
-  return {wert: an.score != null ? Math.round(an.score) : null, art: 'Eignung'};
+  if (g != null) return {wert: Math.round(g), art: 'Gesamt', reiz: an.reiz ?? w.reiz, eignung: an.score ?? w.eignung, firma: an.firma ?? w.firma, geschaetzt: an.gesamt == null && !!w.geschaetzt, gruende: an.gesamt == null ? w.gruende : undefined};
+  if (an.score != null) return {wert: Math.round(an.score), art: 'Eignung'};
+  return wertSchaetzung(a);
+}
+/** Grobe Schätzung, wenn weder Analyse noch Wertung da sind (Direktansprache, von Hand angelegt): jede Stelle bekommt einen Wert.
+    Reiz aus Titel (Suchbegriffe, Gehalt der Stellenfamilie), Gehalt laut Anzeige und eigenem Interesse, Eignung offen (60), Formel wie im Morgenlauf. */
+function wertSchaetzung(a) {
+  const titel = String(a.position || ''), gruende = [];
+  const begriffe = String(P().suche?.begriffe || '').split(/\s*,\s*/).filter(b => b.length > 3);
+  const treffer = begriffe.filter(b => titel.toLowerCase().includes(b.toLowerCase())).length;
+  let reiz = 52 + Math.min(12, treffer * 6); if (treffer) gruende.push('passt zu den Suchbegriffen');
+  const top = Math.max(Number(a.gehaltMax) || 0, Number(a.gehaltMin) || 0) / 1000;
+  const k = top >= 10 ? top : (GEH_KAT.find(([re]) => re.test(titel)) || [null, 50, 60])[2];
+  reiz += k >= 65 ? 8 : k >= 60 ? 3 : k < 50 ? -10 : k < 55 ? -5 : 0; gruende.push(top >= 10 ? `Gehalt bis ${Math.round(top)}k laut Anzeige` : `Gehalt grob nach Stellenfamilie (bis ${k}k)`);
+  if (/sachbearbeit|assistenz|aushilfe/i.test(titel)) { reiz -= 8; gruende.push('klingt nach Sachbearbeitung'); }
+  reiz += ((Number(a.interesse) || 3) - 3) * 4;
+  reiz = Math.max(0, Math.min(100, reiz));
+  const f = a.art === 'initiativ' ? null : iniFirma(a), fs = f && !f.agentur && f.score != null ? f.score : null, eignung = 60;
+  const wert = Math.max(0, Math.min(100, Math.round(fs == null ? 0.6 * reiz + 0.4 * eignung - 5 : 0.5 * reiz + 0.3 * eignung + 0.2 * fs)));
+  return {wert, art: 'Schätzung', reiz, eignung, eignungOffen: true, firma: fs, geschaetzt: true, gruende: [...gruende, 'Eignung offen, kaum Infos zur Stelle']};
 }
 function renderListe() {
   const el = $('#v-liste');
@@ -1285,7 +1303,7 @@ function renderListe() {
     const fertig = !!(a.anschreiben && String(a.anschreiben).trim());
     return `<article class="radar-item rang-item" data-open="${a.id}" tabindex="0">
       <div class="rang-nr">${i + 1}</div>
-      <div class="radar-score" style="--c:${w.wert == null ? 'var(--muted)' : ringColor(w.wert)}" title="${w.ini ? 'Gesamtwertung: 70 % Reiz (mit den Firmendaten) und 30 % Eignung' : w.art === 'Gesamt' ? 'Gesamtwertung aus Reiz, Eignung und Firma' : w.art === 'Firma' ? 'Wertung des Unternehmens' + (w.geschaetzt ? ', grob geschätzt' : '') : 'Eignung laut Analyse'}">${w.wert ?? '–'}<small>${w.art}</small></div>
+      <div class="radar-score" style="--c:${w.wert == null ? 'var(--muted)' : ringColor(w.wert)}" title="${w.ini ? 'Gesamtwertung: 70 % Reiz (mit den Firmendaten) und 30 % Eignung' : w.art === 'Gesamt' ? 'Gesamtwertung aus Reiz, Eignung und Firma' : w.art === 'Firma' ? 'Wertung des Unternehmens' + (w.geschaetzt ? ', grob geschätzt' : '') : w.art === 'Schätzung' ? 'Grob geschätzt, weil kaum Infos zur Stelle da sind: ' + (w.gruende || []).join(', ') : 'Eignung laut Analyse'}${w.geschaetzt && w.art !== 'Schätzung' ? ' (geschätzt' + (w.gruende?.length ? ': ' + w.gruende.join(', ') : '') + ')' : ''}">${w.wert == null ? '–' : (w.geschaetzt ? '≈' : '') + w.wert}<small>${w.art}</small></div>
       <div class="radar-main"><div class="t1">${esc(titel)}</div><div class="t2">${esc([a.firma || 'Ohne Firma', a.ort].filter(Boolean).join(' · '))} · ${esc(gehaltText(ini ? a.initiativ?.fokus : a.position, a.wertung?.fk || iniFirma(a)?.key, w.gross, a.gehaltMin, a.gehaltMax))}</div>
         ${werte ? `<div class="radar-werte">${werte}</div>` : ''}
         <div class="radar-chips">${a.status !== 'gemerkt' ? `<span class="stamp" style="--stage:${stageVar(a.status)}">${S[a.status].label}</span>` : ''}${ini ? '<span class="chip acc">Initiativ</span>' : ''}${w.gross ? '<span class="chip good">großes Unternehmen</span>' : ''}${w.beratung ? '<span class="chip warn">Beratung, viel Präsentieren</span>' : ''}${ini ? '' : fahrtChip(a)}<span class="chip ${fertig ? 'good' : ''}">${fertig ? 'Unterlagen fertig' : 'Unterlagen folgen'}</span>${a.sprache === 'en' ? '<span class="chip">auf Englisch</span>' : ''}${w.geschaetzt ? '<span class="chip warn">Wertung geschätzt</span>' : ''}${nachfassFaellig(a) ? '<span class="chip warn">Nachfragen fällig</span>' : ''}</div></div>

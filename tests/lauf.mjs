@@ -625,6 +625,22 @@ test('drive', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('schaetzung', async () => {
+  // jede Stelle hat einen Score: ohne Analyse und Wertung schätzt die App grob und zeigt es mit ≈
+  const { seite, gh, fehler } = await appStarten();
+  const leer = json(gh, 'apps/test-raus.json');
+  gh.dateien.set('apps/test-direkt.json', Buffer.from(JSON.stringify({ firma: 'Beratung Muster GmbH', position: 'Controller Einkauf und ERP', status: 'rueckmeldung', interesse: 3, verworfen: false,
+    erstellt: '2026-11-19T12:00:00Z', verlauf: [], aufgaben: [], kontakt: { name: '', rolle: '', email: '', telefon: '' }, stellenText: leer.stellenText || '' }, null, 1) + '\n'));
+  await seite.waitForSelector('#bereitPanel, #v-liste', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.goto('http://app.test/Bewerbungszentrale/#liste');
+  await seite.waitForSelector('#v-liste [data-open="test-direkt"] .radar-score', { timeout: 10000 });
+  const text = await seite.textContent('#v-liste [data-open="test-direkt"] .radar-score');
+  assert.match(text, /^≈\d{2}Schätzung$/, text);
+  assert.match(await seite.getAttribute('#v-liste [data-open="test-direkt"] .radar-score', 'title'), /Grob geschätzt.*Eignung offen/);
+  assert.deepEqual(fehler, []);
+});
+
 test('gmail-merken', async () => {
   // die Erlaubnis zum Senden gilt eine Stunde: nach dem Neuladen ohne neue Anmeldung, mit dem Gmail-Konto aus dem Profil als Vorauswahl
   const { seite, gmail, fehler } = await appStarten({ google: true });
