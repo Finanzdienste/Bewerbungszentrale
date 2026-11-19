@@ -66,6 +66,32 @@ Zugriffstoken bleibt im Speicher der Seite. Gesendet wird nur, wenn die Person
 im Senden-Fenster tippt; in der Sammelliste stehen nur Bewerbungen, die das
 Gegenlesen freigegeben hat.
 
+## Bildschirmzeit für Tobis Widget
+
+Android zählt die App als „Chrome“. Tobis Widget-App (Repo
+[Finanzdienste/Bildschirmzeit](https://github.com/Finanzdienste/Bildschirmzeit))
+zieht ihre Zeit seit dem 19.11.2026 von Chrome ab und zeigt sie als
+„Bewerbungen“.
+
+- `js/bildschirmzeit.js` ist eine **byte-gleiche Kopie** von
+  `web/bildschirmzeit.js` aus dem Repo Bildschirmzeit: nur dort ändern, dann
+  hierher (und nach Boxenstopp, Freizeit, Workout) kopieren und `VERSION` in
+  `sw.js` hochzählen.
+- `js/bildschirmzeit-start.js` (ein Modul) startet es als
+  `bewerbungszentrale`. `index.html` ist ein klassisches Skript und läuft
+  vorher, deshalb lässt `route()` den Link `#bildschirmzeit=…` stehen, bis das
+  Modul ihn herausnimmt. Kommt der Link in die offene App, bleibt man in der
+  Ansicht, auch in der Adresse.
+- Verbunden wird nur über „Verbinden“ in der Widget-App (öffnet
+  `…/Bewerbungszentrale/#bildschirmzeit=<Kennung>`). Ohne den Link misst,
+  schickt und zeigt nichts davon etwas. Verbunden: ein kurzer Hinweis, unter
+  „Profil & Daten“ der Stand von heute und „Trennen“.
+- Gemeldet werden nur Sekunden je Tag an Supabase (öffentlicher Schlüssel,
+  nur die `bildschirmzeit_`-Funktionen), keine Bewerbungsdaten. Der Service
+  Worker speichert diese Anfragen nie.
+- Geprüft von `node tests/lauf.mjs bildschirmzeit` (Supabase nachgebaut,
+  erfundene Kennungen).
+
 ## Läufe
 
 Der tägliche Morgenlauf (Stellensuche, Bewertung, Unterlagen, Gegenlesen) ist

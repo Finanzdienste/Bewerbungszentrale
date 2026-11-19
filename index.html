@@ -9,6 +9,8 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <script src="js/plattform.js"></script>
+<!-- Bildschirmzeit für Tobis Widget – tut nichts ohne den Link aus der Widget-App (js/bildschirmzeit-start.js). -->
+<script type="module" src="js/bildschirmzeit-start.js"></script>
 </head>
 <body>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -869,6 +871,14 @@ function renderAll() {
 }
 const VIEWS = ['uebersicht','pipeline','liste','radar','termine','profil'];
 function route() {
+  // Ein Link aus Tobis Widget-App (#bildschirmzeit=…) in der offenen App: js/bildschirmzeit.js nimmt ihn
+  // gleich heraus (es hört nach uns). Man bleibt, wo man war – danach auch wieder in der Adresse.
+  // Beim Start (noch keine Ansicht) gilt die Übersicht wie sonst.
+  if (/[#&]bildschirmzeit=/.test(location.hash) && state.view_vorher) {
+    const v = state.view;
+    setTimeout(() => { if (!/[#&]bildschirmzeit=/.test(location.hash)) try { history.replaceState(history.state, '', `${location.pathname}${location.search}#${v}`); } catch {} }, 0);
+    return;
+  }
   const h = (location.hash || '').slice(1);
   const v = VIEWS.includes(h) ? h : 'uebersicht';
   state.view = v;
@@ -1759,6 +1769,7 @@ function renderProfil(force) {
           ${bsp ? `<div class="danger-zone"><span style="flex:1">${bsp} Beispiel-Bewerbungen sind noch da.</span><button class="btn sm danger" data-act="del-bsp" type="button">${ic('trash')}Beispiele löschen</button></div>` : ''}
         </div>
       </section>
+      ${bildschirmzeitPanel()}
     </div>
   </div>`;
 }
@@ -3868,6 +3879,34 @@ function toast(msg, {action} = {}) {
   $('#toasts').append(t);
   setTimeout(() => t.remove(), action ? 6500 : 3800);
 }
+
+/* ================= Bildschirmzeit für Tobis Widget =================
+ * js/bildschirmzeit-start.js (ein Modul, läuft nach diesem Skript) legt window.bzBildschirmzeit an.
+ * Nur verbunden (Link aus der Widget-App) gibt es den Abschnitt unter „Profil & Daten“ – sonst kein Wort davon. */
+window.bzMeldung = (text) => toast(text);
+function bildschirmzeitPanel() {
+  const bz = window.bzBildschirmzeit, s = bz?.stand();
+  if (!s) return '';
+  const zeit = s.zuletzt ? new Date(s.zuletzt).toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'}) : '';
+  return `<section class="panel" id="bz-bildschirmzeit"><div class="panel-head"><h2>Bildschirmzeit</h2><span class="sub">für dein Widget</span></div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <p class="muted" style="font-size:var(--t-sm)">Verbunden mit deinem Widget. Heute ${esc(bz.dauerText(s.heute))} offen, ${zeit ? `zuletzt gemeldet um ${esc(zeit)}` : 'noch nichts gemeldet'}.</p>
+          ${s.fehler ? `<p class="muted" style="font-size:var(--t-xs)">Zuletzt nicht durchgekommen: ${esc(s.fehler)}.</p>` : ''}
+          <div class="ki-row"><button class="btn sm" data-act="bildschirmzeit-trennen" type="button">Trennen</button></div>
+        </div>
+      </section>`;
+}
+/** Verbunden, gemeldet, getrennt: nur den Abschnitt nachziehen, damit Eingaben im Profil bleiben. */
+function bildschirmzeitAuffrischen() {
+  if (state.view !== 'profil' || document.visibilityState !== 'visible') return;
+  const alt = document.getElementById('bz-bildschirmzeit');
+  const vorlage = document.createElement('template'); vorlage.innerHTML = bildschirmzeitPanel();
+  const neu = vorlage.content.firstElementChild;
+  if (alt && neu) { if (!alt.isEqualNode(neu)) alt.replaceWith(neu); }
+  else if (alt) alt.remove();
+  else if (neu) renderProfil(false);
+}
+window.addEventListener('bildschirmzeit', bildschirmzeitAuffrischen);
 async function copyFrom(id) {
   const el = document.getElementById(id); if (!el) return;
   try { await navigator.clipboard.writeText(el.value ?? el.textContent); toast('In die Zwischenablage kopiert'); }
@@ -3919,6 +3958,7 @@ document.addEventListener('click', async e => {
     if (act === 'coach-stop') return kiJobs.get('coach')?.abort();
     if (act === 'clear-filter') { state.listFilter.clear(); return renderListe(); }
     if (act === 'export-csv') return save(`Bewerbungen_${today()}.csv`, csv());
+    if (act === 'bildschirmzeit-trennen') { window.bzBildschirmzeit?.trennen(); return toast('Getrennt: Die Bewerbungszentrale meldet nichts mehr an dein Widget.'); }
     if (act === 'export-json') return save(`Bewerbungszentrale_Backup_${today()}.json`, JSON.stringify({app:'Bewerbungszentrale', version:1, exportiert:new Date().toISOString(), profil:state.profil, bewerbungen:list()}, null, 2));
     if (act === 'del-bsp') {
       const ids = list().filter(a => a.beispiel).map(a => a.id);

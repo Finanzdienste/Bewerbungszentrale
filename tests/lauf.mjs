@@ -720,6 +720,72 @@ test('lesemodus', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('bildschirmzeit', async () => {
+  // Tobis Widget (Finanzdienste/Bildschirmzeit) zieht die Zeit der App von „Chrome“ ab. Supabase ist nachgebaut, die Kennungen sind erfunden.
+  const K = 'Erfundene-Kennung_nur-zum-Testen'.padEnd(43, 'x'), K2 = 'Zweite_erfundene-Kennung'.padEnd(43, 'y');
+  const { seite, ctx, fehler } = await appStarten();
+  const anfragen = [];
+  await ctx.route('https://vjyohppohmvhhxgwouti.supabase.co/**', (route) => {
+    const r = route.request();
+    anfragen.push({ name: r.url().split('/rpc/')[1], kopf: r.headers(), p: r.postDataJSON() });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: 'true' });
+  });
+  const gespeichert = () => seite.evaluate(() => JSON.parse(localStorage.getItem('bildschirmzeit.bewerbungszentrale') || 'null'));
+  const sichtbar = (v) => seite.evaluate((x) => !document.querySelector(`[data-view="${x}"]`).hidden, v);
+
+  // Ohne Link: nichts gemessen, nichts geschickt, kein Wort davon
+  await seite.goto('http://app.test/Bewerbungszentrale/#profil');
+  await seite.waitForSelector('#v-profil h1', { timeout: 20000 });
+  await seite.waitForFunction(() => typeof window.bzBildschirmzeit?.stand === 'function');
+  await warte(300);
+  assert.equal(anfragen.length, 0, 'ohne Link keine Anfrage');
+  assert.equal(await seite.locator('#bz-bildschirmzeit').count(), 0, 'ohne Link kein Abschnitt');
+  assert.equal(await gespeichert(), null);
+
+  // Der Link aus der Widget-App: verbindet, verschwindet aus der Adresse, meldet „heute“ als bewerbungszentrale
+  await seite.goto('http://app.test/Bewerbungszentrale/icon.svg'); // ein anderes Dokument: so lädt die App wirklich neu
+  await seite.goto(`http://app.test/Bewerbungszentrale/#bildschirmzeit=${K}`);
+  await seite.waitForFunction(() => /Bildschirmzeit verbunden/.test(document.querySelector('#toasts')?.textContent || ''), null, { timeout: 10000 });
+  assert.ok(!/bildschirmzeit=/.test(await seite.evaluate(() => location.href)), 'der Link bleibt nicht in der Adresse');
+  assert.ok(await sichtbar('uebersicht'), 'die App startet wie sonst');
+  for (let i = 0; i < 100 && !anfragen.length; i++) await warte(50);
+  const m = anfragen[0];
+  assert.equal(m?.name, 'bildschirmzeit_melden');
+  assert.equal(m.p.p_app, 'bewerbungszentrale');
+  assert.equal(m.p.p_kennung, K);
+  assert.equal(Object.keys(m.p.p_tage).length, 1);
+  assert.ok(Object.values(m.p.p_tage)[0] <= 1, `heute fängt bei 0 an (${JSON.stringify(m.p.p_tage)})`);
+  assert.equal(m.kopf.apikey, 'sb_publishable_wTUNShIKMFjCOmZzQuuN-A_vFHPkKUI');
+  assert.equal(m.kopf.authorization, undefined, 'nur der öffentliche Schlüssel, kein Authorization');
+  assert.equal((await gespeichert()).kennung, K);
+
+  // Unter „Profil & Daten“: der Stand und „Trennen“
+  await seite.goto('http://app.test/Bewerbungszentrale/#profil');
+  await seite.waitForSelector('#bz-bildschirmzeit', { timeout: 10000 });
+  assert.match(await seite.textContent('#bz-bildschirmzeit'), /Verbunden mit deinem Widget\. Heute .* offen/);
+
+  // Ein neuer Link in der offenen App: verbindet neu, man bleibt in der Ansicht – auch in der Adresse
+  await seite.goto('http://app.test/Bewerbungszentrale/#pipeline');
+  await seite.waitForFunction(() => !document.querySelector('[data-view="pipeline"]').hidden);
+  await seite.evaluate((k) => { location.hash = `#bildschirmzeit=${k}`; }, K2);
+  await seite.waitForFunction((k) => JSON.parse(localStorage.getItem('bildschirmzeit.bewerbungszentrale') || '{}').kennung === k, K2, { timeout: 5000 });
+  await warte(200);
+  assert.equal(await seite.evaluate(() => location.hash), '#pipeline');
+  assert.ok(await sichtbar('pipeline'), 'die Pipeline bleibt offen');
+
+  // Trennen: nichts mehr messen und schicken, der Abschnitt verschwindet
+  await seite.goto('http://app.test/Bewerbungszentrale/#profil');
+  await seite.waitForSelector('#bz-bildschirmzeit', { timeout: 10000 });
+  await seite.click('[data-act="bildschirmzeit-trennen"]');
+  await seite.waitForSelector('#bz-bildschirmzeit', { state: 'detached', timeout: 5000 });
+  assert.equal(await gespeichert(), null);
+  const vorher = anfragen.length;
+  await seite.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' }); document.dispatchEvent(new Event('visibilitychange')); });
+  await warte(300);
+  assert.equal(anfragen.length, vorher, 'getrennt: beim Wegschalten keine Meldung mehr');
+  assert.deepEqual(fehler, [], fehler.join('\n'));
+});
+
 test('oeffentlich', async () => {
   // Im öffentlichen Repo stehen keine persönlichen Daten
   const verboten = [/Kruse/i, /Walddörfer/i, /alice-dsl/i, /krusetobias/i, /o2mail/i, /PxCY3xsfP6mMNvqdAa2MzF/];
