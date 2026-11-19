@@ -3,7 +3,7 @@
  * Schriften aus dem Zwischenspeicher. Nie gespeichert: GitHub-API (Daten),
  * KI-Anfragen. Bei jeder Änderung an index.html oder js/ VERSION hochzählen.
  */
-const VERSION = 'v32';
+const VERSION = 'v33';
 const HUELLE = `bz-huelle-${VERSION}`;
 const DAUER = 'bz-dauer-v1'; // Karte, Schriften, Bibliotheken von CDNs (versioniert, ändern sich nicht)
 const SHELL = ['./', 'index.html', 'js/plattform.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];

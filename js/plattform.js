@@ -674,8 +674,12 @@
       const u = new URL((upload ? 'https://www.googleapis.com/upload/drive/v3/' : 'https://www.googleapis.com/drive/v3/') + pfad);
       for (const [k, v] of Object.entries(query)) u.searchParams.set(k, v);
       let r;
-      try { r = await fetch(u, { method, headers: { Authorization: `Bearer ${zugriff.token}`, ...(json ? { 'Content-Type': 'application/json; charset=UTF-8' } : typ ? { 'Content-Type': typ } : {}) }, body: json ? JSON.stringify(json) : body }); }
-      catch (e) { throw fehler('unklar', e?.message || 'Netzwerkfehler'); }
+      for (let versuch = 0; ; versuch++) { // schwaches Netz (Handy): bis zu dreimal mit Pause, auch bei 429 und 5xx
+        try { r = await fetch(u, { method, headers: { Authorization: `Bearer ${zugriff.token}`, ...(json ? { 'Content-Type': 'application/json; charset=UTF-8' } : typ ? { 'Content-Type': typ } : {}) }, body: json ? JSON.stringify(json) : body }); }
+        catch (e) { if (versuch < 2) { await new Promise((res) => setTimeout(res, 2000 * (versuch + 1))); continue; } throw fehler('netz', 'Keine Verbindung zu Google Drive'); }
+        if ((r.status === 429 || r.status >= 500) && versuch < 2) { await new Promise((res) => setTimeout(res, 3000 * (versuch + 1))); continue; }
+        break;
+      }
       if (r.ok) return r.status === 204 ? {} : r.json().catch(() => ({}));
       const j = await r.json().catch(() => null), m = j?.error?.message || `HTTP ${r.status}`;
       if (r.status === 401) { vergessen(); throw fehler('needs_reauth', m); }

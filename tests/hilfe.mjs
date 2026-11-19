@@ -28,13 +28,13 @@ export async function schliessen() { if (browser) await browser.close(); browser
  * speicher: localStorage vor dem Start (z. B. Zugang). ki: (prompt) => Antworttext.
  * google: Google-Anmeldung und Gmail-API nachbilden; gesendete Mails landen in gmail.
  */
-export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false, graphql = true, google = false, gmailFehler = 0, nurLesen = false, driveStart = [] } = {}) {
+export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false, graphql = true, google = false, gmailFehler = 0, nurLesen = false, driveStart = [], driveAbbruch = 0 } = {}) {
   const b = await browserStarten();
   const ctx = await b.newContext({ viewport: { width: breite, height: hoehe }, serviceWorkers: 'block', acceptDownloads: true, permissions: ['clipboard-read', 'clipboard-write'] });
   const gh = githubAttrappe(ladeOrdner(daten), { graphql, nurLesen });
   const kia = kiAttrappe(ki);
   const fehler = [], gmail = [];
-  const drive = driveAttrappe(driveStart);
+  const drive = driveAttrappe(driveStart, driveAbbruch);
   const vorher = speicher === undefined ? { 'bewerbungszentrale.zugang.v1': JSON.stringify({ token: gh.token }), 'bewerbungszentrale.ki.v1': JSON.stringify({ schluessel: 'sk-ant-test-00000000000000000000000000' }) } : speicher;
   await ctx.addInitScript(({ vorher, teilen, google }) => {
     if (!sessionStorage.getItem('bz-test-start')) { for (const [k, v] of Object.entries(vorher)) localStorage.setItem(k, v); sessionStorage.setItem('bz-test-start', '1'); }
@@ -76,13 +76,14 @@ export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), spe
 }
 
 /** Google Drive v3 im Speicher: nur das, was die App braucht (Liste mit q, Ordner, Multipart-Upload, Ersetzen, Ändern). */
-function driveAttrappe(start = []) {
+function driveAttrappe(start = [], abbruch = 0) {
   const dateien = new Map(), log = [];
   let n = 0;
   for (const f of start) { const id = f.id || 'd' + ++n; dateien.set(id, { trashed: false, parents: [], appProperties: {}, inhalt: Buffer.alloc(0), ...f, id }); }
   const json = (route, status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
   const aus = (f) => ({ id: f.id, name: f.name, mimeType: f.mimeType, appProperties: f.appProperties });
   async function handler(route) {
+    if (abbruch > 0) { abbruch--; log.push('abgebrochen'); return route.abort('internetdisconnected'); } // schwaches Handy-Netz
     const r = route.request(), u = new URL(r.url()), m = r.method(), upload = u.pathname.startsWith('/upload/');
     if (!/^Bearer ya29\./.test(r.headers().authorization || '')) return json(route, 401, { error: { code: 401, message: 'Invalid Credentials' } });
     const id = (u.pathname.match(/\/files\/([^/]+)$/) || [])[1];

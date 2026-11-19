@@ -2206,6 +2206,7 @@ async function driveAbgleich(plan, dateien) { // Google Drive: Ordner „Bewerbu
   } catch (e) {
     if (e?.code === 'needs_reauth') { DRIVE.wartet = true; DRIVE.fehler = ''; driveAufKlickWarten(); return; }
     if (e?.code === 'not_found') DRIVE.wurzel = ''; // Ordner gelöscht: beim nächsten Mal neu anlegen
+    if (e?.code === 'netz') { DRIVE.fehler = 'Gerade keine Verbindung zu Google Drive, neuer Versuch in einer Minute.'; setTimeout(() => ordnerPlanen(0), 60000); return; }
     DRIVE.fehler = /has not been used|is disabled/i.test(e?.message || '') ? 'Im Google-Cloud-Projekt die „Google Drive API“ einschalten (APIs & Dienste → Bibliothek), dann neu laden.' : `Drive hakt: ${e?.message || 'unbekannter Fehler'}`;
   }
 }

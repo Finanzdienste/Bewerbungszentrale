@@ -593,7 +593,7 @@ test('ordner', async () => {
 
 test('drive', async () => {
   // dieselben Mappen fürs Handy in Google Drive: einmal verbinden, dann je Stelle ein Ordner; Erledigtes in den Papierkorb, Fremdes bleibt
-  const { seite, gh, drive, fehler } = await appStarten({ google: true, driveStart: [
+  const { seite, gh, drive, fehler } = await appStarten({ google: true, driveAbbruch: 2, driveStart: [
     { id: 'w1', name: 'Bewerbungsmappen', mimeType: 'application/vnd.google-apps.folder', appProperties: { bz: 'wurzel' } },
     { id: 'alt1', name: '99 Alte Firma - Erledigt', mimeType: 'application/vnd.google-apps.folder', parents: ['w1'], appProperties: { bz: 'stelle', stand: 'x' } },
     { id: 'eig1', name: 'Eigene Notizen', mimeType: 'application/vnd.google-apps.folder', parents: ['w1'] },
@@ -614,6 +614,7 @@ test('drive', async () => {
   assert.ok(['Anschreiben_', 'Lebenslauf_', 'Zeugnisse_', 'Bewerbung_'].every((v) => namen.some((n) => n.startsWith(v) && n.endsWith('.pdf'))));
   for (const f of drin.filter((f) => f.name.endsWith('.pdf'))) { assert.equal(f.inhalt.subarray(0, 4).toString(), '%PDF', f.name); assert.equal(f.mimeType, 'application/pdf'); }
   assert.match(drin.find((f) => f.name === 'Portal-Infos.txt').inhalt.toString('utf8'), /Gehaltsvorstellung: /);
+  assert.equal(drive.log.filter((x) => x === 'abgebrochen').length, 2, 'zwei Netzaussetzer, trotzdem durchgelaufen');
   assert.equal(drive.dateien.get('alt1').trashed, true, 'erledigter Ordner in den Papierkorb');
   assert.equal(drive.dateien.get('eig1').trashed, false, 'fremder Ordner bleibt');
   assert.equal([...drive.dateien.values()].filter((f) => f.appProperties?.bz === 'wurzel').length, 1, 'vorhandener Hauptordner wird weiterbenutzt');
