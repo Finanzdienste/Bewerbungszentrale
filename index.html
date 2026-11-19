@@ -92,7 +92,16 @@ svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .tabbar{display:flex;gap:2px;align-items:stretch}
 .mailfeld{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;margin:0 0 14px;border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));background:var(--accent-soft);border-radius:12px}
 .mailfeld span{display:flex;flex-direction:column;min-width:0}.mailfeld small{color:var(--muted);font-size:var(--t-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dash-filter{margin:0 0 12px}.dash-filter .fsep{flex:0 0 1px;align-self:stretch;background:var(--line);margin:0 4px}
+.dash-kopf{display:flex;flex-direction:column;gap:8px;margin:0 0 14px}
+.bereiche{display:flex;flex-direction:column;gap:10px}
+.bereich{border:1px solid var(--line);border-left:4px solid var(--stage);border-radius:12px;background:var(--sheet)}
+.bereich>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;cursor:pointer;list-style:none}
+.bereich>summary::-webkit-details-marker{display:none}
+.bereich>summary::after{content:'';width:9px;height:9px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);margin:-4px 2px 0 0;transition:transform .15s}
+.bereich[open]>summary::after{transform:rotate(-135deg);margin-top:4px}
+.b-titel{font-weight:600;font-size:var(--t-lg,18px)}
+.b-n{margin-left:auto;font:600 20px/1 var(--f-mono)}
+.bereich>ul.todo,.bereich>.empty-mini{margin:0;padding:0 12px 12px}
 a.col-tab{text-decoration:none;color:inherit}
 a.col-tab:hover h3{text-decoration:underline}
 .stufen{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:4px 0 22px}
@@ -1041,35 +1050,49 @@ function renderUebersicht() {
 /** Kacheln im Dashboard: je Stufe die Zahl, ein Tipp öffnet die Liste genau dieser Bewerbungen. */
 /** Pipeline direkt im Dashboard: erste Spalte nur, was sich abschicken lässt, dann die Stufen nach dem Abschicken.
     Was der Morgenlauf noch vorbereitet, steht nur als Zahl darüber. Ein Tipp auf den Spaltenkopf öffnet die Liste. */
-const DASH_SPALTEN = [['bereit', 'Vorbereitet'], ['vorbereitung', 'In Vorbereitung'], ['beworben', 'Beworben'], ['rueckmeldung', 'Rückmeldung'], ['interview', 'Gespräch'], ['angebot', 'Angebot'], ['zusage', 'Zusage'], ['absage', 'Absage']];
-const dashFilter = (() => { try { const f = JSON.parse(localStorage.getItem('bz-dash') || 'null'); if (f && Array.isArray(f.aus)) return {aus: new Set(f.aus), weg: f.weg || ''}; } catch {} return {aus: new Set(['vorbereitung']), weg: ''}; })();
-const dashMerken = () => { try { localStorage.setItem('bz-dash', JSON.stringify({aus: [...dashFilter.aus], weg: dashFilter.weg})); } catch {} };
-/** Dashboard = eine Pipeline: Spalten nach Stand, Vorbereitete nach Score sortiert. Filter blenden Spalten aus oder zeigen nur Portal bzw. Mail.
-    Liegt mindestens eine Mail-Bewerbung bereit, steht oben das Feld „x per Mail schicken“. */
+const DASH_BEREICHE = [['antwort', 'Warten auf deine Antwort'], ['bereit', 'Vorbereitet'], ['vorbereitung', 'In Vorbereitung'], ['beworben', 'Beworben'], ['rueckmeldung', 'Rückmeldung'], ['interview', 'Gespräch'], ['angebot', 'Angebot'], ['zusage', 'Zusage'], ['absage', 'Absage']];
+const dashOffen = (() => { try { const o = JSON.parse(localStorage.getItem('bz-dash-offen') || 'null'); if (Array.isArray(o)) return new Set(o); } catch {} return new Set(['antwort', 'bereit']); })();
+let dashWeg = (() => { try { return localStorage.getItem('bz-dash-weg') || ''; } catch { return ''; } })();
+const dashMerken = () => { try { localStorage.setItem('bz-dash-offen', JSON.stringify([...dashOffen])); localStorage.setItem('bz-dash-weg', dashWeg); } catch {} };
+/** Dashboard: oben „x per Mail schicken“ (wenn etwas bereitliegt), Suche und Filter, darunter die Bereiche groß untereinander,
+    jeder mit seiner Zahl und zum Aufklappen. Vorbereitete stehen nach Score sortiert. */
 function dashboardBoard() {
-  const alle = list().filter(a => !a.beispiel), belegt = firmenMitVersand();
-  const bereitSet = new Set(alle.filter(a => istBereit(a) && !belegt.has(firmaGruppe(a.firma))).map(a => a.id));
-  const sc = a => wertungVon(a).wert ?? 0;
-  const inSpalte = {
-    bereit: a => bereitSet.has(a.id), vorbereitung: a => a.status === 'gemerkt' && !bereitSet.has(a.id),
-    absage: a => a.status === 'absage' || a.status === 'zurueckgezogen',
-  };
-  const weg = a => dashFilter.weg === 'portal' ? istPortal(a) : dashFilter.weg === 'mail' ? !istPortal(a) : true;
-  const spalten = DASH_SPALTEN.map(([k, label]) => {
-    const items = alle.filter(inSpalte[k] || (a => a.status === k));
-    const sichtbar = items.filter(weg).sort(['bereit', 'vorbereitung'].includes(k) ? (x, y) => sc(y) - sc(x) || (x.fristBis || '9999').localeCompare(y.fristBis || '9999') : (x, y) => lastActivity(y).localeCompare(lastActivity(x)));
-    return {k, label, items, sichtbar};
-  }).filter(s => s.items.length || !['angebot', 'zusage'].includes(s.k));
   const mail = mailBereit(), lesen = window.bzPlattform?.nurLesen?.();
   const att = attentionItems(), termine = att.filter(x => x.kind === 'termin').length, rest = att.length - termine;
-  const chip = (attr, wert, label, n, an) => `<button type="button" class="fchip" ${attr}="${wert}" aria-pressed="${an}">${label}<span class="c">${n}</span></button>`;
-  const farbe = k => k === 'bereit' ? 'var(--accent)' : k === 'vorbereitung' ? stageVar('gemerkt') : stageVar(k);
-  const cols = spalten.filter(s => !dashFilter.aus.has(s.k)).map(s => `<div class="col" style="--stage:${farbe(s.k)}"><div class="col-tab"><h3>${s.label}</h3><span class="n">${s.sichtbar.length}</span></div>
-      <div class="col-body" data-drop="${['bereit', 'vorbereitung'].includes(s.k) ? 'gemerkt' : s.k}">${s.sichtbar.length ? s.sichtbar.map(cardHTML).join('') : `<div class="col-empty">${s.k === 'bereit' ? 'Gerade nichts fertig' : '–'}</div>`}</div></div>`).join('');
+  const alle = list().filter(a => !a.beispiel), belegt = firmenMitVersand();
+  const bereit = alle.filter(a => istBereit(a) && !belegt.has(firmaGruppe(a.firma)));
+  const chip = (wert, label, n) => `<button type="button" class="fchip" data-dweg="${wert}" aria-pressed="${dashWeg === wert}">${label}<span class="c">${n}</span></button>`;
   return `${mail.length && !lesen ? `<div class="mailfeld" id="mailFeld"><span><b>${mail.length} per Mail schicken</b><small>${esc(mail.slice(0, 3).map(a => a.firma).join(', '))}${mail.length > 3 ? ' …' : ''}</small></span><button class="btn primary" type="button" data-act="sammel-mail">${ic('mail')}Jetzt senden</button></div>` : ''}
     ${att.length ? `<p class="desc" style="margin:0 0 10px"><a href="#termine">${[termine ? `${termine} ${termine === 1 ? 'Termin' : 'Termine'}` : '', rest ? `${rest} ${rest === 1 ? 'Sache' : 'Sachen'} zu erledigen` : ''].filter(Boolean).join(' und ')} in den nächsten 7 Tagen</a></p>` : ''}
-    <div class="filters scroll dash-filter">${spalten.map(s => chip('data-dspalte', s.k, s.label, s.items.length, !dashFilter.aus.has(s.k))).join('')}<span class="fsep"></span>${chip('data-dweg', 'portal', 'Portal', alle.filter(a => bereitSet.has(a.id) && istPortal(a)).length, dashFilter.weg === 'portal')}${chip('data-dweg', 'mail', 'Per Mail', alle.filter(a => bereitSet.has(a.id) && !istPortal(a)).length, dashFilter.weg === 'mail')}</div>
-    <div class="board-wrap"><div class="board">${cols}</div></div>`;
+    <div class="dash-kopf"><label class="search" for="dashQ"><span class="sr">Bewerbungen durchsuchen</span>${ic('search')}<input id="dashQ" type="search" placeholder="Firma, Stelle, Ort suchen" autocomplete="off" value="${esc(state.dashSuche || '')}"></label>
+      <div class="filters">${chip('portal', 'Über Portal', bereit.filter(istPortal).length)}${chip('mail', 'Per Mail', bereit.filter(a => !istPortal(a)).length)}</div></div>
+    <div class="bereiche" id="dash">${dashBereicheHTML()}</div>`;
+}
+/** Eine Firma wartet auf dich: offene Aufgabe zum Antworten oder Zurückrufen, oder eine vorbereitete Antwort, die noch nicht raus ist. */
+function wartetAufDich(a) {
+  if (['absage', 'zurueckgezogen', 'zusage'].includes(a.status)) return false;
+  return (a.aufgaben || []).some(k => !k.erledigt && /antworten|zurückrufen|rückruf/i.test(k.text || ''));
+}
+function dashBereicheHTML() {
+  const alle = list().filter(a => !a.beispiel), belegt = firmenMitVersand(), q = (state.dashSuche || '').trim();
+  const bereitSet = new Set(alle.filter(a => istBereit(a) && !belegt.has(firmaGruppe(a.firma))).map(a => a.id));
+  const sc = a => wertungVon(a).wert ?? 0;
+  const gehoert = {antwort: wartetAufDich, bereit: a => bereitSet.has(a.id), vorbereitung: a => a.status === 'gemerkt' && !bereitSet.has(a.id), absage: a => a.status === 'absage' || a.status === 'zurueckgezogen'};
+  const passt = a => (dashWeg === 'portal' ? istPortal(a) : dashWeg === 'mail' ? !istPortal(a) : true) && (!q || matches(a, q));
+  const zeile = (a, k) => { const w = wertungVon(a), an = a.anfahrt || {}, nt = naechsterTermin(a);
+    const d = [a.ort, an.min ? `${an.min} min` : '', a.status === 'gemerkt' ? (istPortal(a) ? 'über Portal' : 'per Mail') : '', a.fristBis && a.status === 'gemerkt' ? `Frist ${fmtDs(a.fristBis)}` : '', nt ? `${WT[nt.d.getDay()]} ${fmtDs(isoDate(nt.d))}, ${fmtT(nt.d)}` : '', a.eingangAm && a.status === 'beworben' ? 'Eingang bestätigt' : '', a.status !== 'gemerkt' && a.beworbenAm ? `beworben ${relTage(a.beworbenAm)}` : ''].filter(Boolean).join(' · ');
+    const auf = k === 'antwort' ? (a.aufgaben || []).find(x => !x.erledigt && /antworten|zurückrufen|rückruf/i.test(x.text || '')) : null;
+    return `<li data-open="${a.id}" tabindex="0" style="--tone:${w.wert != null ? ringColor(w.wert) : 'var(--muted)'}"><span class="ico" style="font-family:var(--f-mono);font-size:12px;font-weight:600">${w.wert != null ? (w.geschaetzt ? '≈' : '') + w.wert : '–'}</span><span style="min-width:0"><div class="t">${esc(a.position || 'Position fehlt')} · ${esc(a.firma || 'Ohne Firma')}</div><div class="d">${esc(auf ? auf.text.replace(/\s*\((?:Antwort liegt in der App bereit)\)/, '') : d)}</div></span></li>`; };
+  const html = DASH_BEREICHE.map(([k, label]) => {
+    const alleDrin = alle.filter(gehoert[k] || (a => a.status === k));
+    if (!alleDrin.length && ['antwort', 'angebot', 'zusage'].includes(k)) return '';
+    const items = alleDrin.filter(passt).sort(['bereit', 'vorbereitung'].includes(k) ? (x, y) => sc(y) - sc(x) || (x.fristBis || '9999').localeCompare(y.fristBis || '9999') : (x, y) => lastActivity(y).localeCompare(lastActivity(x)));
+    const offen = q ? items.length > 0 : dashOffen.has(k);
+    const farbe = k === 'antwort' ? 'var(--warn)' : k === 'bereit' ? 'var(--accent)' : k === 'vorbereitung' ? stageVar('gemerkt') : stageVar(k);
+    return `<details class="bereich" data-bereich="${k}" style="--stage:${farbe}" ${offen ? 'open' : ''}><summary><span class="b-titel">${label}</span><span class="b-n">${items.length}</span></summary>
+      ${items.length ? `<ul class="todo">${items.map(a => zeile(a, k)).join('')}</ul>` : `<div class="empty-mini">${q || dashWeg ? 'Nichts passt zu Suche und Filter.' : k === 'bereit' ? 'Gerade ist nichts fertig zum Abschicken.' : 'Gerade nichts.'}</div>`}</details>`;
+  }).join('');
+  return html;
 }
 function stufenKacheln() {
   const alle = list().filter(a => !a.beispiel), belegt = firmenMitVersand(), n = k => alle.filter(a => a.status === k).length;
@@ -1384,6 +1407,8 @@ function renderListe() {
 }
 const RAUS_ART = {ort: 'Ort', anue: 'Zeitarbeit', gehalt: 'Gehalt', niveau: 'Niveau unter dem Abschluss', befristet: 'Befristung', fach: 'Fachlich zu weit weg', beratung: 'Arbeitsweise', klima: 'Arbeitsklima', weg: 'Nicht mehr offen', doppelt: 'Doppelt', firma: 'Eine Bewerbung je Firma', gegenlesen: 'Beim Gegenlesen', recherche: 'Bei der Recherche'};
 document.addEventListener('toggle', e => { if (e.target?.id === 'aussortiert') state.rausOffen = e.target.open; }, true);
+document.addEventListener('toggle', e => { const k = e.target?.dataset?.bereich; if (!k || (state.dashSuche || '').trim()) return; e.target.open ? dashOffen.add(k) : dashOffen.delete(k); dashMerken(); }, true);
+document.addEventListener('input', e => { if (e.target?.id !== 'dashQ') return; state.dashSuche = e.target.value; const d = $('#dash'); if (d) d.innerHTML = dashBereicheHTML(); });
 const aussortierte = () => Object.entries(state.apps).filter(([, a]) => a.verworfen && a.aussortiert && a.status === 'gemerkt' && !a.beispiel).map(([id, a]) => ({id, ...a}));
 function aussortiertHTML() {
   const rs = aussortierte().filter(a => matches(a, state.search)); if (!rs.length) return '';
@@ -2334,25 +2359,6 @@ async function driveAbgleich(plan, dateien, allgemein) { // Google Drive: Ordner
     if (e?.code === 'netz') { DRIVE.fehler = 'Gerade keine Verbindung zu Google Drive, neuer Versuch in einer Minute.'; setTimeout(() => ordnerPlanen(0), 60000); return; }
     DRIVE.fehler = /has not been used|is disabled/i.test(e?.message || '') ? 'Im Google-Cloud-Projekt die „Google Drive API“ einschalten (APIs & Dienste → Bibliothek), dann neu laden.' : `Drive hakt: ${e?.message || 'unbekannter Fehler'}`;
   }
-}
-function bereitPanel(opt = {}) {
-  const offen = list().filter(a => a.status === 'gemerkt' && !a.verworfen && !a.beispiel && a.anschreiben?.trim());
-  if (!offen.some(a => a.pruefung || a.ueberarbeiten)) return '';
-  const stand = new Map(offen.map(a => [a.id, pruefStand(a)]));
-  const belegt = firmenMitVersand();
-  const bereit = offen.filter(a => istBereit(a) && !belegt.has(firmaGruppe(a.firma))).sort((x, y) => (x.fristBis || '9999').localeCompare(y.fristBis || '9999') || (wertungVon(y).wert ?? 0) - (wertungVon(x).wert ?? 0));
-  const blick = offen.filter(a => ['maengel', 'geaendert'].includes(stand.get(a.id)));
-  const arbeit = offen.filter(a => ['neu', 'wird'].includes(stand.get(a.id))).length;
-  const perMail = bereit.filter(a => a.bewerbungsweg === 'email' && (a.kontakt?.email || '').trim());
-  const zeile = (a, warn) => { const sc = wertungVon(a).wert; const tage = a.fristBis ? dayDiff(new Date(), parseD(a.fristBis)) : null;
-    return `<li data-open="${a.id}" tabindex="0" style="--tone:${warn ? 'var(--warn)' : sc ? ringColor(sc) : 'var(--accent)'}"><span class="ico" style="font-family:var(--f-mono);font-size:12px;font-weight:600">${warn ? ic('alert') : sc ?? '?'}</span><span style="min-width:0"><div class="t">${esc(a.position)} · ${esc(a.firma)}</div><div class="d">${esc([a.bewerbungsweg === 'email' ? 'per Mail' : 'über Portal', a.pruefung?.note != null ? `Note ${a.pruefung.note}` : '', (a.pruefung?.fragen || []).length ? `${a.pruefung.fragen.length} ${a.pruefung.fragen.length === 1 ? 'Frage' : 'Fragen'} offen` : ''].filter(Boolean).join(' · '))}</div></span><span class="when ${tage != null && tage <= 3 ? 'urgent' : ''}">${a.fristBis ? 'bis ' + fmtDs(a.fristBis) : a.bewerbungsweg === 'email' ? 'Mail' : 'Portal'}</span></li>`; };
-  const n = state.zeigBereitAlle ? bereit.length : 8;
-  return `<section class="panel" id="bereitPanel"><div class="panel-head"><h2 style="display:flex;gap:8px;align-items:center">${ic('check')}${opt.ohneListe ? 'Abschicken' : 'Bereit zum Abschicken'}</h2><span class="sub">${esc([`${bereit.length} gegengelesen und freigegeben`, perMail.length ? `${perMail.length} per Mail` : '', arbeit ? `${arbeit} in Arbeit` : ''].filter(Boolean).join(' · '))}</span></div>
-    ${opt.ohneListe ? '' : bereit.length ? `<ul class="todo">${bereit.slice(0, n).map(a => zeile(a)).join('')}</ul>` : `<div class="empty-mini">${ic('clock')}Noch nichts freigegeben. Der Morgenlauf liest jeden Morgen gegen.</div>`}
-    ${ordnerZeile(bereit)}
-    <div class="ki-row" style="margin-top:8px">${bereit.length > 8 && !opt.ohneListe ? `<button class="btn sm" type="button" data-act="bereit-alle">${state.zeigBereitAlle ? 'Weniger zeigen' : `Alle ${bereit.length} zeigen`}</button>` : ''}${perMail.length && !window.bzPlattform?.nurLesen?.() ? `<button class="btn sm primary" type="button" data-act="sammel-mail">${ic('mail')}${perMail.length === 1 ? 'Die Mail-Bewerbung senden' : `Alle ${perMail.length} Mail-Bewerbungen senden`}</button>` : ''}</div>
-    ${blick.length ? `<h3 style="margin-top:14px;font-size:var(--t-sm)">Brauchen deinen Blick (${blick.length})</h3><ul class="todo">${blick.slice(0, 5).map(a => zeile(a, true)).join('')}</ul>` : ''}
-  </section>`;
 }
 /* ---------- Mail-Bewerbungen über die Gmail-API senden (eigene App, nur auf Knopfdruck) ---------- */
 const GMAIL = window.bzPlattform?.gmail || null;
@@ -4039,8 +4045,7 @@ document.addEventListener('click', async e => {
   const rbz = t.closest('[data-rbereich]'); if (rbz) { state.radarBereich = rbz.dataset.rbereich; state.radarZeig = RADAR_SEITE; renderRadar(); return; }
   const la = t.closest('[data-lart]'); if (la) { state.listArt = la.dataset.lart; renderListe(); return; }
   const bwb = t.closest('[data-bw]'); if (bwb) { location.hash = '#' + bwb.dataset.bw; return; }
-  const dsp = t.closest('[data-dspalte]'); if (dsp) { const k = dsp.dataset.dspalte; dashFilter.aus.has(k) ? dashFilter.aus.delete(k) : dashFilter.aus.add(k); dashMerken(); return renderUebersicht(); }
-  const dwg = t.closest('[data-dweg]'); if (dwg) { dashFilter.weg = dashFilter.weg === dwg.dataset.dweg ? '' : dwg.dataset.dweg; dashMerken(); return renderUebersicht(); }
+  const dwg = t.closest('[data-dweg]'); if (dwg) { dashWeg = dashWeg === dwg.dataset.dweg ? '' : dwg.dataset.dweg; dashMerken(); $$('[data-dweg]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.dweg === dashWeg))); const d = $('#dash'); if (d) d.innerHTML = dashBereicheHTML(); return; }
   const ra = t.closest('[data-rans]'); if (ra) { state.radarAnsicht = ra.dataset.rans; state.karteAuswahl = []; try { history.replaceState(history.state, '', `${location.pathname}${location.search}#${ra.dataset.rans === 'karte' ? 'karte' : 'radar'}`); } catch {} reiterMarkieren(); renderRadar(); return; }
   const fw = t.closest('[data-fwahl]'); if (fw) { const it = fw.closest('[data-fk]'); if (it) firmaWahl(it.dataset.fk, fw.dataset.fwahl); return; }
   const rfk = t.closest('[data-act="radar-firma"]'); if (rfk) { state.radarFirma = rfk.dataset.fk; state.radarAnsicht = 'liste'; state.radarFilter = 'gut'; state.radarBereich = ''; state.radarZeig = RADAR_SEITE; const g = radarGefiltert(); if (!g.rows.length) state.radarFilter = 'weitere'; renderRadar(); $('#v-radar')?.scrollIntoView({block: 'start'}); return; }
@@ -4098,7 +4103,6 @@ document.addEventListener('click', async e => {
     if (act === 'ki-tab' && state.openId) { state.drawerTab = 'ki'; renderDrawerHead(); renderDrawerBody(true); return; }
     if (act === 'mark-beworben' && state.openId) { setStatus(state.openId, 'beworben'); renderDrawerBody(); return; }
     if (act === 'pr-frei' || act === 'pr-neu' || act === 'pr-vorversion') return pruefAktion(act);
-    if (act === 'bereit-alle') { state.zeigBereitAlle = !state.zeigBereitAlle; renderSoon(); return; }
     if (act === 'ordner-waehlen') return ordnerWaehlen();
     if (act === 'drive-verbinden') return driveVerbinden();
     if (act === 'zurueckholen') { const rid = t.closest('[data-rid]')?.dataset.rid; if (rid) zurueckholen(rid); return; }

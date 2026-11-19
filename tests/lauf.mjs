@@ -123,9 +123,10 @@ test('eine-je-firma', async () => {
     aussortiert: { art: 'firma', grund: 'Eine Bewerbung je Firma: zuerst die andere Stelle', datum: '2026-11-18', von: 'Claude' } }, null, 1) + '\n'));
   // und eine abgeschickte Bewerbung bei der Firma von test-mail
   gh.dateien.set('apps/test-aktiv.json', Buffer.from(JSON.stringify({ ...leer, firma: 'Klima Beispiel GmbH & Co. KG', position: 'Andere Stelle', verworfen: false, aussortiert: undefined, status: 'beworben', beworbenAm: '2026-11-10' }, null, 1) + '\n'));
-  await seite.waitForSelector('#v-uebersicht .board', { timeout: 20000 });
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
   await seite.evaluate(() => window.bzPlattform.abgleichen());
-  await seite.waitForFunction(() => !document.querySelector('#v-uebersicht .col-body[data-drop="gemerkt"] [data-id="test-mail"]'), null, { timeout: 10000 });
+  await seite.waitForSelector('#dash', { timeout: 20000 });
+  await seite.waitForFunction(() => !document.querySelector('#dash [data-bereich="bereit"] [data-open="test-mail"]'), null, { timeout: 10000 });
   assert.equal(await seite.locator('#mailFeld [data-act="sammel-mail"]').count(), 0, 'nichts senden, wo schon eine Bewerbung läuft');
   await seite.goto('http://app.test/Bewerbungszentrale/#liste');
   await seite.waitForSelector('#aussortiert', { timeout: 20000 });
@@ -147,8 +148,9 @@ test('gehalt', async () => {
   const a = json(gh, 'apps/test-portal.json');
   gh.dateien.set('apps/test-portal.json', Buffer.from(JSON.stringify({ ...a, gehaltWunsch: 64000, gehaltBegruendung: 'Erfundene Begründung aus Vergleichsanzeigen.', gehaltAuto: true,
     anschreiben: a.anschreiben.replace('Mit freundlichen', 'Meine Gehaltsvorstellung liegt bei 61.000 Euro brutto im Jahr.\n\nMit freundlichen') }, null, 1) + '\n'));
-  await seite.waitForSelector('#v-uebersicht .board, #v-liste', { timeout: 20000 });
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
   await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.waitForSelector('#dash, #v-liste', { timeout: 20000 });
   await zuAkte(seite, 'test-portal');
   const h = seite.locator('#gwunschGrund');
   await seite.waitForFunction(() => /Erfundene Begründung/.test(document.querySelector('#gwunschGrund')?.textContent || ''), null, { timeout: 10000 });
@@ -169,8 +171,9 @@ test('anfahrt', async () => {
   const a = json(gh, 'apps/test-portal.json');
   gh.dateien.set('apps/test-portal.json', Buffer.from(JSON.stringify({ ...a, anfahrt: { min: 40, art: 'oepnv', weg: 'Bus 1 bis Testplatz, dann 3 min zu Fuß', oepnv: 40, rad: 55, auto: 45,
     tage: 3, tageGrund: 'laut Anzeige: 2 Tage Homeoffice', stunden: 4, genau: true } }, null, 1) + '\n'));
-  await seite.waitForSelector('#v-uebersicht .board, #v-liste', { timeout: 20000 });
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
   await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.waitForSelector('#dash, #v-liste', { timeout: 20000 });
   await seite.goto('http://app.test/Bewerbungszentrale/#liste');
   await seite.waitForFunction(() => /4 Std\. Fahrt pro Woche/.test(document.querySelector('#v-liste [data-open="test-portal"]')?.textContent || ''), null, { timeout: 10000 });
   const punkte = () => seite.evaluate(() => parseInt(document.querySelector('#v-liste [data-open="test-portal"] .radar-score')?.textContent || '', 10));
@@ -199,8 +202,9 @@ test('anfahrt-geschaetzt', async () => {
   const a = json(gh, 'apps/test-portal.json');
   gh.dateien.set('apps/test-portal.json', Buffer.from(JSON.stringify({ ...a, anfahrt: { min: 50, art: 'oepnv', weg: 'Bus 2 bis Teststraße', oepnv: 50, tage: 4,
     tageGrund: 'keine Angabe zum Homeoffice (angenommen 4 Bürotage)', geschaetzt: true, stunden: 6.5, genau: true } }, null, 1) + '\n'));
-  await seite.waitForSelector('#v-uebersicht .board, #v-liste', { timeout: 20000 });
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
   await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.waitForSelector('#dash, #v-liste', { timeout: 20000 });
   await seite.goto('http://app.test/Bewerbungszentrale/#liste');
   await seite.waitForFunction(() => /≈ 6,5 Std\. Fahrt pro Woche/.test(document.querySelector('#v-liste [data-open="test-portal"]')?.textContent || ''), null, { timeout: 10000 });
   await zuAkte(seite, 'test-portal');
@@ -231,8 +235,9 @@ test('laden-viel', async () => {
   const { seite, gh, fehler } = await appStarten();
   const vorlage = json(gh, 'apps/test-portal.json');
   for (let i = 0; i < 130; i++) gh.dateien.set(`apps/test-viel-${i}.json`, Buffer.from(JSON.stringify({ ...vorlage, firma: `Viel Beispiel ${i} GmbH`, position: `Stelle ${i}` }, null, 1) + '\n'));
-  await seite.waitForSelector('#v-uebersicht .board', { timeout: 20000 });
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
   await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.waitForSelector('#dash', { timeout: 20000 });
   await seite.goto('http://app.test/Bewerbungszentrale/#liste');
   await seite.waitForFunction(() => document.querySelectorAll('[data-open^="test-viel-"]').length >= 130, null, { timeout: 20000 });
   assert.ok(gh.log.filter((x) => x === 'POST /graphql').length >= 4, '130 Akten in mindestens 4 Paketen');
@@ -398,10 +403,10 @@ const mimeTeile = (mime) => {
 
 test('gegenlesen', async () => {
   const { seite, gh, fehler } = await appStarten();
-  await seite.waitForSelector('#v-uebersicht .board', { timeout: 20000 });
-  assert.match(await seite.textContent('#v-uebersicht [data-dspalte="bereit"]'), /Vorbereitet\s*1/);
+  await seite.waitForSelector('#dash', { timeout: 20000 });
+  assert.match(await seite.textContent('#dash [data-bereich="bereit"] summary'), /Vorbereitet\s*1/);
   assert.match(await seite.textContent('#mailFeld'), /1 per Mail schicken/);
-  assert.equal(await seite.locator('#v-uebersicht .col-body[data-drop="gemerkt"] [data-id="test-mail"]').count(), 1, 'freigegebene Mail-Bewerbung steht in der ersten Spalte');
+  assert.equal(await seite.locator('#dash [data-bereich="bereit"] [data-open="test-mail"]').count(), 1, 'freigegebene Mail-Bewerbung steht unter Vorbereitet');
   assert.equal(await seite.locator('#mailFeld [data-act="sammel-mail"]').count(), 1);
   await zuAkte(seite, 'test-mail');
   assert.equal(await seite.getAttribute('#pruefung', 'class'), 'pruef frei', 'App erkennt dieselbe Fassung wie der Morgenlauf');
@@ -551,7 +556,7 @@ test('ordner', async () => {
     window.showDirectoryPicker = async () => w;
   });
   await seite.reload();
-  await seite.waitForSelector('#v-uebersicht .board', { timeout: 20000 });
+  await seite.waitForSelector('#dash', { timeout: 20000 });
   await seite.goto('http://app.test/Bewerbungszentrale/#profil');
   await seite.waitForSelector('#ordner-zeile [data-act="ordner-waehlen"]', { timeout: 20000 });
   assert.equal(await seite.locator('[data-act="ordner-export"]').count(), 0, 'kein Export-Knopf');
@@ -607,7 +612,7 @@ test('drive', async () => {
   gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...a, kontakt: { ...a.kontakt, email: '' } }, null, 1) + '\n'));
   await seite.goto(`http://app.test/Bewerbungszentrale/#google=${GOOGLE_ID}`);
   await seite.reload();
-  await seite.waitForSelector('#v-uebersicht .board', { timeout: 20000 });
+  await seite.waitForSelector('#dash', { timeout: 20000 });
   await seite.goto('http://app.test/Bewerbungszentrale/#profil');
   await seite.waitForSelector('#ordner-zeile [data-act="drive-verbinden"]', { timeout: 20000 });
   assert.match(await seite.textContent('#ordner-zeile'), /Drive einmal verbinden/);
@@ -643,8 +648,9 @@ test('schaetzung', async () => {
   const leer = json(gh, 'apps/test-raus.json');
   gh.dateien.set('apps/test-direkt.json', Buffer.from(JSON.stringify({ firma: 'Beratung Muster GmbH', position: 'Controller Einkauf und ERP', status: 'rueckmeldung', interesse: 3, verworfen: false,
     erstellt: '2026-11-19T12:00:00Z', verlauf: [], aufgaben: [], kontakt: { name: '', rolle: '', email: '', telefon: '' }, stellenText: leer.stellenText || '' }, null, 1) + '\n'));
-  await seite.waitForSelector('#v-uebersicht .board, #v-liste', { timeout: 20000 });
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
   await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.waitForSelector('#dash, #v-liste', { timeout: 20000 });
   await seite.goto('http://app.test/Bewerbungszentrale/#liste');
   await seite.waitForSelector('#v-liste [data-open="test-direkt"] .radar-score', { timeout: 10000 });
   const text = await seite.textContent('#v-liste [data-open="test-direkt"] .radar-score');
@@ -672,8 +678,9 @@ test('eingang', async () => {
   const { seite, gh, fehler } = await appStarten({ breite: 1280 });
   const a = json(gh, 'apps/test-mail.json');
   gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...a, status: 'beworben', beworbenAm: '2026-11-18', eingangAm: '2026-11-18', maxStufe: 1 }, null, 1) + '\n'));
-  await seite.waitForSelector('#v-uebersicht .board, #v-liste', { timeout: 20000 });
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
   await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.waitForSelector('#dash, #v-liste', { timeout: 20000 });
   await seite.goto('http://app.test/Bewerbungszentrale/#pipeline');
   await seite.waitForSelector('#v-pipeline .card[data-id="test-mail"]', { timeout: 10000 });
   assert.match(await seite.textContent('#v-pipeline .card[data-id="test-mail"]'), /Eingang bestätigt/);
@@ -692,16 +699,23 @@ test('dashboard', async () => {
   await seite.evaluate(() => window.bzPlattform.abgleichen());
   await seite.goto('http://app.test/Bewerbungszentrale/#uebersicht');
   assert.deepEqual(await seite.$$eval('.tabbar a', (as) => as.map((x) => x.textContent.trim())), ['Dashboard', 'Karte', 'Profil']);
-  await seite.waitForSelector('#v-uebersicht .board', { timeout: 10000 });
+  await seite.waitForSelector('#dash', { timeout: 10000 });
   assert.doesNotMatch(await seite.textContent('#v-uebersicht'), /Radar/, 'kein Radar mehr im Dashboard');
-  await seite.waitForSelector('#v-uebersicht [data-dspalte="beworben"]', { timeout: 10000 });
-  assert.match(await seite.textContent('#v-uebersicht [data-dspalte="beworben"]'), /Beworben\s*1/);
-  assert.equal(await seite.locator('#v-uebersicht .board [data-id="test-mail"]').count(), 1, 'Karte steht direkt im Dashboard');
-  assert.equal(await seite.locator('#v-uebersicht .col-tab', { hasText: 'In Vorbereitung' }).count(), 0, 'In Vorbereitung ist am Anfang ausgeblendet');
-  await seite.click('#v-uebersicht [data-dspalte="beworben"]');
-  await seite.waitForFunction(() => !document.querySelector('#v-uebersicht .board [data-id="test-mail"]'), null, { timeout: 5000 });
-  await seite.click('#v-uebersicht [data-dspalte="beworben"]');
-  await seite.waitForSelector('#v-uebersicht .board [data-id="test-mail"]', { timeout: 5000 });
+  await seite.waitForSelector('#dash [data-bereich="beworben"]', { timeout: 10000 });
+  assert.match(await seite.textContent('#dash [data-bereich="beworben"] summary'), /Beworben\s*1/);
+  assert.equal(await seite.getAttribute('#dash [data-bereich="beworben"]', 'open'), null, 'Beworben ist zu, Vorbereitet offen');
+  assert.notEqual(await seite.getAttribute('#dash [data-bereich="bereit"]', 'open'), null);
+  await seite.click('#dash [data-bereich="beworben"] summary');
+  await seite.waitForSelector('#dash [data-bereich="beworben"] [data-open="test-mail"]', { state: 'visible', timeout: 5000 });
+  await seite.fill('#dashQ', 'Hafen Muster');
+  await seite.waitForFunction(() => !document.querySelector('#dash [data-open="test-mail"]') && document.querySelector('#dash [data-open="test-portal"]'), null, { timeout: 5000 });
+  assert.equal(await seite.isVisible('#dash [data-open="test-portal"]'), true, 'Suche klappt die Bereiche mit Treffern auf');
+  assert.doesNotMatch(await seite.textContent('#v-uebersicht'), /Jetzt dran|Brauchen deinen Blick/);
+  gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...json(gh, 'apps/test-mail.json'), aufgaben: [{ id: 'rr1', text: 'Testfirma zurückrufen (Fr bis 14 Uhr)', faellig: '2026-11-20', erledigt: false }] }, null, 1) + '\n'));
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.fill('#dashQ', '');
+  await seite.waitForSelector('#dash [data-bereich="antwort"] [data-open="test-mail"]', { timeout: 10000 });
+  assert.match(await seite.textContent('#dash [data-bereich="antwort"]'), /Warten auf deine Antwort\s*1.*zurückrufen/s);
   assert.equal(await seite.locator('#mailFeld').count(), 0, 'keine Mail-Bewerbung bereit');
   await seite.click('.tabbar a[data-tab="karte"]');
   await seite.waitForFunction(() => !document.querySelector('#v-karte').hidden, null, { timeout: 10000 });
