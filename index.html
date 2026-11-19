@@ -1071,7 +1071,7 @@ function dashboardBoard() {
 /** Eine Firma wartet auf dich: offene Aufgabe zum Antworten oder Zurückrufen, oder eine vorbereitete Antwort, die noch nicht raus ist. */
 function wartetAufDich(a) {
   if (['absage', 'zurueckgezogen', 'zusage'].includes(a.status)) return false;
-  return (a.aufgaben || []).some(k => !k.erledigt && /antworten|zurückrufen|rückruf/i.test(k.text || ''));
+  return (a.aufgaben || []).some(k => !k.erledigt && /(?:^|\s)(?:antworten|zurückrufen|rückruf)\b/i.test(k.text || ''));
 }
 function dashBereicheHTML() {
   const alle = list().filter(a => !a.beispiel), belegt = firmenMitVersand(), q = (state.dashSuche || '').trim();
@@ -1081,7 +1081,7 @@ function dashBereicheHTML() {
   const passt = a => (dashWeg === 'portal' ? istPortal(a) : dashWeg === 'mail' ? !istPortal(a) : true) && (!q || matches(a, q));
   const zeile = (a, k) => { const w = wertungVon(a), an = a.anfahrt || {}, nt = naechsterTermin(a);
     const d = [a.ort, an.min ? `${an.min} min` : '', a.status === 'gemerkt' ? (istPortal(a) ? 'über Portal' : 'per Mail') : '', a.fristBis && a.status === 'gemerkt' ? `Frist ${fmtDs(a.fristBis)}` : '', nt ? `${WT[nt.d.getDay()]} ${fmtDs(isoDate(nt.d))}, ${fmtT(nt.d)}` : '', a.eingangAm && a.status === 'beworben' ? 'Eingang bestätigt' : '', a.status !== 'gemerkt' && a.beworbenAm ? `beworben ${relTage(a.beworbenAm)}` : ''].filter(Boolean).join(' · ');
-    const auf = k === 'antwort' ? (a.aufgaben || []).find(x => !x.erledigt && /antworten|zurückrufen|rückruf/i.test(x.text || '')) : null;
+    const auf = k === 'antwort' ? (a.aufgaben || []).find(x => !x.erledigt && /(?:^|\s)(?:antworten|zurückrufen|rückruf)\b/i.test(x.text || '')) : null;
     return `<li data-open="${a.id}" tabindex="0" style="--tone:${w.wert != null ? ringColor(w.wert) : 'var(--muted)'}"><span class="ico" style="font-family:var(--f-mono);font-size:12px;font-weight:600">${w.wert != null ? (w.geschaetzt ? '≈' : '') + w.wert : '–'}</span><span style="min-width:0"><div class="t">${esc(a.position || 'Position fehlt')} · ${esc(a.firma || 'Ohne Firma')}</div><div class="d">${esc(auf ? auf.text.replace(/\s*\((?:Antwort liegt in der App bereit)\)/, '') : d)}</div></span></li>`; };
   const html = DASH_BEREICHE.map(([k, label]) => {
     const alleDrin = alle.filter(gehoert[k] || (a => a.status === k));
