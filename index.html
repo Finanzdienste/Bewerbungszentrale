@@ -1812,6 +1812,19 @@ function wohnortSetzen(lat, lon) { // speichert nur im Profil (Daten-Repo), nich
   if (karte) { try { karte.remove(); } catch {} karte = null; karteBereit = false; } // die große Karte beim nächsten Öffnen mit dem neuen Punkt
 }
 window.bzWohnortSetzen = wohnortSetzen;
+function wohnortGps() { // Standort des Geräts, nur ins Profil (Daten-Repo)
+  const st = $('#wohnortSt');
+  if (!navigator.geolocation) { if (st) st.textContent = 'Dieses Gerät kann seinen Standort nicht bestimmen. Tipp stattdessen auf der Karte auf dein Haus.'; return; }
+  if (st) st.textContent = 'Standort wird bestimmt …';
+  navigator.geolocation.getCurrentPosition(pos => {
+    const {latitude, longitude, accuracy} = pos.coords;
+    wohnortSetzen(latitude, longitude);
+    if (wohnortMap) { try { wohnortMap.jumpTo({center: [longitude, latitude], zoom: 16}); } catch {} }
+    if (st) st.textContent = `Gespeichert, genau auf etwa ${Math.round(accuracy || 0)} m.${accuracy > 100 ? ' Das ist ungenau, prüf den Punkt auf der Karte und tipp notfalls auf dein Haus.' : ''} Die Fahrzeiten rechnet Claude mit dem neuen Wohnort neu, sag dazu in der Sitzung Bescheid.`;
+  }, err => {
+    if (st) st.textContent = err?.code === 1 ? 'Der Zugriff auf den Standort wurde nicht erlaubt. Erlaube ihn für diese Seite oder tipp auf der Karte auf dein Haus.' : 'Der Standort ließ sich gerade nicht bestimmen. Versuch es draußen oder am Fenster noch einmal.';
+  }, {enableHighAccuracy: true, timeout: 20000, maximumAge: 0});
+}
 async function wohnortKarte() {
   const slot = $('#wohnortSlot'); if (!slot) return;
   if (wohnortMap) { try { wohnortMap.remove(); } catch {} wohnortMap = null; }
@@ -1836,7 +1849,8 @@ function renderProfil(force) {
   const txt = (id, l, ph = '', help = '') => `<label class="fld" for="p-${id}"><span>${l}${help ? ` <span class="help">${help}</span>` : ''}</span><input class="in" id="p-${id}" data-p="${id}" value="${esc(p[id])}" placeholder="${esc(ph)}"></label>`;
   el.innerHTML = `<div class="view-head"><div><h1>Profil &amp; Daten</h1><p>Je mehr hier steht, desto besser passen Anschreiben, Analysen und Gesprächsvorbereitung. Alles wird automatisch gespeichert.</p></div></div>
   <section class="panel" id="wohnortPanel"><div class="panel-head"><h2>Wohnort</h2><span class="sub">für Fahrzeiten und die Karte, bleibt privat in deinem Daten-Repo</span></div>
-    <p class="desc" style="margin:0 0 8px">Tippe auf der Karte genau auf dein Haus. Der rote Punkt ist der gespeicherte Wohnort.</p>
+    <p class="desc" style="margin:0 0 8px">Am einfachsten zu Hause auf „Per GPS bestimmen“ tippen. Oder auf der Karte genau auf dein Haus tippen. Der rote Punkt ist der gespeicherte Wohnort.</p>
+    <div class="ki-row" style="margin:0 0 10px"><button class="btn sm primary" type="button" data-act="wohnort-gps">Per GPS bestimmen</button></div>
     <div id="wohnortSlot" class="karte" style="height:320px"></div>
     <span class="ki-status" id="wohnortSt" style="margin-top:8px">${p.heim ? `Gespeichert: ${Number(p.heim.lat).toFixed(4)}, ${Number(p.heim.lon).toFixed(4)}${p.heimStand ? `, geändert am ${fmtD(p.heimStand)}` : ''}` : 'Noch kein Wohnort gespeichert.'}</span>
   </section>
@@ -4105,6 +4119,7 @@ document.addEventListener('click', async e => {
     if (act === 'mark-beworben' && state.openId) { setStatus(state.openId, 'beworben'); renderDrawerBody(); return; }
     if (act === 'pr-frei' || act === 'pr-neu' || act === 'pr-vorversion') return pruefAktion(act);
     if (act === 'ordner-waehlen') return ordnerWaehlen();
+    if (act === 'wohnort-gps') return wohnortGps();
     if (act === 'drive-verbinden') return driveVerbinden();
     if (act === 'zurueckholen') { const rid = t.closest('[data-rid]')?.dataset.rid; if (rid) zurueckholen(rid); return; }
     if (act === 'sammel-mail') return sammelMailModal();

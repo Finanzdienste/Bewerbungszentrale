@@ -737,6 +737,11 @@ test('wohnort', async () => {
   await seite.evaluate(() => window.bzWohnortSetzen(53.58123, 10.08456));
   assert.ok(await bis(() => { const p = JSON.parse(gh.dateien.get('profil/main.json').toString('utf8')); return p.heim && p.heim.lat === 53.5812 && p.heim.lon === 10.0846; }, 15000), 'Wohnort gespeichert, auf 4 Stellen gerundet');
   assert.match(await seite.textContent('#wohnortSt'), /Gespeichert/);
+  // http://app.test ist kein sicherer Kontext, deshalb Standort im Browser nachbauen
+  await seite.evaluate(() => Object.defineProperty(navigator, 'geolocation', { configurable: true, value: { getCurrentPosition: (ok) => setTimeout(() => ok({ coords: { latitude: 53.57001, longitude: 10.09002, accuracy: 12 } }), 50) } }));
+  await seite.click('[data-act="wohnort-gps"]');
+  assert.ok(await bis(() => { const p = JSON.parse(gh.dateien.get('profil/main.json').toString('utf8')); return p.heim && p.heim.lat === 53.57 && p.heim.lon === 10.09; }, 15000), 'Wohnort per GPS gespeichert');
+  assert.match(await seite.textContent('#wohnortSt'), /genau auf etwa 12 m/);
   assert.deepEqual(fehler.filter((f) => !/WebGL|webgl/.test(f)), []);
 });
 
