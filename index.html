@@ -1993,8 +1993,8 @@ function pruefAktion(act) {
   saveApp(id); renderDrawerBody();
 }
 /* ---------- Portal-Mappen als Ordner auf dem PC (Edge/Chrome: File System Access) ----------
-   Je fertiger Portal-Bewerbung ein Unterordner „Score Firma - Stelle“ mit Anschreiben, Lebenslauf, ganzer Mappe und Portal-Infos.
-   Die Zeugnisse liegen einmal im Hauptordner. Ordner, die nicht mehr dran sind (beworben, aussortiert), räumt der nächste Export weg,
+   Je fertiger Portal-Bewerbung ein Unterordner „Score Firma - Stelle“ mit Anschreiben, Lebenslauf, Zeugnissen, ganzer Mappe und Portal-Infos,
+   alles in jedem Ordner, damit beim Hochladen ein Ordner reicht. Ordner, die nicht mehr dran sind (beworben, aussortiert), räumt der nächste Export weg,
    aber nur solche, die die App selbst angelegt hat (Liste in .bewerbungszentrale.json). */
 const istPortal = a => !(a.bewerbungsweg === 'email' && (a.kontakt?.email || '').trim());
 function ordnerName(a, sc) {
@@ -2065,7 +2065,7 @@ async function ordnerSync() {
   try {
     const belegt = firmenMitVersand(), profilStand = sha1Hex(pyJson(P())).slice(0, 12);
     const liste = list().filter(a => istBereit(a) && istPortal(a) && !belegt.has(firmaGruppe(a.firma))).map(a => ({a, sc: wertungVon(a).wert ?? 0})).sort((x, y) => y.sc - x.sc)
-      .map(x => { const info = portalInfos(x.a); return {...x, name: ordnerName(x.a, x.sc), info, stand: `${fassungVon(x.a)}|${profilStand}#${sha1Hex(info).slice(0, 10)}`}; });
+      .map(x => { const info = portalInfos(x.a); return {...x, name: ordnerName(x.a, x.sc), info, stand: `m2|${fassungVon(x.a)}|${profilStand}#${sha1Hex(info).slice(0, 10)}`}; }); // m2: Zeugnisse in jedem Ordner
     const sig = profilStand + '\n' + liste.map(x => x.name + '\t' + x.stand).join('\n');
     if (sig === ORDNER.sig) return; // nichts geändert: Laufwerk nicht anfassen (das erste Mal nach dem Laden prüft immer)
     const zeig = t => { ORDNER.info = t; const z = $('#ordner-zeile'); if (z) z.outerHTML = ordnerZeile(list().filter(istBereit)); };
@@ -2073,7 +2073,8 @@ async function ordnerSync() {
     let alt = {}; try { alt = JSON.parse(await lies(dir, '.bewerbungszentrale.json') || '{}'); } catch { alt = {}; }
     const altO = alt.ordner || {}, neu = {}, namen = new Set(liste.map(x => x.name));
     for (const n of Object.keys(altO)) if (!namen.has(n)) { try { await dir.removeEntry(n, {recursive: true}); weg++; } catch { /* schon weg oder gerade offen */ } }
-    if (liste.length && alt.profil !== profilStand) { zeig('Zeugnisse werden abgelegt …'); const z = await mappeBauen(liste[0].a, {teil: 'anlagen'}); if (alt.zeugnisse && alt.zeugnisse !== z.filename) { try { await dir.removeEntry(alt.zeugnisse); } catch { /* weg */ } } await schreib(dir, z.filename, z.bytes); alt.zeugnisse = z.filename; }
+    if (alt.zeugnisse) { try { await dir.removeEntry(alt.zeugnisse); } catch { /* weg */ } } // früher einmal im Hauptordner, jetzt in jedem Stellen-Ordner
+    let zeugnisse = null; const zg = async () => zeugnisse || (zeugnisse = await mappeBauen(liste[0].a, {teil: 'anlagen'})); // einmal bauen, überall ablegen
     for (const [i, {a, name, info, stand}] of liste.entries()) {
       if (ORDNER.dir !== dir) return;
       const [pdfAlt, infoAlt] = String(altO[name] || '').split('#'), [pdfNeu, infoNeu] = stand.split('#');
@@ -2082,11 +2083,12 @@ async function ordnerSync() {
         zeig(`wird gefüllt: ${i + 1} von ${liste.length}, gerade ${a.firma || ''} …`);
         ordner = ordner || await dir.getDirectoryHandle(name, {create: true});
         for (const teil of ['brief', 'cv', 'alles']) { const r = await mappeBauen(a, {teil}); await schreib(ordner, r.filename, r.bytes); await pause(); }
+        const z = await zg(); if (z.seiten) await schreib(ordner, z.filename, z.bytes);
         await schreib(ordner, 'Portal-Infos.txt', enc(info)); neuGebaut++;
       } else if (infoAlt !== infoNeu) await schreib(ordner, 'Portal-Infos.txt', enc(info));
       neu[name] = stand;
     }
-    const manifest = {hinweis: 'Von der Bewerbungszentrale angelegt. Ordner aus dieser Liste räumt sie selbst weg, wenn die Stelle erledigt ist.', profil: profilStand, zeugnisse: alt.zeugnisse || '', ordner: neu};
+    const manifest = {hinweis: 'Von der Bewerbungszentrale angelegt. Ordner aus dieser Liste räumt sie selbst weg, wenn die Stelle erledigt ist.', profil: profilStand, ordner: neu};
     if (JSON.stringify({...alt, stand: undefined}) !== JSON.stringify(manifest)) await schreib(dir, '.bewerbungszentrale.json', enc(JSON.stringify({...manifest, stand: new Date().toISOString()}, null, 1)));
     ORDNER.sig = sig;
     ORDNER.info = `${liste.length} ${liste.length === 1 ? 'Stelle' : 'Stellen'}, Stand ${new Date().toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'})}`;

@@ -546,7 +546,8 @@ test('ordner', async () => {
     const w = ordner('Bewerbungen');
     w.kinder.set('99 Alte Firma - Erledigt', ordner('99 Alte Firma - Erledigt'));
     w.kinder.set('Eigene Notizen', ordner('Eigene Notizen'));
-    w.kinder.set('.bewerbungszentrale.json', datei('.bewerbungszentrale.json', JSON.stringify({ ordner: { '99 Alte Firma - Erledigt': 'x' } })));
+    w.kinder.set('Zeugnisse_Alt.pdf', datei('Zeugnisse_Alt.pdf', '%PDF alt'));
+    w.kinder.set('.bewerbungszentrale.json', datei('.bewerbungszentrale.json', JSON.stringify({ zeugnisse: 'Zeugnisse_Alt.pdf', ordner: { '99 Alte Firma - Erledigt': 'x' } })));
     window.__wurzel = w;
     window.showDirectoryPicker = async () => w;
   });
@@ -566,8 +567,8 @@ test('ordner', async () => {
   assert.match(stelle, /^\d{2} Klima Beispiel GmbH - Energiecontroller$/, 'Score davor, ohne (m/w/d)');
   const inhalt = stand[stelle];
   const pdfs = Object.keys(inhalt).filter((n) => n.endsWith('.pdf')).sort();
-  assert.equal(pdfs.length, 3, 'Anschreiben, Lebenslauf, Mappe: ' + pdfs.join(', '));
-  assert.ok(pdfs.some((n) => n.startsWith('Anschreiben_')) && pdfs.some((n) => n.startsWith('Lebenslauf_')) && pdfs.some((n) => n.startsWith('Bewerbung_')));
+  assert.equal(pdfs.length, 4, 'Anschreiben, Lebenslauf, Zeugnisse, Mappe: ' + pdfs.join(', '));
+  assert.ok(['Anschreiben_', 'Lebenslauf_', 'Zeugnisse_', 'Bewerbung_'].every((v) => pdfs.some((n) => n.startsWith(v))), 'alles in jedem Ordner');
   for (const n of pdfs) assert.ok(inhalt[n].startsWith('%PDF'), n + ' ist ein PDF');
   const info = inhalt['Portal-Infos.txt'];
   assert.match(info, /Link zur Anzeige: https:\/\/example\.org\/stelle\/1\r\n/);
@@ -575,7 +576,7 @@ test('ordner', async () => {
   assert.match(info, /Gehaltsvorstellung: /);
   assert.match(info, /Sehr geehrte Damen und Herren,/, 'Anschreiben zum Einfügen, ohne Betreffzeile');
   assert.doesNotMatch(info, /Bewerbung als Energiecontroller \(m\/w\/d\)\r\n\r\nSehr geehrte/);
-  assert.ok(namen.some((n) => /^Zeugnisse_.*\.pdf$/.test(n)), 'Zeugnisse einmal im Hauptordner');
+  assert.ok(!namen.some((n) => /^Zeugnisse_.*\.pdf$/.test(n)), 'keine Zeugnisse mehr im Hauptordner, auch die alte Kopie ist weg');
   assert.ok(!namen.includes('99 Alte Firma - Erledigt'), 'erledigter Ordner aus der eigenen Liste weg');
   assert.ok(namen.includes('Eigene Notizen'), 'fremde Ordner bleiben');
   assert.ok(!namen.some((n) => /Hafen Muster/.test(n)), 'nur freigegebene Bewerbungen');
