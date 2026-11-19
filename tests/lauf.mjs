@@ -57,7 +57,7 @@ test('ohne-graphql', async () => {
 test('schreiben', async () => {
   const { seite, gh, fehler } = await appStarten();
   await zuAkte(seite, 'test-portal');
-  await seite.click('[data-act="mark-beworben"]');
+  await seite.evaluate(() => window.bzStatusSetzen('test-portal', 'beworben')); // in der App passiert das beim Senden
   await seite.waitForFunction(() => window.bzPlattform.offen() === 0 && true, null, { timeout: 2000 }).catch(() => {});
   for (let i = 0; i < 40 && !gh.log.some((x) => x.startsWith('PUT') && x.includes('apps/test-portal.json')); i++) await warte(250);
   const roh = gh.dateien.get('apps/test-portal.json').toString('utf8');
@@ -91,7 +91,7 @@ test('nachholen', async () => {
   const { seite, gh, fehler } = await appStarten();
   gh.schalter.schreibenHaengt = true;
   await zuAkte(seite, 'test-portal');
-  await seite.click('[data-act="mark-beworben"]');
+  await seite.evaluate(() => window.bzStatusSetzen('test-portal', 'beworben'));
   const offen = () => seite.evaluate(() => new Promise((ok) => { const r = indexedDB.open('bewerbungszentrale', 1); r.onsuccess = () => { const g = r.result.transaction('meta').objectStore('meta').get('offen:apps/test-portal.json'); g.onsuccess = () => ok(g.result || null); g.onerror = () => ok(null); }; r.onerror = () => ok(null); }));
   let o = null;
   for (let i = 0; i < 40 && !(o = await offen()); i++) await warte(250);
@@ -155,14 +155,9 @@ test('gehalt', async () => {
   const h = seite.locator('#gwunschGrund');
   await seite.waitForFunction(() => /Erfundene Begründung/.test(document.querySelector('#gwunschGrund')?.textContent || ''), null, { timeout: 10000 });
   assert.match(await h.textContent(), /Vorschlag des Morgenlaufs: Erfundene Begründung/);
-  assert.match(await h.textContent(), /steht noch 61\.000/, 'warnt, wenn der Brief eine andere Zahl nennt');
-  await seite.fill('#d-gwunsch', '61000');
-  for (let i = 0; i < 40 && !json(gh, 'apps/test-portal.json').gehaltPerson; i++) await warte(250);
-  const d = json(gh, 'apps/test-portal.json');
-  assert.equal(d.gehaltWunsch, 61000);
-  assert.equal(d.gehaltPerson, true, 'eigene Forderung bleibt vor dem Morgenlauf geschützt');
-  assert.match(await h.textContent(), /Deine eigene Forderung/);
-  assert.doesNotMatch(await h.textContent(), /steht noch/);
+  assert.match(await h.textContent(), /steht noch 61\.000.*sag Claude Bescheid/, 'warnt, wenn der Brief eine andere Zahl nennt');
+  assert.match(await seite.textContent('#gwunsch'), /Forderung: 64\.000/);
+  assert.equal(await seite.locator('#d-gwunsch').count(), 0, 'nur Anzeige, kein Eingabefeld');
   assert.deepEqual(fehler, []);
 });
 
@@ -183,14 +178,13 @@ test('anfahrt', async () => {
   assert.match(await seite.textContent('#fahrtText'), /40 min einfach mit ÖPNV und Rad: Bus 1 bis Testplatz/);
   assert.match(await seite.textContent('#fahrtText'), /Auto 45 min/);
   assert.match(await seite.textContent('#fahrtStunden'), /2 Tage Homeoffice\. Rund 4 Stunden pro Woche.*3 Punkte/);
-  await seite.fill('#d-btage', '5');
-  for (let i = 0; i < 40 && json(gh, 'apps/test-portal.json').buerotage !== 5; i++) await warte(250);
-  assert.equal(json(gh, 'apps/test-portal.json').buerotage, 5, 'eigene Bürotage werden gespeichert');
-  assert.match(await seite.textContent('#fahrtStunden'), /Deine Angabe\. Rund 6,5 Stunden pro Woche.*8 Punkte/);
-  await seite.fill('#d-btage', '0');
-  await seite.waitForFunction(() => /Kein Pendeln/.test(document.querySelector('#fahrtStunden')?.textContent || ''), null, { timeout: 5000 });
-  await seite.fill('#d-btage', '5');
-  for (let i = 0; i < 40 && json(gh, 'apps/test-portal.json').buerotage !== 5; i++) await warte(250);
+  assert.equal(await seite.locator('#d-btage').count(), 0, 'nur Anzeige, kein Eingabefeld');
+  // Bürotage, die die Person im Chat nennt, trägt Claude ein
+  gh.dateien.set('apps/test-portal.json', Buffer.from(JSON.stringify({ ...json(gh, 'apps/test-portal.json'), buerotage: 5 }, null, 1) + '\n'));
+  await seite.click('#drClose');
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await zuAkte(seite, 'test-portal');
+  await seite.waitForFunction(() => /Laut deiner Angabe\. Rund 6,5 Stunden pro Woche.*8 Punkte/.test(document.querySelector('#fahrtStunden')?.textContent || ''), null, { timeout: 10000 });
   await seite.goto('http://app.test/Bewerbungszentrale/#liste');
   await seite.waitForSelector('#v-liste [data-open="test-portal"]', { timeout: 10000 });
   assert.equal(await punkte(), 72, 'mit 5 Bürotagen minus 8');
@@ -209,9 +203,7 @@ test('anfahrt-geschaetzt', async () => {
   await seite.waitForFunction(() => /≈ 6,5 Std\. Fahrt pro Woche/.test(document.querySelector('#v-liste [data-open="test-portal"]')?.textContent || ''), null, { timeout: 10000 });
   await zuAkte(seite, 'test-portal');
   await seite.waitForSelector('#fahrtStunden', { timeout: 10000 });
-  assert.match(await seite.textContent('#fahrtStunden'), /geschätzt, trag die Bürotage ein/);
-  await seite.fill('#d-btage', '2');
-  await seite.waitForFunction(() => !/geschätzt/.test(document.querySelector('#fahrtStunden')?.textContent || ''), null, { timeout: 5000 });
+  assert.match(await seite.textContent('#fahrtStunden'), /geschätzt, die Anzeige nennt keine Bürotage/);
   assert.deepEqual(fehler, []);
 });
 
@@ -294,8 +286,7 @@ test('konflikt', async () => {
   await zuAkte(seite, 'test-mail');
   // Ein Lauf ändert dieselbe Akte, bevor die App schreibt
   const d = json(gh, 'apps/test-mail.json'); d.notizen = 'vom Lauf'; gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify(d, null, 1) + '\n'));
-  await seite.click('details.manuell summary');
-  await seite.click('details.manuell [data-act="mark-beworben"]');
+  await seite.evaluate(() => window.bzStatusSetzen('test-mail', 'beworben'));
   for (let i = 0; i < 60 && json(gh, 'apps/test-mail.json').status !== 'beworben'; i++) await warte(250);
   assert.equal(json(gh, 'apps/test-mail.json').status, 'beworben', 'Schreiben klappt nach 409');
   assert.ok(gh.log.some((x) => x.startsWith('GET') && x.includes('/contents/apps/test-mail.json')), 'aktuelle sha geholt');
@@ -373,10 +364,8 @@ test('ohne-teilen', async () => {
 test('ki', async () => {
   const { seite, ki, fehler } = await appStarten({ ki: async () => 'Bewerbung als Datenanalyst (m/w/d)\n\nSehr geehrte Damen und Herren,\n\nErfundener Testbrief.\n\nMit freundlichen Grüßen\nMax Muster' });
   await zuAkte(seite, 'test-leer');
-  await seite.click('#m-ki summary');
-  await seite.waitForSelector('[data-ki="anschreiben"]:not([disabled])', { timeout: 10000 });
-  await seite.click('[data-ki="anschreiben"]');
-  await seite.waitForFunction(() => /Erfundener Testbrief/.test(document.querySelector('#ki-anschreiben')?.value || ''), null, { timeout: 15000 });
+  assert.equal(await seite.locator('#drawer [data-ki]').count(), 0, 'keine KI-Knöpfe in der Akte');
+  assert.match(await seite.evaluate(async () => (await (await window.claude.use('sample'))('Testbrief', { cache: false })).text), /Erfundener Testbrief/);
   const a = ki.anfragen[0];
   assert.equal(a.body.model, 'claude-opus-5-5');
   assert.equal(a.body.stream, true);
@@ -384,13 +373,27 @@ test('ki', async () => {
   assert.deepEqual(fehler, []);
 });
 
-test('ohne-ki', async () => {
-  const { seite, gh } = await appStarten({ speicher: { 'bewerbungszentrale.zugang.v1': JSON.stringify({ token: 'github_pat_test_0000000000000000000000' }) } });
-  await zuAkte(seite, 'test-leer');
-  await seite.click('#m-ki summary');
-  await seite.waitForSelector('a[href="#einrichten"]', { timeout: 10000 });
+test('nur-ansicht', async () => {
+  // in der Akte gibt es nichts einzutragen: keine Eingabefelder, kein Status zum Umschalten, nichts zum Löschen
+  const { seite, gh, fehler } = await appStarten({ speicher: { 'bewerbungszentrale.zugang.v1': JSON.stringify({ token: 'github_pat_test_0000000000000000000000' }) } });
+  const offen = () => seite.evaluate(() => [...document.querySelectorAll('#drawer input, #drawer textarea, #drawer select')].filter((e) => e.type !== 'hidden' && !e.readOnly).map((e) => e.id || e.tagName));
+  for (const id of ['test-mail', 'test-portal', 'test-leer']) {
+    await zuAkte(seite, id);
+    await seite.evaluate(() => document.querySelectorAll('#drawer details').forEach((d) => { d.open = true; }));
+    assert.deepEqual(await offen(), [], `${id}: Infos ohne Eingabefelder`);
+    await seite.click('[data-tab="verlauf"]');
+    await seite.evaluate(() => document.querySelectorAll('#drawer details').forEach((d) => { d.open = true; }));
+    assert.deepEqual(await offen(), [], `${id}: Verlauf ohne Eingabefelder`);
+    assert.equal(await seite.locator('#drawer [data-act="del-ask"], #drawer [data-vdel], #drawer [data-kdel], #drawer [data-tdel], #drawer [data-task], #drawer [data-status], #drawer [data-act="mark-beworben"], #drawer [data-act="verwerfen"]').count(), 0, `${id}: nichts zum Ändern`);
+    await seite.click('#drClose');
+  }
+  await seite.goto('http://app.test/Bewerbungszentrale/#profil');
+  await seite.waitForSelector('#v-profil h1', { timeout: 10000 });
+  assert.equal(await seite.locator('#v-profil [data-p], #v-profil [data-ps], #v-profil #upFile').count(), 0, 'Profil ohne Formulare');
   assert.ok(gh.token);
+  assert.deepEqual(fehler, []);
 });
+
 
 const bis = async (f, ms = 10000) => { for (let i = 0; i < ms / 250; i++) { if (f()) return true; await warte(250); } return false; };
 const GOOGLE_ID = '123456789012-abcdefghijklmnop.apps.googleusercontent.com';
@@ -415,26 +418,22 @@ test('gegenlesen', async () => {
   await seite.click('#drClose');
   await zuAkte(seite, 'test-portal');
   assert.match(await seite.getAttribute('#pruefung', 'class'), /maengel/);
-  assert.match(await seite.textContent('#pruefung'), /zehn Jahre Erfahrung/);
-  await seite.click('[data-act="pr-vorversion"]');
-  await seite.waitForSelector('#pruefung.geaendert', { timeout: 5000 });
-  assert.ok(await bis(() => /VORVERSION/.test(json(gh, 'apps/test-portal.json').anschreiben || '')), 'Vorversion gespeichert');
-  assert.doesNotMatch(json(gh, 'apps/test-portal.json').vorversion.anschreiben, /VORVERSION/, 'die bisherige Fassung ist jetzt die Vorversion');
-  await seite.click('#pruefung [data-act="pr-frei"]');
-  await seite.waitForSelector('#pruefung.frei', { timeout: 5000 });
-  assert.ok(await bis(() => json(gh, 'apps/test-portal.json').pruefung?.manuell === true));
+  assert.match(await seite.textContent('#pruefung'), /Claude überarbeitet die Bewerbung von Hand.*zehn Jahre Erfahrung/s);
+  assert.equal(await seite.locator('#pruefung button').count(), 0, 'freigeben oder neu schreiben macht der Morgenlauf');
   assert.deepEqual(fehler, []);
 });
 
 test('gegenlesen-neu', async () => {
   const { seite, gh, fehler } = await appStarten();
+  const a = json(gh, 'apps/test-portal.json');
+  gh.dateien.set('apps/test-portal.json', Buffer.from(JSON.stringify({ ...a, ueberarbeiten: { datum: '2026-11-18', maengel: ['Erfundener Punkt'] } }, null, 1) + '\n'));
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
   await zuAkte(seite, 'test-portal');
-  await seite.click('#pruefung [data-act="pr-neu"]');
-  assert.ok(await bis(() => json(gh, 'apps/test-portal.json').ueberarbeiten?.manuell === true));
-  assert.match(json(gh, 'apps/test-portal.json').ueberarbeiten.maengel[0], /zehn Jahre Erfahrung.*belegten zwei Jahre/);
-  assert.match(await seite.textContent('#pruefung'), /nächste Morgenlauf schreibt/);
+  await seite.waitForFunction(() => /nächste Morgenlauf schreibt/.test(document.querySelector('#pruefung')?.textContent || ''), null, { timeout: 10000 });
   assert.deepEqual(fehler, []);
 });
+
 
 test('gmail-einrichten', async () => {
   const { seite, fehler } = await appStarten({ google: true });
@@ -733,8 +732,8 @@ test('dashboard', async () => {
   await seite.waitForSelector('#duBistDran', { timeout: 5000 });
   assert.match(await seite.textContent('#duBistDran'), /zurückrufen/);
   assert.ok(await seite.evaluate(() => document.querySelector('#duBistDran').getBoundingClientRect().top < document.querySelector('.timeline, .empty-mini').getBoundingClientRect().top), 'Aufgabe steht über dem Verlauf');
-  await seite.selectOption('#drStatus', 'interview');
-  await seite.waitForFunction(() => /Gespräch/.test(document.querySelector('.timeline')?.textContent || ''), null, { timeout: 5000 });
+  assert.equal((await seite.textContent('#drStatus')).trim(), 'Beworben');
+  assert.equal(await seite.locator('#drawer select').count(), 0, 'Status nur zum Ansehen');
   await seite.click('[data-act="close"]');
   await seite.click('.tabbar a[data-tab="karte"]');
   await seite.waitForFunction(() => !document.querySelector('#v-karte').hidden, null, { timeout: 10000 });
@@ -800,27 +799,28 @@ test('gmail-fehler', async () => {
 });
 
 test('linkedin', async () => {
-  const { seite, gh, ki, fehler } = await appStarten({ ki: async () => 'Hallo [Vorname], ich arbeite im Controlling und interessiere mich für Ihr Team. Hätten Sie 15 Minuten für einen kurzen Austausch? Viele Grüße, Max Muster' });
+  const { seite, gh, fehler } = await appStarten();
+  const a = json(gh, 'apps/test-portal.json');
+  gh.dateien.set('apps/test-portal.json', Buffer.from(JSON.stringify({ ...a, netzwerk: { nachricht: 'Hallo [Vorname], ich arbeite im Controlling. Hätten Sie 15 Minuten? Viele Grüße, Max Muster' } }, null, 1) + '\n'));
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
   await zuAkte(seite, 'test-portal');
   await seite.click('#netzwerk summary');
   const href = await seite.getAttribute('#li-suche', 'href');
   assert.match(href, /^https:\/\/www\.linkedin\.com\/search\/results\/people\/\?keywords=Hafen%20Muster/);
-  await seite.click('[data-act="li-ki"]');
-  await seite.waitForSelector('#li-text', { timeout: 15000 });
+  await seite.waitForSelector('#li-text', { timeout: 10000 });
   assert.match(await seite.inputValue('#li-text'), /^Hallo \[Vorname\],/);
-  assert.match(ki.anfragen.at(-1).body.messages.at(-1).content.toString(), /höchstens 300 Zeichen/i);
-  await seite.click('[data-act="li-angeschrieben"]');
-  assert.ok(await bis(() => (json(gh, 'apps/test-portal.json').verlauf || []).some((v) => /LinkedIn/.test(v.text))));
-  assert.ok(json(gh, 'apps/test-portal.json').netzwerk?.nachricht);
+  assert.equal(await seite.locator('[data-act="li-ki"], [data-act="li-angeschrieben"]').count(), 0);
   assert.deepEqual(fehler, []);
 });
+
 
 test('lesemodus', async () => {
   const { seite, gh, fehler } = await appStarten({ nurLesen: true });
   await seite.waitForSelector('#lesemodus', { timeout: 20000 });
   assert.equal(await seite.locator('[data-act="sammel-mail"]').count(), 0, 'kein Sammelversand im Lesemodus');
   await zuAkte(seite, 'test-portal');
-  await seite.click('[data-act="mark-beworben"]');
+  await seite.evaluate(() => window.bzStatusSetzen('test-portal', 'beworben'));
   await warte(4000);
   assert.ok(!gh.log.some((x) => x.startsWith('PUT')), 'nichts geschrieben');
   assert.equal(json(gh, 'apps/test-portal.json').status, 'gemerkt');

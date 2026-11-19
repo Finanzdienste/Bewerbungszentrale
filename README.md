@@ -8,6 +8,13 @@ App fürs Handy, für Tobi.
 
 ## Wie sie gebaut ist
 
+- **Nur zum Ansehen:** In der App wird nichts eingetragen oder bearbeitet. Sie zeigt an,
+  lässt Portal-Angaben kopieren, liefert die Mappen und sendet vorbereitete Mails per Knopf.
+  Status, Notizen, Bürotage, Anschreiben und Antworten schreiben Morgenlauf, Postfach-Routine
+  und Claude-Sitzungen ins Daten-Repo. Den Status setzt die App nur selbst, wenn sie eine Mail sendet.
+- **Akte:** zwei Reiter. „Infos“ (Score, Ort, Anfahrt, Gehalt, Weg, Kontakt, Abschicken,
+  Notizen, zugeklappt Unterlagen und Anzeige) und „Verlauf“ (oben „Du bist dran“ mit
+  Antwortvorschlag oder Rückruf, dann Termine, Offenes, Verlauf).
 - **Vanilla-JS-PWA ohne Bauschritt**, live über GitHub Pages. Alles hier ist
   öffentlich lesbar, darum stehen hier keine persönlichen Daten.
 - `index.html` ist die App (ursprünglich ein Claude-Artifact, das mit
@@ -24,7 +31,7 @@ App fürs Handy, für Tobi.
   - **sample** (KI): eigener Schlüssel, Anthropic (`sk-ant-…`, claude-opus-5-5)
     oder Google (`AQ.…`, gemini-3.8-flash), direkt vom Handy.
   - **downloads**: Datei speichern per Download-Link.
-- **Mappen-Ordner** (Edge/Chrome am PC): Unter „Bereit zum Abschicken“ einmal einen Ordner
+- **Mappen-Ordner** (Edge/Chrome am PC): Im Profil unter „Bewerbungsmappen“ einmal einen Ordner
   wählen, dann legt die App jede freigegebene Portal-Bewerbung von selbst als Unterordner
   „Score Firma - Stelle“ ab, mit allem für den Upload in jedem Ordner (Anschreiben, Lebenslauf,
   Zeugnisse, ganze Mappe, `Portal-Infos.txt`). Dazu ein Ordner „Allgemein“ mit dem allgemeinen Lebenslauf und

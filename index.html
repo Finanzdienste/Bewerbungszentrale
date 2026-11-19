@@ -408,6 +408,7 @@ td.num{font-family:var(--f-mono);font-size:var(--t-xs);white-space:nowrap}
 .tasks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
 .tasks li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:start;padding:9px 0;border-top:1px solid var(--line)}
 .tasks li:first-child{border-top:none}
+.tasks li.lese{grid-template-columns:minmax(0,1fr) auto}
 .tasks li.done .tx{text-decoration:line-through;color:var(--faint)}
 .tasks .tx{font-size:var(--t-sm);line-height:1.4;overflow-wrap:anywhere}
 .tasks .tx small{display:block;color:var(--muted);font-size:var(--t-xs);margin-top:1px}
@@ -481,8 +482,8 @@ fieldset legend{font-size:var(--t-xs);font-weight:600;color:var(--muted);padding
 .sec-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .dr-leiste{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:12px}
 .dr-leiste .dr-tabs{margin-top:0}
-.st-wahl{margin-bottom:6px;flex:none}
-.st-wahl select.in{width:auto;height:32px;padding:0 10px;font-weight:600;border-color:var(--stage);color:var(--stage);background-color:color-mix(in srgb,var(--stage) 8%,var(--sheet))}
+.st-chip{flex:none;margin-bottom:8px;padding:4px 10px;border-radius:999px;border:1px solid var(--stage);color:var(--stage);background:color-mix(in srgb,var(--stage) 8%,var(--sheet));font-weight:600;font-size:var(--t-sm)}
+.lesetext{white-space:pre-wrap;overflow-wrap:anywhere;font-size:var(--t-sm);line-height:1.5;background:var(--paper);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;max-height:420px;overflow-y:auto}
 .dran-punkt{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warn);margin-left:3px;vertical-align:middle}
 .fakten{display:grid;margin:0;border:1px solid var(--line);border-radius:var(--r-lg);background:var(--sheet)}
 .fz{display:grid;grid-template-columns:92px minmax(0,1fr);gap:12px;padding:10px 14px;border-top:1px solid var(--line)}
@@ -501,6 +502,7 @@ fieldset legend{font-size:var(--t-xs);font-weight:600;color:var(--muted);padding
 .ki-card.dran{border-color:color-mix(in srgb,var(--warn) 55%,var(--line));background:color-mix(in srgb,var(--warn) 6%,var(--sheet))}
 .ki-card.abschicken{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
 .v-kopf{margin-bottom:10px}
+.profil-rest{display:flex;flex-direction:column;gap:20px;min-width:0;margin-top:20px}
 .danger-zone{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-top:14px;border-top:1px dashed var(--line-strong);font-size:var(--t-sm);color:var(--muted)}
 
 .timeline{list-style:none;margin:0;padding:0 0 0 18px;position:relative;display:flex;flex-direction:column;gap:14px}
@@ -1345,11 +1347,11 @@ function fahrtHTML(a) {
 function fahrtStundenHTML(a) {
   const an = a.anfahrt || {}, t = pendelTage(a), h = pendelStunden(a);
   if (t == null) return '';
-  const quelle = Number.isFinite(a.buerotage) ? 'Deine Angabe.' : esc(an.tageGrund ? an.tageGrund.charAt(0).toUpperCase() + an.tageGrund.slice(1) + '.' : '');
+  const quelle = Number.isFinite(a.buerotage) ? 'Laut deiner Angabe.' : esc(an.tageGrund ? an.tageGrund.charAt(0).toUpperCase() + an.tageGrund.slice(1) + '.' : '');
   if (h == null) return quelle;
   if (h === 0) return `${quelle} Kein Pendeln, kein Abzug in der Gesamtwertung.`;
   const pm = pendelMalus(h);
-  return `${quelle} Rund <b>${zahlDe(h)} Stunden pro Woche</b> unterwegs, hin und zurück${pendelGeschaetzt(a) ? ' (geschätzt, trag die Bürotage ein, sobald du sie kennst)' : ''}. ${pm ? `Das zieht ${pm} ${pm === 1 ? 'Punkt' : 'Punkte'} von der Gesamtwertung ab.` : 'Bis 2,5 Stunden pro Woche gibt es keinen Abzug.'}`;
+  return `${quelle} Rund <b>${zahlDe(h)} Stunden pro Woche</b> unterwegs, hin und zurück${pendelGeschaetzt(a) ? ' (geschätzt, die Anzeige nennt keine Bürotage)' : ''}. ${pm ? `Das zieht ${pm} ${pm === 1 ? 'Punkt' : 'Punkte'} von der Gesamtwertung ab.` : 'Bis 2,5 Stunden pro Woche gibt es keinen Abzug.'}`;
 }
 function wertungVon(a) { const w = wertungBasis(a); if (w.wert == null) return w; const gb = grossAkte(a), bm = a.art === 'initiativ' ? 0 : beratMalus(a.position), pm = pendelMalus(pendelStunden(a)); return (gb || bm || pm) ? {...w, wert: Math.max(0, Math.min(100, w.wert + gb - bm - pm)), gross: gb > 0, beratung: bm > 0, fahrt: pm} : w; }
 function wertungBasis(a) {
@@ -1830,6 +1832,7 @@ function wohnortSetzen(lat, lon) { // speichert nur im Profil (Daten-Repo), nich
   if (karte) { try { karte.remove(); } catch {} karte = null; karteBereit = false; } // die große Karte beim nächsten Öffnen mit dem neuen Punkt
 }
 window.bzWohnortSetzen = wohnortSetzen;
+window.bzStatusSetzen = (id, neu) => setStatus(id, neu, {quiet: true}); // für Tests: in der App setzt nur das Senden den Status
 function wohnortGps() { // Standort des Geräts, nur ins Profil (Daten-Repo)
   const st = $('#wohnortSt');
   if (!navigator.geolocation) { if (st) st.textContent = 'Dieses Gerät kann seinen Standort nicht bestimmen. Tipp stattdessen auf der Karte auf dein Haus.'; return; }
@@ -1865,7 +1868,7 @@ function renderProfil(force) {
   const p = P();
   const bsp = list().filter(a => a.beispiel).length;
   const txt = (id, l, ph = '', help = '') => `<label class="fld" for="p-${id}"><span>${l}${help ? ` <span class="help">${help}</span>` : ''}</span><input class="in" id="p-${id}" data-p="${id}" value="${esc(p[id])}" placeholder="${esc(ph)}"></label>`;
-  el.innerHTML = `<div class="view-head"><div><h1>Profil &amp; Daten</h1><p>Je mehr hier steht, desto besser passen Anschreiben, Analysen und Gesprächsvorbereitung. Alles wird automatisch gespeichert.</p></div></div>
+  el.innerHTML = `<div class="view-head"><div><h1>Profil</h1><p>Zum Ansehen und Kopieren. Ändern: sag Claude Bescheid.</p></div></div>
   <section class="panel" id="wohnortPanel"><div class="panel-head"><h2>Wohnort</h2><span class="sub">für Fahrzeiten und die Karte, bleibt privat in deinem Daten-Repo</span></div>
     <p class="desc" style="margin:0 0 8px">Am einfachsten zu Hause auf „Per GPS bestimmen“ tippen. Oder auf der Karte genau auf dein Haus tippen. Der rote Punkt ist der gespeicherte Wohnort.</p>
     <div class="ki-row" style="margin:0 0 10px"><button class="btn sm primary" type="button" data-act="wohnort-gps">Per GPS bestimmen</button></div>
@@ -1873,63 +1876,7 @@ function renderProfil(force) {
     <span class="ki-status" id="wohnortSt" style="margin-top:8px">${p.heim ? `Gespeichert: ${Number(p.heim.lat).toFixed(4)}, ${Number(p.heim.lon).toFixed(4)}${p.heimStand ? `, geändert am ${fmtD(p.heimStand)}` : ''}` : 'Noch kein Wohnort gespeichert.'}</span>
   </section>
   ${(() => { const z = ordnerZeile(list().filter(istBereit)); return z ? `<section class="panel" id="mappenPanel"><div class="panel-head"><h2>Bewerbungsmappen</h2><span class="sub">als Ordner auf dem PC und in Google Drive</span></div>${z}</section>` : ''; })()}
-  <div class="grid-2 wide-left">
-    <section class="panel"><div class="panel-head"><h2>Dein Bewerberprofil</h2><span class="sub">nur für die KI-Funktionen</span></div>
-      <div class="form-grid">
-        ${txt('name', 'Name', 'Vor- und Nachname')}
-        ${txt('zielrolle', 'Wunschposition', 'z. B. Data Analyst, Produktmanagerin')}
-        ${txt('email', 'E-Mail', 'name@beispiel.de', 'für Anschreiben und Mails')}
-        ${txt('telefon', 'Telefon', '0176 …')}
-        ${txt('gmailKonto', 'Gmail-Konto für den Versand', 'name@gmail.com', 'das mit Claude verbundene Konto')}
-        ${txt('titel', 'Titel unter dem Namen', 'z. B. Prozess- und Datenanalyst', 'wie im Lebenslauf')}
-        <label class="fld span-2" for="p-adresse"><span>Anschrift <span class="help">Straße Nr., PLZ Ort, erscheint im Briefkopf</span></span><input class="in" id="p-adresse" data-p="adresse" value="${esc(p.adresse)}" placeholder="Musterstraße 1, 20095 Hamburg"></label>
-        <label class="fld span-2" for="p-kurzprofil"><span>Kurzprofil <span class="help">3–5 Sätze: Erfahrung, Branche, größte Erfolge</span></span><textarea class="in" id="p-kurzprofil" data-p="kurzprofil" rows="4" placeholder="Seit 4 Jahren analysiere ich Vertriebsdaten im E-Commerce …">${esc(p.kurzprofil)}</textarea></label>
-        <label class="fld span-2" for="p-skills"><span>Kernkompetenzen <span class="help">durch Komma getrennt</span></span><input class="in" id="p-skills" data-p="skills" value="${esc(p.skills)}" placeholder="SQL, Python, Power BI, Stakeholder-Management"></label>
-        <label class="fld span-2" for="p-lebenslauf"><span>Lebenslauf als Text <span class="help">aus deinem PDF kopieren und einfügen</span></span><textarea class="in mono" id="p-lebenslauf" data-p="lebenslauf" rows="9" placeholder="Berufserfahrung&#10;03/2022 – heute  Analyst, Muster GmbH&#10;…">${esc(p.lebenslauf)}</textarea></label>
-        <label class="fld" for="p-gehalt"><span>Gehaltsvorstellung <span class="help">€ brutto/Jahr</span></span><input class="in" id="p-gehalt" data-p="gehalt" type="number" inputmode="numeric" step="1000" min="0" value="${p.gehalt ?? ''}" placeholder="62000"></label>
-        ${txt('kuendigung', 'Kündigungsfrist', 'z. B. 3 Monate zum Quartalsende')}
-        ${txt('eintritt', 'Frühester Eintritt', 'z. B. 01.02.2027')}
-        <label class="fld" for="p-ton"><span>Ton der Anschreiben</span><select class="in" id="p-ton" data-p="ton">
-          ${[['klassisch','Klassisch-förmlich'],['modern','Modern & direkt'],['kreativ','Kreativ & persönlich']].map(([v, l]) => `<option value="${v}" ${p.ton === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-        <label class="fld" for="p-sprache"><span>Sprache</span><select class="in" id="p-sprache" data-p="sprache">${['Deutsch','Englisch'].map(v => `<option ${p.sprache === v ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
-      </div>
-    </section>
-    <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
-      <section class="panel"><div class="panel-head"><h2>Automatische Jobsuche</h2><span class="sub">jeden Morgen um 6:40 Uhr</span></div>
-        <div class="form-grid">
-          <label class="toggle span-2" for="ps-aktiv" style="margin:0;color:var(--ink);font-weight:600"><input type="checkbox" class="cb" id="ps-aktiv" data-ps="aktiv" ${p.suche.aktiv ? 'checked' : ''}>Täglich nach neuen Stellen suchen und Bewerbungen vorbereiten</label>
-          <label class="fld span-2" for="ps-begriffe"><span>Jobtitel <span class="help">durch Komma getrennt</span></span><input class="in" id="ps-begriffe" data-ps="begriffe" value="${esc(p.suche.begriffe)}" placeholder="Data Analyst, BI-Analyst, Business Analyst"></label>
-          <label class="fld" for="ps-orte"><span>Orte <span class="help">durch Komma getrennt</span></span><input class="in" id="ps-orte" data-ps="orte" value="${esc(p.suche.orte)}" placeholder="Hamburg, Bremen"></label>
-          <label class="fld" for="ps-umkreis"><span>Umkreis <span class="help">km</span></span><input class="in" id="ps-umkreis" data-ps="umkreis" type="number" min="0" max="200" step="5" value="${p.suche.umkreis ?? ''}"></label>
-          <label class="toggle span-2" for="ps-remote" style="margin:0"><input type="checkbox" class="cb" id="ps-remote" data-ps="remote" ${p.suche.remote ? 'checked' : ''}>Remote-Stellen auch außerhalb dieser Orte</label>
-          <label class="fld" for="ps-minGehalt"><span>Mindestgehalt <span class="help">€ brutto/Jahr</span></span><input class="in" id="ps-minGehalt" data-ps="minGehalt" type="number" min="0" step="1000" value="${p.suche.minGehalt ?? ''}" placeholder="optional"></label>
-          <label class="fld" for="ps-minScore"><span>Vorschlagen ab Passung <span class="help">0–100</span></span><input class="in" id="ps-minScore" data-ps="minScore" type="number" min="0" max="100" step="5" value="${p.suche.minScore ?? 70}"></label>
-          <label class="fld span-2" for="ps-ausschluss"><span>Ausschließen <span class="help">Begriffe, Firmen, Branchen</span></span><input class="in" id="ps-ausschluss" data-ps="ausschluss" value="${esc(p.suche.ausschluss)}" placeholder="Werkstudent, Praktikum, Zeitarbeit"></label>
-          <label class="fld" for="ps-maxProTag"><span>Höchstens pro Tag</span><input class="in" id="ps-maxProTag" data-ps="maxProTag" type="number" min="1" max="15" value="${p.suche.maxProTag ?? 5}"></label>
-          <label class="fld" for="ps-ordner"><span>Drive-Ordner mit Unterlagen</span><input class="in" id="ps-ordner" data-ps="ordner" value="${esc(p.suche.ordner)}" placeholder="Bewerbung"></label>
-        </div>
-        <p class="muted" style="font-size:var(--t-xs);margin-top:12px">${esc(laufText())} Abgeschickt wird nie automatisch: Du bekommst fertige Gmail-Entwürfe mit Anhängen oder bei Portal-Bewerbungen alles in der Akte.</p>
-      </section>
-      <section class="panel"><div class="panel-head"><h2>Ziele &amp; Erinnerungen</h2></div>
-        <div class="form-grid">
-          <label class="fld" for="p-wochenziel"><span>Wochenziel <span class="help">Bewerbungen</span></span><input class="in" id="p-wochenziel" data-p="wochenziel" type="number" min="0" max="50" value="${p.wochenziel}"></label>
-          <label class="fld" for="p-nachfassTage"><span>Nachfragen nach <span class="help">Tagen</span></span><input class="in" id="p-nachfassTage" data-p="nachfassTage" type="number" min="3" max="60" value="${p.nachfassTage}"></label>
-        </div>
-      </section>
-      ${cvPanel()}
-      ${linkedinPanel()}
-      ${dateienPanel()}
-      <section class="panel"><div class="panel-head"><h2>Daten sichern</h2><span class="sub">${list().length} Bewerbungen gespeichert</span></div>
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <div class="ki-row"><button class="btn" data-act="export-csv" type="button" ${DL ? '' : 'disabled'}>${ic('down')}Tabelle als CSV</button><button class="btn" data-act="export-json" type="button" ${DL ? '' : 'disabled'}>${ic('down')}Komplett-Backup (JSON)</button></div>
-          <div class="ki-row"><label class="btn" for="importFile">${ic('up')}Backup importieren</label><input type="file" id="importFile" accept=".json,application/json" hidden></div>
-          <p class="muted" style="font-size:var(--t-xs)">${DL ? 'CSV öffnet sich direkt in Excel oder Numbers (Semikolon-getrennt). Das JSON-Backup enthält alles inklusive Verlauf und Anschreiben.' : 'Export ist in dieser Ansicht nicht verfügbar. Öffne die App auf claude.ai.'}</p>
-          ${bsp ? `<div class="danger-zone"><span style="flex:1">${bsp} Beispiel-Bewerbungen sind noch da.</span><button class="btn sm danger" data-act="del-bsp" type="button">${ic('trash')}Beispiele löschen</button></div>` : ''}
-        </div>
-      </section>
-      ${bildschirmzeitPanel()}
-    </div>
-  </div>`;
+  <div class="profil-rest">${cvPanel()}${linkedinPanel()}${bildschirmzeitPanel()}</div>`;
   wohnortKarte();
 }
 document.addEventListener('input', e => {
@@ -1996,7 +1943,7 @@ function renderDrawerHead() {
     </div>
     <div class="dr-leiste">
       <div class="dr-tabs" role="tablist">${tabs.map(([k, l]) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${state.drawerTab === k}">${l}${k === 'verlauf' && dran ? ' <span class="dran-punkt" title="Du bist dran"></span>' : ''}</button>`).join('')}</div>
-      <label class="st-wahl" for="drStatus" style="--stage:${stageVar(cur)}"><span class="sr">Status</span><select class="in" id="drStatus">${STATUS_REIHE.map(k => `<option value="${k}" ${k === cur ? 'selected' : ''}>${esc(S[k].label)}</option>`).join('')}</select></label>
+      <span class="st-chip" id="drStatus" style="--stage:${stageVar(cur)}">${esc(S[cur].label)}</span>
     </div>`;
 }
 function betreffFuer(a) { // Mailbetreff: Stelle, Kennziffer und Name, damit die Mail im Postfach der Personalabteilung auffindbar ist
@@ -2023,23 +1970,22 @@ function bereitHTML(a) {
         <div class="ki-row" style="margin-top:8px">${MCP ? '' : `<button class="btn" type="button" data-act="mail-teilen">${ic('share')}Per Mail-App senden</button>`}<button class="btn" type="button" data-act="wa-teilen">${ic('share')}Per WhatsApp teilen</button>${mappeBtn}<a class="btn" href="${esc(mailto)}">${ic('mail')}In Mail-App öffnen</a></div>
         <div class="copyline"><span>An</span><code id="cp-an">${esc(mail)}</code><button class="btn sm" type="button" data-copy="cp-an" aria-label="Empfänger kopieren">${ic('copy')}</button></div>
         <div class="copyline"><span>Betreff</span><code id="cp-betreff">${esc(betreff)}</code><button class="btn sm" type="button" data-copy="cp-betreff" aria-label="Betreff kopieren">${ic('copy')}</button></div>
-        <label class="sr" for="d-mailtext">Mailtext</label><textarea class="in" id="d-mailtext" data-f="mailtext" rows="7" style="margin-top:6px">${esc(text)}</textarea>
-        <div class="ki-row" style="margin-top:6px"><button class="btn sm" type="button" data-copy="d-mailtext">${ic('copy')}Mailtext kopieren</button><button class="btn sm" type="button" data-act="mark-beworben">${ic('check')}Als beworben markieren</button></div>
+        <div class="lesetext" id="d-mailtext" style="margin-top:6px">${esc(text)}</div>
+        <div class="ki-row" style="margin-top:6px"><button class="btn sm" type="button" data-copy="d-mailtext">${ic('copy')}Mailtext kopieren</button></div>
       </details>` : '';
   return `<section class="ki-card abschicken">
     <h3>${ic('mail')}Abschicken</h3>
     ${pruefungHTML(a)}
     ${ohneAnschreiben
-      ? `<div class="ki-row"><button class="btn primary" type="button" data-act="ki-tab">${ic('spark')}Erst Anschreiben erstellen</button></div>`
+      ? `<p class="desc">Das Anschreiben fehlt noch. Das schreibt der Morgenlauf.</p>`
       : mail
-        ? `<div class="ki-row">${MCP ? `<button class="btn primary" type="button" data-act="gmail-senden">${ic('mail')}Jetzt per Gmail bewerben</button>` : `<button class="btn primary" type="button" data-act="gmail-api">${ic('mail')}Per Gmail senden</button>`}<button class="btn" type="button" data-act="ki-tab">${ic('doc')}Anschreiben ansehen</button>${a.vorschlag ? `<button class="btn ghost" type="button" data-act="verwerfen">${ic('x')}Nicht interessant</button>` : ''}</div>
+        ? `<div class="ki-row">${MCP ? `<button class="btn primary" type="button" data-act="gmail-senden">${ic('mail')}Jetzt per Gmail bewerben</button>` : `<button class="btn primary" type="button" data-act="gmail-api">${ic('mail')}Per Gmail senden</button>`}<button class="btn" type="button" data-act="ki-tab">${ic('doc')}Anschreiben ansehen</button></div>
            <p class="desc">Geht an <b>${esc(mail)}</b>, Anschreiben, Lebenslauf und Zeugnisse als eine PDF. Vor dem Senden siehst du alles noch einmal.</p>
            <span class="ki-status" id="mappeStatus"></span>
            ${manuell}`
         : `<div class="ki-row">${mappeBtn}${link ? `<a class="btn primary" href="${esc(link)}" target="_blank" rel="noopener">${ic('ext')}Zum Bewerbungsportal</a>` : ''}<button class="btn" type="button" data-act="ki-tab">${ic('doc')}Anschreiben ansehen</button><button class="btn" type="button" data-act="wa-teilen">${ic('share')}Per WhatsApp teilen</button></div>
-           <p class="desc">Mappe herunterladen und im Portal hochladen. Die Eingangsbestätigung trägt der Morgenlauf ein.${link ? '' : ' Den Link zur Anzeige kannst du unter „Angaben bearbeiten“ eintragen.'}</p>
+           <p class="desc">Mappe herunterladen und im Portal hochladen. Die Eingangsbestätigung trägt der Morgenlauf ein.</p>
            <span class="ki-status" id="mappeStatus"></span>
-           <div class="ki-row"><button class="btn sm" type="button" data-act="mark-beworben">${ic('check')}Schon beworben</button>${a.vorschlag ? `<button class="btn sm ghost" type="button" data-act="verwerfen">${ic('x')}Nicht interessant</button>` : ''}</div>
            ${portalHTML(a)}`}
     ${netzwerkHTML(a)}
   </section>`;
@@ -2061,9 +2007,9 @@ function netzwerkHTML(a) {
     <p class="desc" style="margin-top:6px">Eine kurze Nachricht an jemanden aus dem Team bringt oft mehr als die Bewerbung allein. Am besten jemand mit ähnlicher Rolle oder die Teamleitung, nicht die Personalabteilung.</p>
     <div class="ki-row"><a class="btn" id="li-suche" href="${esc(url)}" target="_blank" rel="noopener">${ic('search')}Auf LinkedIn suchen: ${esc(suche)}</a></div>
     ${text ? `<label class="fld" for="li-text" style="margin-top:8px"><span>Nachricht (${[...text].length} Zeichen, [Vorname] ersetzen)</span><textarea class="in" id="li-text" rows="5" readonly>${esc(text)}</textarea></label>
-      <div class="ki-row" style="margin-top:4px"><button class="btn sm" type="button" data-copy="li-text">${ic('copy')}Nachricht kopieren</button><button class="btn sm" type="button" data-act="li-angeschrieben">${ic('check')}Angeschrieben</button></div>
+      <div class="ki-row" style="margin-top:4px"><button class="btn sm" type="button" data-copy="li-text">${ic('copy')}Nachricht kopieren</button></div>
       <p class="muted" style="font-size:var(--t-xs);margin-top:6px">Ohne LinkedIn Premium sind persönliche Notizen bei Kontaktanfragen oft begrenzt. Dann ohne Notiz vernetzen und die Nachricht nach der Annahme schicken.</p>`
-      : `<div class="ki-row" style="margin-top:8px"><button class="btn sm ki" type="button" data-act="li-ki" ${job || kiState !== 'ok' ? 'disabled' : ''}>${ic('spark')}${job ? 'Wird geschrieben …' : 'Nachricht schreiben lassen'}</button><button class="btn sm" type="button" data-act="li-angeschrieben">${ic('check')}Angeschrieben</button><span class="ki-status" id="st-li"></span></div>`}
+      : ''}
   </details>`;
 }
 async function liNachrichtErstellen() {
@@ -2155,7 +2101,7 @@ function pruefungHTML(a) {
   const p = a.pruefung || {}; const mg = p.maengel || [];
   const ernst = mg.filter(m => m.schwere !== 'gering'), klein = mg.filter(m => m.schwere === 'gering');
   const fragen = (p.fragen || []).length ? `<div><b>Vor dem Abschicken klären:</b><ul>${p.fragen.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>` : '';
-  const vor = a.vorversion ? `<button class="btn sm ghost" type="button" data-act="pr-vorversion">${ic('reply')}Vorige Fassung (${fmtDs(a.vorversion.datum)}) wiederherstellen</button>` : '';
+  const vor = '';
   const wann = p.datum ? ` am ${fmtDs(p.datum)}` : '';
   const box = (kl, icon, kopf, rest = '', knoepfe = '') => `<div class="pruef ${kl}" id="pruefung"><div class="pr-kopf">${ic(icon)}<span>${kopf}</span></div>${rest}${knoepfe || vor ? `<div class="ki-row">${knoepfe}${vor}</div>` : ''}</div>`;
   if (s === 'neu') return box('', 'clock', 'Noch nicht gegengelesen. Das macht der nächste Morgenlauf.', '', '');
@@ -2164,10 +2110,9 @@ function pruefungHTML(a) {
   if (s === 'frei') return box('frei', 'check', `Gegengelesen${wann} und freigegeben${p.note != null ? `, Note ${esc(p.note)} von 100` : ''}${p.manuell ? ' (von dir)' : ''}.`,
     `${p.staerke ? `<div>${esc(p.staerke)}</div>` : ''}${fragen}${klein.length ? `<details><summary>${klein.length === 1 ? 'Ein kleiner Hinweis' : `${klein.length} kleine Hinweise`}</summary>${maengelHTML(klein)}</details>` : ''}`);
   if (s === 'geaendert') return box('geaendert', 'alert', 'Seit dem Gegenlesen geändert. Der nächste Morgenlauf liest die neue Fassung gegen.',
-    mg.length ? `<details><summary>Ergebnis zur vorigen Fassung</summary>${maengelHTML(mg)}</details>` : '', `<button class="btn sm" type="button" data-act="pr-frei">${ic('check')}So freigeben</button>`);
-  return box('maengel', 'alert', `Gegengelesen${wann}: ${ernst.length === 1 ? 'ein Punkt braucht' : `${ernst.length} Punkte brauchen`} deinen Blick${p.note != null ? ` (Note ${esc(p.note)})` : ''}.`,
-    `${maengelHTML(ernst)}${fragen}${klein.length ? `<details><summary>${klein.length} kleine Hinweise</summary>${maengelHTML(klein)}</details>` : ''}`,
-    `<button class="btn sm ki" type="button" data-act="pr-neu">${ic('spark')}Morgen neu schreiben lassen</button><button class="btn sm" type="button" data-act="pr-frei">${ic('check')}Trotzdem freigeben</button>`);
+    mg.length ? `<details><summary>Ergebnis zur vorigen Fassung</summary>${maengelHTML(mg)}</details>` : '');
+  return box('maengel', 'alert', `Gegengelesen${wann}: ${ernst.length === 1 ? 'ein Punkt ist' : `${ernst.length} Punkte sind`} noch offen${p.note != null ? ` (Note ${esc(p.note)})` : ''}. ${(a.pruefRunden || 0) >= 2 ? 'Claude überarbeitet die Bewerbung von Hand.' : 'Der Morgenlauf überarbeitet die Bewerbung.'}`,
+    `${maengelHTML(ernst)}${fragen}${klein.length ? `<details><summary>${klein.length} kleine Hinweise</summary>${maengelHTML(klein)}</details>` : ''}`);
 }
 function pruefAktion(act) {
   const id = state.openId; const a = state.apps[id]; if (!a) return;
@@ -2529,8 +2474,6 @@ function cvPanel() {
       ${p.foto?.url ? `<img src="${esc(p.foto.url)}" alt="Dein Bewerbungsfoto" style="width:68px;height:85px;object-fit:cover;border-radius:10px;flex:none;${p.fotoAn === false ? 'opacity:.35;filter:grayscale(1)' : ''}">` : ''}
       <div style="min-width:0;display:flex;flex-direction:column;gap:8px">
         <p style="font-size:var(--t-sm)">Die App setzt deinen Lebenslauf selbst: ${n} Stationen, ${p.cv.ausbildung?.length || 0} Abschlüsse, Kenntnisse und Sprachen. Für jede Bewerbung passt Claude Profiltext und Schwerpunkte an und nimmt dasselbe Design wie im Anschreiben.</p>
-        <label class="toggle" for="p-fotoAn" style="margin:0"><input type="checkbox" class="cb" id="p-fotoAn" ${p.fotoAn !== false ? 'checked' : ''} ${p.foto?.url ? '' : 'disabled'}>Foto im Lebenslauf</label>
-        ${AS ? `<div class="ki-row"><label class="btn sm" for="upFoto">${ic('up')}Neues Foto</label><input type="file" id="upFoto" accept="image/jpeg,image/png" hidden><span class="ki-status" id="fotoStatus"></span></div>` : ''}
       </div>
     </div>
     <h3 style="font-size:var(--t-md);margin-top:16px">Lebenslauf für Portale</h3>
@@ -3214,7 +3157,7 @@ function gehaltHinweis(a) {
   else if (a.gehaltBegruendung) teile.push(`Vorschlag des Morgenlaufs: ${esc(a.gehaltBegruendung)}`);
   const zahlen = [...`${a.anschreiben || ''}\n${a.mailtext || ''}`.matchAll(/(\d{2,3}\.\d{3}) Euro brutto/g)].map(m => Number(m[1].replace('.', '')));
   const anders = a.gehaltWunsch ? zahlen.filter(z => z !== a.gehaltWunsch) : [];
-  if (anders.length) teile.push(`<b>Im Anschreiben oder in der Mail steht noch ${eur(anders[0])}.</b> Pass die Zahl dort an, bevor du sendest.`);
+  if (anders.length) teile.push(`<b>Im Anschreiben oder in der Mail steht noch ${eur(anders[0])}.</b> Das passt nicht zur Forderung, sag Claude Bescheid.`);
   return teile.join(' ');
 }
 /** Infos: das Wichtigste auf einen Blick, darunter Abschicken (nur vor dem Versand), Notizen und
@@ -3229,9 +3172,8 @@ function infosHTML(a) {
   const kontakt = [k.name ? `${esc(k.name)}${k.rolle ? ` <span class="muted">(${esc(k.rolle)})</span>` : ''}` : '', k.telefon ? `<a href="tel:${esc(String(k.telefon).replace(/[^\d+]/g, ''))}">${esc(k.telefon)}</a>` : '', !mail && k.email ? esc(k.email) : ''].filter(Boolean).join(' · ');
   const beworben = a.status !== 'gemerkt' && a.beworbenAm ? `${fmtD(a.beworbenAm)}${a.eingangAm ? ` · Eingang bestätigt ${fmtDs(a.eingangAm)}` : ''}` : '';
   const anfahrt = a.art === 'initiativ' && !a.anfahrt ? '' : `<p id="fahrtText">${fahrtHTML(a)}</p>
-      <div class="fz-in" ${a.anfahrt?.min ? '' : 'hidden'}>${fld('btage', 'Bürotage pro Woche', 'buerotage', a.buerotage, {type:'number', ph: Number.isFinite(a.anfahrt?.tage) ? zahlDe(a.anfahrt.tage) : '', attrs:'inputmode="decimal" step="0.5" min="0" max="5"'})}</div>
-      <p class="desc" id="fahrtStunden">${fahrtStundenHTML(a)}</p>`;
-  const gehalt = `${anzeigeGehalt}<div class="fz-in">${fld('gwunsch', 'Meine Forderung', 'gehaltWunsch', a.gehaltWunsch, {type:'number', ph:String(P().gehalt || 62000), attrs:'inputmode="numeric" step="1000" min="0"'})}</div><p class="desc" id="gwunschGrund">${gehaltHinweis(a)}</p>`;
+      <p class="desc" id="fahrtStunden" style="margin-top:4px">${fahrtStundenHTML(a)}</p>`;
+  const gehalt = `${anzeigeGehalt}${a.gehaltWunsch ? `<div id="gwunsch" style="margin-top:4px">Forderung: <b>${eur(a.gehaltWunsch)}</b></div>` : ''}<p class="desc" id="gwunschGrund" style="margin-top:4px">${gehaltHinweis(a)}</p>`;
   return `<dl class="fakten">
       ${z('Score', score)}
       ${z('Ort', esc([a.ort, a.arbeitsmodell].filter(Boolean).join(' · ')))}
@@ -3244,34 +3186,21 @@ function infosHTML(a) {
       ${z('Kontakt', kontakt)}
     </dl>
     ${bereitHTML(a)}
-    <label class="fld" for="d-notizen"><span>Notizen</span><textarea class="in" id="d-notizen" data-f="notizen" rows="${Math.min(10, Math.max(3, String(a.notizen || '').split('\n').length + 1))}" placeholder="Eindrücke, offene Fragen fürs Gespräch …">${esc(a.notizen)}</textarea></label>
-    <details class="mehr" id="m-ki"><summary>Anschreiben, Lebenslauf und Analyse</summary><div class="mehr-in">${kiTabHTML(a, {ohneMail: true})}</div></details>
-    <details class="mehr" id="m-anzeige"><summary>Stellenanzeige${a.stellenText ? '' : ' (fehlt)'}</summary><div class="mehr-in">
-      ${kiState === 'ok' ? `<div class="ki-row"><button class="btn sm ki" type="button" data-act="fill-from-ad">${ic('spark')}Felder daraus übernehmen</button><span class="ki-status" id="fillStatus"></span></div>` : ''}
-      <label class="fld" for="d-stelle"><span class="sr">Anzeigentext</span><textarea class="in" id="d-stelle" data-f="stellenText" rows="14" placeholder="Anzeigentext hier einfügen">${esc(a.stellenText)}</textarea></label></div></details>
-    <details class="mehr" id="m-angaben"><summary>Angaben bearbeiten</summary><div class="mehr-in"><div class="form-grid">
-      ${fld('firma', 'Unternehmen', 'firma', a.firma, {ph:'z. B. Muster GmbH'})}
-      ${fld('position', 'Position', 'position', a.position, {ph:'z. B. Data Analyst (m/w/d)'})}
-      ${fld('ort', 'Ort', 'ort', a.ort, {ph:'Stadt'})}
-      ${sel('modell', 'Arbeitsmodell', 'arbeitsmodell', a.arbeitsmodell, MODELLE)}
-      <label class="fld span-2" for="d-anschrift"><span>Anschrift der Firma</span><input class="in" id="d-anschrift" data-f="anschrift" value="${esc(a.anschrift || '')}" placeholder="Straße Nr., PLZ Ort"></label>
-      <label class="fld span-2" for="d-link"><span>Link zur Anzeige</span><div class="inline"><input class="in" id="d-link" data-f="link" type="url" value="${esc(a.link)}" placeholder="https://…"><a class="btn icon" id="d-link-open" href="${esc(link || '#')}" target="_blank" rel="noopener" aria-label="Anzeige öffnen" ${link ? '' : 'hidden'}>${ic('ext')}</a></div></label>
-      ${fld('kennziffer', 'Kennziffer', 'kennziffer', a.kennziffer, {ph:'aus der Anzeige'})}
-      ${fld('frist', 'Bewerbungsfrist', 'fristBis', a.fristBis, {type:'date'})}
-      ${fld('beworben', 'Beworben am', 'beworbenAm', a.beworbenAm, {type:'date'})}
-      ${sel('quelle', 'Gefunden über', 'quelle', a.quelle, QUELLEN)}
-      ${fld('gmin', 'Gehalt laut Anzeige von', 'gehaltMin', a.gehaltMin, {type:'number', ph:'55000', attrs:'inputmode="numeric" step="1000" min="0"'})}
-      ${fld('gmax', 'bis', 'gehaltMax', a.gehaltMax, {type:'number', ph:'65000', attrs:'inputmode="numeric" step="1000" min="0"'})}
-      ${fld('kname', 'Ansprechperson', 'kontakt.name', k.name, {ph:'Name'})}
-      ${fld('krolle', 'Rolle', 'kontakt.rolle', k.rolle, {ph:'Recruiting, Teamleitung …'})}
-      ${fld('kmail', 'E-Mail', 'kontakt.email', k.email, {type:'email'})}
-      ${fld('ktel', 'Telefon', 'kontakt.telefon', k.telefon, {type:'tel'})}
-      <label class="fld" for="d-layout"><span>Design der Unterlagen</span><select class="in" id="d-layout" data-f="layout"><option value="modern" ${a.layout !== 'klassisch' ? 'selected' : ''}>Modern</option><option value="klassisch" ${a.layout === 'klassisch' ? 'selected' : ''}>Klassisch</option></select></label>
-      <label class="fld" for="d-akzent"><span>Akzentfarbe</span><select class="in" id="d-akzent" data-f="akzent">${AKZENT_NAMEN.map(([v, l]) => `<option value="${v}" ${(a.akzent || 'petrol') === v ? 'selected' : ''}>${l}</option>`).join('')}${a.akzent && !AKZENT_NAMEN.some(([v]) => v === a.akzent) ? `<option value="${esc(a.akzent)}" selected>Firmenfarbe ${esc(a.akzent)}</option>` : ''}</select></label>
-      <label class="fld" for="d-sprache"><span>Sprache der Unterlagen</span><select class="in" id="d-sprache" data-f="sprache"><option value="de" ${a.sprache !== 'en' ? 'selected' : ''}>Deutsch</option><option value="en" ${a.sprache === 'en' ? 'selected' : ''}>Englisch${P().cv_en ? '' : ' (englischer Lebenslauf fehlt im Profil)'}</option></select></label>
-      <div class="fld"><span class="lbl" id="lbl-int">Wie sehr willst du die Stelle?</span><div class="stars" role="radiogroup" aria-labelledby="lbl-int">${[1,2,3,4,5].map(n => `<button type="button" role="radio" aria-checked="${a.interesse === n}" aria-label="${n} von 5" class="${n <= a.interesse ? 'on' : ''}" data-stars="${n}">${STAR}</button>`).join('')}</div></div>
-    </div>
-    <div class="danger-zone" id="delZone"><span style="flex:1">Akte endgültig löschen, mit Verlauf und Anschreiben.</span><button class="btn sm danger" type="button" data-act="del-ask">${ic('trash')}Löschen</button></div></div></details>`;
+    ${a.notizen ? `<section><h3 class="v-kopf">Notizen</h3><div class="lesetext" id="d-notizen">${esc(a.notizen)}</div></section>` : ''}
+    ${unterlagenHTML(a)}
+    ${a.stellenText ? `<details class="mehr" id="m-anzeige"><summary>Stellenanzeige</summary><div class="mehr-in"><div class="lesetext" id="d-stelle">${esc(a.stellenText)}</div></div></details>` : ''}`;
+}
+/** Anschreiben, Lebenslauf und was Claude zur Stelle herausgefunden hat: nur zum Ansehen und Kopieren. */
+function unterlagenHTML(a) {
+  const an = a.analyse, vb = a.vorbereitung, rc = a.recherche, p = P();
+  const teile = [];
+  if (a.anschreiben) teile.push(`<div><div class="ki-row" style="justify-content:space-between"><h3>Anschreiben</h3><button class="btn sm" type="button" data-copy="ki-anschreiben">${ic('copy')}Kopieren</button></div><div class="lesetext" id="ki-anschreiben">${esc(a.anschreiben)}</div></div>`);
+  if (p.cv) teile.push(`<div class="ki-row"><button class="btn sm" type="button" data-act="cv-akte" ${DL ? '' : 'hidden'}>${ic('down')}Lebenslauf für diese Stelle ansehen</button><span class="ki-status" id="mappeStatus3"></span></div>`);
+  if (rc?.kurzprofil) teile.push(`<div><h3>Zur Firma</h3><p style="font-size:var(--t-sm);margin-top:6px">${esc(rc.kurzprofil)}</p>${rc.kultur ? `<p class="desc">${esc(rc.kultur)}</p>` : ''}</div>`);
+  if (an && (an.staerken || an.luecken)) teile.push(`<div><h3>Passung</h3>${analyseHTML(an)}</div>`);
+  if (vb) teile.push(`<div><h3>Gesprächsvorbereitung</h3>${prepHTML(vb)}</div>`);
+  if (!teile.length) return '';
+  return `<details class="mehr" id="m-ki"><summary>${a.anschreiben ? 'Anschreiben und Unterlagen' : 'Unterlagen'}</summary><div class="mehr-in">${teile.join('')}</div></details>`;
 }
 const DRAN_RX = /(?:^|\s)(?:antworten|zurückrufen|rückruf)\b/i;
 /** Verlauf: oben, was du als Nächstes tun sollst (Antwortvorschlag, Rückruf), dann Termine und offene Aufgaben,
@@ -3281,45 +3210,30 @@ function verlaufHTML(a) {
   const auf = [...(a.aufgaben || [])].filter(k => !k.erledigt).sort((x, y) => (x.faellig || '9999').localeCompare(y.faellig || '9999'));
   const dran = wartetAufDich(a) ? auf.filter(k => DRAN_RX.test(k.text || '')) : [];
   const ruf = dran.find(k => /zurückrufen|rückruf/i.test(k.text || ''));
-  const mailOben = dran.length > 0 && (!!a.mail?.text || dran.some(k => /antworten/i.test(k.text || '')));
   const kommend = [...(a.termine || [])].filter(x => (x.datum || '').slice(0, 10) >= heute).sort((x, y) => (x.datum || '').localeCompare(y.datum || ''));
-  const aufgabe = k => { const n = k.faellig ? dayDiff(new Date(), parseD(k.faellig)) : null; return `<li><input type="checkbox" class="cb" id="dk-${k.id}" data-task="${id}|${k.id}"><label class="tx" for="dk-${k.id}">${esc(k.text)}</label><span style="display:flex;gap:4px;align-items:center"><span class="due ${n != null && n < 0 ? 'over' : ''}">${k.faellig ? fmtDs(k.faellig) : ''}</span><button class="btn sm icon ghost" type="button" data-kdel="${esc(k.id)}" aria-label="Aufgabe löschen">${ic('x')}</button></span></li>`; };
+  const aufgabe = k => { const n = k.faellig ? dayDiff(new Date(), parseD(k.faellig)) : null; return `<li class="lese"><span class="tx">${esc(k.text)}</span><span class="due ${n != null && n < 0 ? 'over' : ''}">${k.faellig ? fmtDs(k.faellig) : ''}</span></li>`; };
   const tel = String(a.kontakt?.telefon || '').trim();
   const oben = dran.length ? `<section class="ki-card dran" id="duBistDran"><h3>${ic('reply')}Du bist dran</h3>
       <ul class="tasks">${dran.map(aufgabe).join('')}</ul>
       ${ruf && tel ? `<div class="ki-row"><a class="btn primary" href="tel:${esc(tel.replace(/[^\d+]/g, ''))}">${ic('phone')}${esc(tel)} anrufen</a></div>` : ''}
       ${ruf && a.briefing ? `<details id="v-briefing-ruf" open><summary>Briefing für den Anruf</summary><div class="md" style="font-size:var(--t-sm)">${md(a.briefing)}</div></details>` : ''}
-    </section>${mailOben ? mailKarteHTML(a, {titel: 'Antwortvorschlag'}) : ''}` : '';
-  const termine = kommend.length ? `<section><h3 class="v-kopf">Termine</h3><div class="agenda">${kommend.map(x => { const d = parseDT(x.datum); return d ? `<div class="ag-day"><div class="ag-date"><div class="m">${MON[d.getMonth()]}</div><div class="d">${d.getDate()}</div><div class="w">${WT[d.getDay()]}</div></div><div class="ag-items"><div class="ag-item" style="--stage:${stageVar('interview')};cursor:default"><span class="tm">${fmtT(d)}</span><span class="tt">${esc(x.art)}</span><span class="ts">${esc(x.ort || '')}${x.notiz ? `<br>${esc(x.notiz)}` : ''}</span><span class="tl">${calLinks(a, x)}<button class="btn sm ghost" type="button" data-tdel="${esc(x.id)}">${ic('trash')}Entfernen</button></span></div></div></div>` : ''; }).join('')}</div></section>` : '';
+    </section>${dran.length && a.mail?.text ? antwortHTML(a) : ''}` : '';
+  const termine = kommend.length ? `<section><h3 class="v-kopf">Termine</h3><div class="agenda">${kommend.map(x => { const d = parseDT(x.datum); return d ? `<div class="ag-day"><div class="ag-date"><div class="m">${MON[d.getMonth()]}</div><div class="d">${d.getDate()}</div><div class="w">${WT[d.getDay()]}</div></div><div class="ag-items"><div class="ag-item" style="--stage:${stageVar('interview')};cursor:default"><span class="tm">${fmtT(d)}</span><span class="tt">${esc(x.art)}</span><span class="ts">${esc(x.ort || '')}${x.notiz ? `<br>${esc(x.notiz)}` : ''}</span><span class="tl">${calLinks(a, x)}</span></div></div></div>` : ''; }).join('')}</div></section>` : '';
   const rest = auf.filter(k => !dran.includes(k));
   const aufgaben = rest.length ? `<section><h3 class="v-kopf">Offen</h3><ul class="tasks">${rest.map(aufgabe).join('')}</ul></section>` : '';
   const briefing = a.briefing && !ruf ? `<details class="mehr" id="v-briefing" ${kommend.length ? 'open' : ''}><summary>Briefing fürs Gespräch</summary><div class="mehr-in md" style="font-size:var(--t-sm)">${md(a.briefing)}</div></details>` : '';
   const vs = [...a.verlauf].map((v, i) => ({...v, i})).sort((x, y) => (y.datum || '').localeCompare(x.datum || '') || y.i - x.i);
-  const timeline = vs.length ? `<ol class="timeline">${vs.map(v => `<li style="--tone:${VTYP[v.typ]?.tone || 'var(--line-strong)'}"><div class="h"><b>${esc(VTYP[v.typ]?.l || v.typ)}</b>${fmtD(v.datum)} · ${relTage(v.datum)}</div><button class="btn sm icon ghost x" type="button" data-vdel="${esc(v.id)}" aria-label="Eintrag löschen">${ic('x')}</button><div class="b">${esc(v.text)}</div></li>`).join('')}</ol>` : `<div class="empty-mini">Noch keine Einträge.</div>`;
-  const training = ['rueckmeldung', 'interview', 'angebot'].includes(a.status) ? `<details class="mehr" id="v-training"><summary>Gespräch üben</summary><div class="mehr-in">${trainingHTML(a)}</div></details>` : '';
-  const neu = `<details class="mehr" id="v-neu"><summary>Eintragen: Ereignis, Termin, Aufgabe, Mail</summary><div class="mehr-in">
-      <form class="add-row" id="vForm">
-        <label class="fld" for="v-typ"><span>Art</span><select class="in" id="v-typ">${Object.entries(VTYP).filter(([k]) => k !== 'status').map(([k, v]) => `<option value="${k}">${v.l}</option>`).join('')}</select></label>
-        <label class="fld" for="v-datum"><span>Datum</span><input class="in" id="v-datum" type="date" value="${heute}"></label>
-        <label class="fld" for="v-text"><span>Was ist passiert?</span><input class="in" id="v-text" placeholder="z. B. Recruiterin hat angerufen"></label>
-        <button class="btn primary" type="submit">${ic('plus')}Eintragen</button>
-      </form>
-      <form class="add-row t4" id="tForm">
-        <label class="fld" for="t-datum"><span>Termin</span><input class="in" id="t-datum" type="datetime-local" required></label>
-        <label class="fld" for="t-art"><span>Art</span><select class="in" id="t-art">${TERMINARTEN.map(x => `<option>${x}</option>`).join('')}</select></label>
-        <label class="fld" for="t-ort"><span>Ort oder Link</span><input class="in" id="t-ort" placeholder="Teams-Link, Adresse …"></label>
-        <button class="btn primary" type="submit">${ic('plus')}Termin</button>
-        <label class="fld" for="t-notiz" style="grid-column:1/-1"><span>Notiz</span><input class="in" id="t-notiz" placeholder="Mit wem? Was vorbereiten?"></label>
-      </form>
-      <div class="ki-row"><button class="btn sm ki" type="button" data-act="einladung">${ic('spark')}Einladung einfügen</button></div>
-      <form class="add-row t2" id="kForm">
-        <label class="fld" for="k-text"><span>Aufgabe</span><input class="in" id="k-text" placeholder="z. B. Arbeitsprobe bis Freitag schicken" required></label>
-        <label class="fld" for="k-faellig"><span>Fällig am</span><input class="in" id="k-faellig" type="date"></label>
-        <button class="btn primary" type="submit">${ic('plus')}Aufgabe</button>
-      </form>
-      ${mailOben ? '' : mailKarteHTML(a)}
-    </div></details>`;
-  return `${oben}${termine}${aufgaben}${briefing}<section><h3 class="v-kopf">Verlauf</h3>${timeline}</section>${neu}${training}`;
+  const timeline = vs.length ? `<ol class="timeline">${vs.map(v => `<li style="--tone:${VTYP[v.typ]?.tone || 'var(--line-strong)'}"><div class="h"><b>${esc(VTYP[v.typ]?.l || v.typ)}</b>${fmtD(v.datum)} · ${relTage(v.datum)}</div><div class="b">${esc(v.text)}</div></li>`).join('')}</ol>` : `<div class="empty-mini">Noch keine Einträge.</div>`;
+  return `${oben}${termine}${aufgaben}${briefing}<section><h3 class="v-kopf">Verlauf</h3>${timeline}</section>`;
+}
+/** Vorbereitete Antwort: ansehen, kopieren oder per Gmail senden. */
+function antwortHTML(a) {
+  const darf = (MCP || GMAIL?.eingerichtet()) && a.kontakt?.email;
+  return `<section class="ki-card dran" id="mailKarte"><h3>${ic('mail')}Antwortvorschlag</h3>
+    ${a.kontakt?.email ? `<p class="muted" style="font-size:var(--t-xs)">An <span style="user-select:all;font-family:var(--f-mono)">${esc(a.kontakt.email)}</span></p>` : ''}
+    <div class="lesetext" id="ki-mail">${esc(a.mail.text)}</div>
+    <div class="ki-row">${darf ? `<button class="btn primary" type="button" data-act="mail-gmail">${ic('mail')}Per Gmail senden</button>` : ''}<button class="btn" type="button" data-copy="ki-mail">${ic('copy')}Kopieren</button></div>
+  </section>`;
 }
 function renderDrawerBody(reset = false) {
   const id = state.openId; const a = state.apps[id]; const b = $('#drBody'); if (!a || !b) return;
@@ -3575,7 +3489,6 @@ function portalHTML(a) {
     ${cv?.profil ? feld('pa-profil', 'Kurzprofil', cv.profil, 4) : ''}
     ${a.anschreiben ? feld('pa-brief', 'Anschreiben (Text)', briefOhneBetreff(a), 8) : ''}
     ${a.motivationKurz ? feld('pa-kurz', 'Kurzfassung', a.motivationKurz, 5) : ''}
-    ${a.anschreiben ? `<div class="ki-row" style="margin-top:6px"><button class="btn sm ki" type="button" data-act="kurzfassung" ${job || kiState !== 'ok' ? 'disabled' : ''}>${ic('spark')}${a.motivationKurz ? 'Kurzfassung neu' : 'Kurzfassung für Felder mit Zeichenlimit (600 Zeichen)'}</button><span class="ki-status" id="st-kurz">${job ? '<span class="pulse"></span>Kürzt …' : ''}</span></div>` : ''}
     <p class="desc" style="margin-top:12px">Viele Portale wollen die Unterlagen einzeln:</p>
     <div class="ki-row"><button class="btn sm" type="button" data-act="dl-teil" data-teil="brief" ${a.anschreiben ? '' : 'disabled'}>${ic('down')}Anschreiben</button><button class="btn sm" type="button" data-act="dl-teil" data-teil="cv">${ic('down')}Lebenslauf</button><button class="btn sm" type="button" data-act="dl-teil" data-teil="anlagen">${ic('down')}Zeugnisse</button><span class="ki-status" id="teilStatus"></span></div>
   </details>`;
@@ -3616,8 +3529,7 @@ function linkedinPanel() {
       ${feld('li-skills', 'Kenntnisse', (li.skills || []).join(', '), 2, 'in LinkedIn einzeln anlegen')}
       ${feld('li-xing', 'XING „Ich biete“', (li.xingBiete || []).join(', '), 2)}
       ${li.tipps?.length ? `<ul class="li-tipps">${li.tipps.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}`
-      : `<p class="muted" style="font-size:var(--t-sm)">Noch keine Profiltexte. Claude schreibt sie dir aus deinem Lebenslauf.</p>`}
-    <div class="ki-row" style="margin-top:10px"><button class="btn sm ki" type="button" data-act="li-neu" ${job || kiState !== 'ok' ? 'disabled' : ''}>${ic('spark')}${li ? 'Neu schreiben' : 'Profiltexte erstellen'}</button><span class="ki-status" id="st-linkedin">${job ? '<span class="pulse"></span>Schreibt …' : ''}</span></div>
+      : `<p class="muted" style="font-size:var(--t-sm)">Noch keine Profiltexte. Sag Claude Bescheid, wenn du welche willst.</p>`}
   </section>`;
 }
 async function linkedinErstellen() {
@@ -4158,7 +4070,7 @@ document.addEventListener('click', async e => {
     if (act === 'dl-teil' && state.openId) return teilHerunterladen(state.apps[state.openId], el.dataset.teil);
     if (act === 'kurzfassung' && state.openId) return kurzfassungErstellen();
     if (act === 'li-neu') return linkedinErstellen();
-    if (act === 'mail-gmail' && state.openId) { const t2 = $('#ki-mail'); const a2 = state.apps[state.openId]; if (t2 && a2) a2.mail.text = t2.value; return mailGmailModal(state.openId); }
+    if (act === 'mail-gmail' && state.openId) return mailGmailModal(state.openId);
     if (act === 'cv-akte' && state.openId) return cvHerunterladen(state.apps[state.openId], null, $('#mappeStatus3') || $('#mappeStatus2'));
     if (act === 'cv-vorschau') return cvHerunterladen({}, el.dataset.layout, $('#cvStatus'));
     if (act === 'cv-reset' && state.openId) { const a = state.apps[state.openId]; delete a.cv; saveApp(state.openId, false); renderDrawerBody(); toast('Lebenslauf wieder in der Standardfassung'); return; }
@@ -4230,7 +4142,6 @@ document.addEventListener('change', e => {
     const s = $('#drBody .sec-head span'); if (s) s.textContent = `${n} von ${UNTERLAGEN.length} Unterlagen beigelegt`;
     renderDrawerHead(); return;
   }
-  if (t.id === 'drStatus' && state.openId) { setStatus(state.openId, t.value); return; }
   if (t.id === 'mailTyp' && state.openId) { state.apps[state.openId].mail.typ = t.value; saveApp(state.openId, false); }
 });
 // Feldbindung in der Akte
