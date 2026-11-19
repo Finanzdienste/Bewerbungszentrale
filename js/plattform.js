@@ -18,6 +18,8 @@
  *   downloads  Datei speichern über einen Download-Link.
  *   user       Wer die App öffnet, ist der Besitzer.
  *   mcp        gibt es nicht. Senden per Gmail geht stattdessen über
+ *              bzPlattform.drive: Google Drive nur für Dateien, die die App selbst
+ *              anlegt (drive.file): Bewerbungsmappen fürs Handy.
  *              bzPlattform.gmail: Anmeldung mit Google (nur Erlaubnis zum
  *              Senden, gmail.send), dann die Gmail-API. Gesendet wird nur
  *              auf Knopfdruck der Person. Die Client-ID der eigenen
@@ -644,6 +646,64 @@
     };
   })();
 
+  /* ------------------------------------------------ Google Drive: Bewerbungsmappen fürs Handy, nur Dateien, die die App selbst anlegt (drive.file) */
+  const drive = (() => {
+    const SCOPE = 'https://www.googleapis.com/auth/drive.file';
+    const MERKEN = 'bewerbungszentrale.drive.v1', AN = 'bewerbungszentrale.drive.an'; // Zugriff läuft nach einer Stunde ab, AN merkt sich nur, dass die Person Drive verbunden hat
+    let zugriff = (() => { const z = lies(MERKEN); return z && typeof z.token === 'string' && z.bis > Date.now() + 60_000 ? z : null; })();
+    const vergessen = () => { zugriff = null; try { localStorage.removeItem(MERKEN); } catch {} };
+    const clientId = () => { const g = lies(GOOGLE); return g && GOOGLE_MUSTER.test(g.clientId || '') ? g.clientId : ''; };
+    const angemeldet = () => !!zugriff && zugriff.bis > Date.now() + 60_000;
+    function anmelden(konto = '') { // im Klick aufrufen; nach dem ersten Mal schließt sich das Google-Fenster von selbst
+      if (angemeldet()) return Promise.resolve();
+      const o = window.google?.accounts?.oauth2;
+      if (!o || !clientId()) return Promise.reject(fehler('unavailable', 'Die Google-Anmeldung ist nicht bereit.'));
+      return new Promise((res, rej) => {
+        o.initTokenClient({
+          client_id: clientId(), scope: SCOPE, prompt: '', ...(/@/.test(konto) ? { hint: konto } : {}),
+          callback: (r) => {
+            if (r?.access_token && (!o.hasGrantedAllScopes || o.hasGrantedAllScopes(r, SCOPE))) { zugriff = { token: r.access_token, bis: Date.now() + (Number(r.expires_in) || 3600) * 1000 }; schreib(MERKEN, zugriff); schreib(AN, { an: true }); res(); }
+            else rej(fehler('consent_required', 'Ohne die Erlaubnis für Google Drive geht es nicht.'));
+          },
+          error_callback: (e) => rej(fehler(e?.type === 'popup_closed' ? 'abgebrochen' : 'consent_required', e?.message || 'Anmeldung abgebrochen')),
+        }).requestAccessToken();
+      });
+    }
+    async function api(pfad, { method = 'GET', query = {}, json, body, typ, upload = false } = {}) {
+      if (!angemeldet()) throw fehler('needs_reauth', 'Bitte neu bei Google anmelden.');
+      const u = new URL((upload ? 'https://www.googleapis.com/upload/drive/v3/' : 'https://www.googleapis.com/drive/v3/') + pfad);
+      for (const [k, v] of Object.entries(query)) u.searchParams.set(k, v);
+      let r;
+      try { r = await fetch(u, { method, headers: { Authorization: `Bearer ${zugriff.token}`, ...(json ? { 'Content-Type': 'application/json; charset=UTF-8' } : typ ? { 'Content-Type': typ } : {}) }, body: json ? JSON.stringify(json) : body }); }
+      catch (e) { throw fehler('unklar', e?.message || 'Netzwerkfehler'); }
+      if (r.ok) return r.status === 204 ? {} : r.json().catch(() => ({}));
+      const j = await r.json().catch(() => null), m = j?.error?.message || `HTTP ${r.status}`;
+      if (r.status === 401) { vergessen(); throw fehler('needs_reauth', m); }
+      throw fehler({ 400: 'bad_request', 403: 'forbidden', 404: 'not_found', 429: 'rate_limited' }[r.status] || 'unklar', m);
+    }
+    async function liste(q) {
+      const aus = []; let seite = '';
+      do {
+        const j = await api('files', { query: { q, fields: 'nextPageToken,files(id,name,mimeType,appProperties)', pageSize: '1000', spaces: 'drive', ...(seite ? { pageToken: seite } : {}) } });
+        aus.push(...(j.files || [])); seite = j.nextPageToken || '';
+      } while (seite);
+      return aus;
+    }
+    const ordner = (name, parent, appProperties = {}) => api('files', { method: 'POST', query: { fields: 'id,name,appProperties' }, json: { name, mimeType: 'application/vnd.google-apps.folder', ...(parent ? { parents: [parent] } : {}), appProperties } });
+    function hochladen({ name, parent, bytes, typ = 'application/octet-stream' }) {
+      const g = 'bz' + Math.random().toString(36).slice(2), enc = new TextEncoder();
+      const vorn = enc.encode(`--${g}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: [parent] })}\r\n--${g}\r\nContent-Type: ${typ}\r\n\r\n`);
+      return api('files', { method: 'POST', upload: true, query: { uploadType: 'multipart', fields: 'id' }, typ: `multipart/related; boundary=${g}`, body: new Blob([vorn, bytes, enc.encode(`\r\n--${g}--\r\n`)]) });
+    }
+    const ersetzen = (id, bytes, typ = 'application/octet-stream') => api('files/' + encodeURIComponent(id), { method: 'PATCH', upload: true, query: { uploadType: 'media', fields: 'id' }, typ, body: new Blob([bytes]) });
+    const aendern = (id, json) => api('files/' + encodeURIComponent(id), { method: 'PATCH', query: { fields: 'id' }, json });
+    return {
+      eingerichtet: () => !!clientId(), verbunden: () => !!lies(AN)?.an, vorbereiten: () => gmail.vorbereiten(),
+      angemeldet, anmelden, liste, ordner, hochladen, ersetzen, aendern,
+      trennen: () => { vergessen(); try { localStorage.removeItem(AN); } catch {} },
+    };
+  })();
+
   /* ------------------------------------------------ window.claude */
   const faehig = {
     db: async () => { await bereit; return db; },
@@ -654,7 +714,7 @@
     mcp: async () => { throw fehler('not_granted', 'In der App gibt es keinen direkten Gmail-Versand.'); },
   };
   window.claude = { use: (name) => (faehig[name] ? faehig[name]() : Promise.reject(fehler('not_granted', name))) };
-  window.bzPlattform = { abgleichen: () => abgleichen(), einrichten: () => einrichtenZeigen(''), offen: () => warteschlange.size + (nurLesen ? 0 : lokal.size), speichern: () => sofortSchreiben(), kiDa: () => !!kiSchluessel(), nurLesen: () => nurLesen, gmail };
+  window.bzPlattform = { abgleichen: () => abgleichen(), einrichten: () => einrichtenZeigen(''), offen: () => warteschlange.size + (nurLesen ? 0 : lokal.size), speichern: () => sofortSchreiben(), kiDa: () => !!kiSchluessel(), nurLesen: () => nurLesen, gmail, drive };
 
   zugangHerstellen();
   start();

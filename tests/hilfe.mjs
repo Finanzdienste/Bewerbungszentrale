@@ -28,12 +28,13 @@ export async function schliessen() { if (browser) await browser.close(); browser
  * speicher: localStorage vor dem Start (z. B. Zugang). ki: (prompt) => Antworttext.
  * google: Google-Anmeldung und Gmail-API nachbilden; gesendete Mails landen in gmail.
  */
-export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false, graphql = true, google = false, gmailFehler = 0, nurLesen = false } = {}) {
+export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false, graphql = true, google = false, gmailFehler = 0, nurLesen = false, driveStart = [] } = {}) {
   const b = await browserStarten();
   const ctx = await b.newContext({ viewport: { width: breite, height: hoehe }, serviceWorkers: 'block', acceptDownloads: true, permissions: ['clipboard-read', 'clipboard-write'] });
   const gh = githubAttrappe(ladeOrdner(daten), { graphql, nurLesen });
   const kia = kiAttrappe(ki);
   const fehler = [], gmail = [];
+  const drive = driveAttrappe(driveStart);
   const vorher = speicher === undefined ? { 'bewerbungszentrale.zugang.v1': JSON.stringify({ token: gh.token }), 'bewerbungszentrale.ki.v1': JSON.stringify({ schluessel: 'sk-ant-test-00000000000000000000000000' }) } : speicher;
   await ctx.addInitScript(({ vorher, teilen, google }) => {
     if (!sessionStorage.getItem('bz-test-start')) { for (const [k, v] of Object.entries(vorher)) localStorage.setItem(k, v); sessionStorage.setItem('bz-test-start', '1'); }
@@ -55,6 +56,7 @@ export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), spe
     }
     if (u.hostname === 'api.github.com') return gh.handler(route);
     if (u.hostname === 'api.anthropic.com') return kia.handler(route);
+    if (u.hostname === 'www.googleapis.com' && /^\/(upload\/)?drive\/v3\//.test(u.pathname)) return drive.handler(route);
     if (u.hostname === 'gmail.googleapis.com') {
       const r = route.request(), roh = r.postData() || '';
       const mime = /json/.test(r.headers()['content-type'] || '') ? Buffer.from(JSON.parse(roh).raw.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8') : roh;
@@ -70,7 +72,44 @@ export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), spe
   seite.on('pageerror', (e) => fehler.push('Seitenfehler: ' + e.message));
   seite.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) fehler.push('Konsole: ' + m.text().slice(0, 300)); });
   await seite.goto('http://app.test/Bewerbungszentrale/');
-  return { seite, ctx, gh, ki: kia, fehler, gmail };
+  return { seite, ctx, gh, ki: kia, fehler, gmail, drive };
+}
+
+/** Google Drive v3 im Speicher: nur das, was die App braucht (Liste mit q, Ordner, Multipart-Upload, Ersetzen, Ändern). */
+function driveAttrappe(start = []) {
+  const dateien = new Map(), log = [];
+  let n = 0;
+  for (const f of start) { const id = f.id || 'd' + ++n; dateien.set(id, { trashed: false, parents: [], appProperties: {}, inhalt: Buffer.alloc(0), ...f, id }); }
+  const json = (route, status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+  const aus = (f) => ({ id: f.id, name: f.name, mimeType: f.mimeType, appProperties: f.appProperties });
+  async function handler(route) {
+    const r = route.request(), u = new URL(r.url()), m = r.method(), upload = u.pathname.startsWith('/upload/');
+    if (!/^Bearer ya29\./.test(r.headers().authorization || '')) return json(route, 401, { error: { code: 401, message: 'Invalid Credentials' } });
+    const id = (u.pathname.match(/\/files\/([^/]+)$/) || [])[1];
+    log.push(`${m} ${upload ? 'upload ' : ''}${id ? 'files/' + id : 'files'}`);
+    if (m === 'GET' && !id) {
+      const q = u.searchParams.get('q') || '', p = (q.match(/'([^']+)' in parents/) || [])[1], w = (q.match(/key='([^']+)' and value='([^']+)'/) || []).slice(1);
+      const files = [...dateien.values()].filter((f) => !f.trashed && (!p || f.parents.includes(p)) && (!w.length || f.appProperties[w[0]] === w[1])).map(aus);
+      return json(route, 200, { files });
+    }
+    if (m === 'POST' && !upload) { const b = JSON.parse(r.postData() || '{}'), f = { id: 'd' + ++n, trashed: false, parents: [], appProperties: {}, inhalt: Buffer.alloc(0), ...b }; dateien.set(f.id, f); return json(route, 200, aus(f)); }
+    if (m === 'POST' && upload) {
+      const roh = r.postDataBuffer(), g = '--' + (r.headers()['content-type'].match(/boundary=(\S+)/) || [])[1];
+      const teile = []; let i = roh.indexOf(g);
+      while (i >= 0) { const j = roh.indexOf(g, i + g.length); if (j < 0) break; teile.push(roh.subarray(i + g.length + 2, j - 2)); i = j; }
+      const kopfEnde = (b) => b.indexOf('\r\n\r\n') + 4;
+      const meta = JSON.parse(teile[0].subarray(kopfEnde(teile[0])).toString('utf8')), inhalt = Buffer.from(teile[1].subarray(kopfEnde(teile[1])));
+      const f = { id: 'd' + ++n, trashed: false, appProperties: {}, ...meta, mimeType: (teile[1].toString('latin1').match(/Content-Type: ([^\r]+)/) || [])[1], inhalt };
+      dateien.set(f.id, f); return json(route, 200, { id: f.id });
+    }
+    if (m === 'PATCH' && id) {
+      const f = dateien.get(id); if (!f) return json(route, 404, { error: { code: 404, message: 'File not found' } });
+      if (upload) f.inhalt = r.postDataBuffer(); else { const b = JSON.parse(r.postData() || '{}'); if ('trashed' in b) f.trashed = b.trashed; if (b.appProperties) f.appProperties = { ...f.appProperties, ...b.appProperties }; if (b.name) f.name = b.name; }
+      return json(route, 200, { id });
+    }
+    return json(route, 400, { error: { code: 400, message: 'nicht nachgebaut' } });
+  }
+  return { handler, dateien, log, kinder: (pid) => [...dateien.values()].filter((f) => !f.trashed && f.parents.includes(pid)) };
 }
 
 export const warte = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -2021,21 +2021,53 @@ const ordnerIdb = (art, wert) => new Promise(res => { // Ordner-Handle merken, d
   } catch { res(null); }
 });
 const ordnerGeht = () => !!window.showDirectoryPicker && !window.bzPlattform?.nurLesen?.();
+const GDRIVE = window.bzPlattform?.drive || null;
+const DRIVE = {wurzel: '', sig: '', info: '', fehler: '', wartet: false};
+const driveAn = () => !!GDRIVE?.verbunden?.() && !!GDRIVE.eingerichtet() && !window.bzPlattform?.nurLesen?.();
+const amHandy = () => matchMedia('(pointer: coarse)').matches;
 function ordnerZeile(bereit) {
-  if (!ordnerGeht() || !bereit.some(istPortal)) return '';
-  if (ORDNER.dir) return `<p class="desc" id="ordner-zeile">${ic('down')} Portal-Mappen liegen automatisch in „${esc(ORDNER.dir.name)}“${ORDNER.info ? `: ${esc(ORDNER.info)}` : ''}${ORDNER.fehler ? ` <span class="err">${esc(ORDNER.fehler)}</span>` : ''} · <a href="#" data-act="ordner-waehlen">anderer Ordner</a></p>`;
-  if (ORDNER.wartet) return `<p class="desc" id="ordner-zeile">${ic('down')} Ordner „${esc(ORDNER.wartet.name)}“: Edge fragt beim nächsten Klick einmal nach. Wähl „Bei jedem Besuch zulassen“, dann läuft es danach still.</p>`;
-  return `<p class="desc" id="ordner-zeile">${ic('down')} Portal-Mappen automatisch als Ordner auf dem PC ablegen (je Stelle mit Score davor): <a href="#" data-act="ordner-waehlen">Ordner einmal wählen</a></p>`;
+  if (!bereit.some(istPortal) || window.bzPlattform?.nurLesen?.()) return '';
+  const z = [];
+  if (ordnerGeht()) {
+    if (ORDNER.dir) z.push(`${ic('down')} Portal-Mappen liegen automatisch in „${esc(ORDNER.dir.name)}“${ORDNER.info ? `: ${esc(ORDNER.info)}` : ''}${ORDNER.fehler ? ` <span class="err">${esc(ORDNER.fehler)}</span>` : ''} · <a href="#" data-act="ordner-waehlen">anderer Ordner</a>`);
+    else if (ORDNER.wartet) z.push(`${ic('down')} Ordner „${esc(ORDNER.wartet.name)}“: Edge fragt beim nächsten Klick einmal nach. Wähl „Bei jedem Besuch zulassen“, dann läuft es danach still.`);
+    else z.push(`${ic('down')} Portal-Mappen automatisch als Ordner auf dem PC ablegen (je Stelle mit Score davor): <a href="#" data-act="ordner-waehlen">Ordner einmal wählen</a>`);
+  }
+  if (GDRIVE) {
+    if (driveAn() && GDRIVE.angemeldet()) z.push(`${ic('down')} Fürs Handy in Google Drive, Ordner „Bewerbungsmappen“${DRIVE.info ? `: ${esc(DRIVE.info)}` : ''}${DRIVE.fehler ? ` <span class="err">${esc(DRIVE.fehler)}</span>` : ''}`);
+    else if (driveAn()) z.push(`${ic('down')} Google Drive „Bewerbungsmappen“${DRIVE.info ? `: ${esc(DRIVE.info)}` : ''}${DRIVE.fehler ? ` <span class="err">${esc(DRIVE.fehler)}</span>` : ''} · ${amHandy() ? '<a href="#" data-act="drive-verbinden">jetzt abgleichen</a>' : 'die Anmeldung erneuert sich beim nächsten Klick'}`);
+    else z.push(`${ic('down')} Dieselben Mappen aufs Handy, über Google Drive: <a href="#" data-act="drive-verbinden">${GDRIVE.eingerichtet() ? 'Drive einmal verbinden' : 'einrichten'}</a>`);
+  }
+  return z.length ? `<div class="desc" id="ordner-zeile">${z.map(x => `<p style="margin:0 0 2px">${x}</p>`).join('')}</div>` : '';
+}
+function ordnerZeileNeu() { const z = $('#ordner-zeile'); if (z) z.outerHTML = ordnerZeile(list().filter(istBereit)); }
+async function driveVerbinden() {
+  if (!GDRIVE) return;
+  if (!GDRIVE.eingerichtet()) return gmailEinrichtenModal([], () => { toast('Gespeichert. Jetzt „Drive einmal verbinden“ antippen.'); GDRIVE.vorbereiten().catch(() => {}); renderSoon(); });
+  try { await GDRIVE.vorbereiten(); await GDRIVE.anmelden(P().gmailKonto || ''); } // im Klick, sonst blockiert der Browser das Google-Fenster
+  catch (e) { if (e?.code !== 'abgebrochen') toast(e?.message || 'Google-Anmeldung hat nicht geklappt.'); return; }
+  DRIVE.fehler = ''; DRIVE.sig = ''; DRIVE.info = 'wird gefüllt …'; renderSoon(); ordnerSync();
+}
+let driveKlick = null;
+function driveAufKlickWarten() { // am PC: abgelaufene Anmeldung beim nächsten Klick still erneuern (das Google-Fenster schließt sich von selbst)
+  if (driveKlick || amHandy()) return;
+  driveKlick = async () => {
+    document.removeEventListener('click', driveKlick, true); driveKlick = null;
+    try { await GDRIVE.anmelden(P().gmailKonto || ''); DRIVE.wartet = false; ordnerPlanen(300); } catch { /* dann eben beim nächsten Mal */ }
+  };
+  document.addEventListener('click', driveKlick, true);
+  GDRIVE.vorbereiten().catch(() => {});
 }
 async function ordnerWaehlen() {
   let dir;
   try { dir = await window.showDirectoryPicker({id: 'bz-mappen', mode: 'readwrite', startIn: 'documents'}); } // im Klick, sonst lässt der Browser das Fenster nicht zu
   catch (e) { if (e?.name !== 'AbortError') toast('Diesen Ordner gibt Edge nicht frei. Leg darin einen Unterordner an und wähl den.'); return; }
-  ORDNER.dir = dir; ORDNER.wartet = null; ORDNER.info = 'wird gefüllt …'; ORDNER.fehler = '';
+  ORDNER.dir = dir; ORDNER.wartet = null; ORDNER.info = 'wird gefüllt …'; ORDNER.fehler = ''; ORDNER.sig = '';
   await ordnerIdb('put', dir);
   renderSoon(); ordnerSync();
 }
 async function ordnerStart() { // beim Laden: gemerkten Ordner wieder öffnen, ohne Klick, wenn Edge es dauerhaft erlaubt
+  if (driveAn()) { GDRIVE.vorbereiten().catch(() => {}); ordnerPlanen(1500); }
   if (!ordnerGeht()) return;
   const h = await ordnerIdb('get'); if (!h?.queryPermission) return;
   let p = 'prompt'; try { p = await h.queryPermission({mode: 'readwrite'}); } catch { return; }
@@ -2050,56 +2082,113 @@ async function ordnerStart() { // beim Laden: gemerkten Ordner wieder öffnen, o
   document.addEventListener('click', frag, true);
 }
 function ordnerPlanen(ms = 4000) { // nach Änderungen gebündelt abgleichen
-  if (!ORDNER.dir || ORDNER.timer || !state.loaded || !state.profilLoaded) return;
+  if ((!ORDNER.dir && !driveAn()) || ORDNER.timer || !state.loaded || !state.profilLoaded) return;
   ORDNER.timer = setTimeout(() => { ORDNER.timer = null; ordnerSync(); }, ms);
 }
+function mappenPlan() { // was in die Ordner gehört: freigegebene Portal-Bewerbungen, höchster Score zuerst
+  const belegt = firmenMitVersand(), profilStand = sha1Hex(pyJson(P())).slice(0, 12), namen = new Set();
+  const liste = list().filter(a => istBereit(a) && istPortal(a) && !belegt.has(firmaGruppe(a.firma))).map(a => ({a, sc: wertungVon(a).wert ?? 0})).sort((x, y) => y.sc - x.sc)
+    .map(x => {
+      let name = ordnerName(x.a, x.sc); for (let i = 2; namen.has(name); i++) name = `${ordnerName(x.a, x.sc).slice(0, 85)} (${i})`; namen.add(name);
+      const info = portalInfos(x.a);
+      return {...x, name, info, stand: `m2|${fassungVon(x.a)}|${profilStand}#${sha1Hex(info).slice(0, 10)}`}; // m2: Zeugnisse in jedem Ordner
+    });
+  return {liste, profilStand, sig: profilStand + '\n' + liste.map(x => x.name + '\t' + x.stand).join('\n')};
+}
 async function ordnerSync() {
-  if (!ORDNER.dir || !state.loaded || !state.profilLoaded) return;
+  if ((!ORDNER.dir && !driveAn()) || !state.loaded || !state.profilLoaded) return;
   if (ORDNER.laeuft) { ORDNER.nochmal = true; return; }
-  ORDNER.laeuft = true; ORDNER.fehler = '';
+  ORDNER.laeuft = true;
+  try {
+    const plan = mappenPlan(), pause = () => new Promise(r => setTimeout(r, 30)); // die App bleibt bedienbar
+    let zeugnisse = null; const zg = async () => zeugnisse || (zeugnisse = await mappeBauen(plan.liste[0].a, {teil: 'anlagen'})); // einmal bauen, überall ablegen
+    const gebaut = new Map(); // PDFs je Stelle nur einmal bauen, auch wenn PC-Ordner und Drive sie brauchen
+    const dateien = x => { if (!gebaut.has(x.name)) gebaut.set(x.name, (async () => {
+      const aus = [];
+      for (const teil of ['brief', 'cv', 'alles']) { const r = await mappeBauen(x.a, {teil}); aus.push({name: r.filename, bytes: r.bytes, typ: 'application/pdf'}); await pause(); }
+      const z = await zg(); if (z.seiten) aus.push({name: z.filename, bytes: z.bytes, typ: 'application/pdf'});
+      return aus;
+    })()); return gebaut.get(x.name); };
+    if (ORDNER.dir && plan.sig !== ORDNER.sig) await lokalAbgleich(plan, dateien);
+    if (driveAn() && plan.sig !== DRIVE.sig) {
+      if (GDRIVE.angemeldet()) await driveAbgleich(plan, dateien);
+      else { DRIVE.wartet = true; driveAufKlickWarten(); }
+    }
+  } finally {
+    ORDNER.laeuft = false; ordnerZeileNeu();
+    if (ORDNER.nochmal) { ORDNER.nochmal = false; ordnerPlanen(1000); }
+  }
+}
+async function lokalAbgleich(plan, dateien) {
   const dir = ORDNER.dir, enc = s => new TextEncoder().encode(s);
   const schreib = async (ordner, name, daten) => { const fh = await ordner.getFileHandle(name, {create: true}); const w = await fh.createWritable(); await w.write(daten); await w.close(); };
   const lies = async (ordner, name) => { try { return await (await (await ordner.getFileHandle(name)).getFile()).text(); } catch { return ''; } };
-  const pause = () => new Promise(r => setTimeout(r, 30)); // die App bleibt bedienbar
-  let neuGebaut = 0, weg = 0;
+  const zeig = t => { ORDNER.info = t; ordnerZeileNeu(); };
+  let neuGebaut = 0, weg = 0; ORDNER.fehler = '';
   try {
-    const belegt = firmenMitVersand(), profilStand = sha1Hex(pyJson(P())).slice(0, 12);
-    const liste = list().filter(a => istBereit(a) && istPortal(a) && !belegt.has(firmaGruppe(a.firma))).map(a => ({a, sc: wertungVon(a).wert ?? 0})).sort((x, y) => y.sc - x.sc)
-      .map(x => { const info = portalInfos(x.a); return {...x, name: ordnerName(x.a, x.sc), info, stand: `m2|${fassungVon(x.a)}|${profilStand}#${sha1Hex(info).slice(0, 10)}`}; }); // m2: Zeugnisse in jedem Ordner
-    const sig = profilStand + '\n' + liste.map(x => x.name + '\t' + x.stand).join('\n');
-    if (sig === ORDNER.sig) return; // nichts geändert: Laufwerk nicht anfassen (das erste Mal nach dem Laden prüft immer)
-    const zeig = t => { ORDNER.info = t; const z = $('#ordner-zeile'); if (z) z.outerHTML = ordnerZeile(list().filter(istBereit)); };
     zeig('wird abgeglichen …');
     let alt = {}; try { alt = JSON.parse(await lies(dir, '.bewerbungszentrale.json') || '{}'); } catch { alt = {}; }
-    const altO = alt.ordner || {}, neu = {}, namen = new Set(liste.map(x => x.name));
+    const altO = alt.ordner || {}, neu = {}, namen = new Set(plan.liste.map(x => x.name));
     for (const n of Object.keys(altO)) if (!namen.has(n)) { try { await dir.removeEntry(n, {recursive: true}); weg++; } catch { /* schon weg oder gerade offen */ } }
     if (alt.zeugnisse) { try { await dir.removeEntry(alt.zeugnisse); } catch { /* weg */ } } // früher einmal im Hauptordner, jetzt in jedem Stellen-Ordner
-    let zeugnisse = null; const zg = async () => zeugnisse || (zeugnisse = await mappeBauen(liste[0].a, {teil: 'anlagen'})); // einmal bauen, überall ablegen
-    for (const [i, {a, name, info, stand}] of liste.entries()) {
+    for (const [i, x] of plan.liste.entries()) {
       if (ORDNER.dir !== dir) return;
-      const [pdfAlt, infoAlt] = String(altO[name] || '').split('#'), [pdfNeu, infoNeu] = stand.split('#');
-      let ordner = null; try { ordner = await dir.getDirectoryHandle(name); } catch { /* fehlt (neu oder von Hand gelöscht) */ }
+      const [pdfAlt, infoAlt] = String(altO[x.name] || '').split('#'), [pdfNeu, infoNeu] = x.stand.split('#');
+      let ordner = null; try { ordner = await dir.getDirectoryHandle(x.name); } catch { /* fehlt (neu oder von Hand gelöscht) */ }
       if (!ordner || pdfAlt !== pdfNeu) {
-        zeig(`wird gefüllt: ${i + 1} von ${liste.length}, gerade ${a.firma || ''} …`);
-        ordner = ordner || await dir.getDirectoryHandle(name, {create: true});
-        for (const teil of ['brief', 'cv', 'alles']) { const r = await mappeBauen(a, {teil}); await schreib(ordner, r.filename, r.bytes); await pause(); }
-        const z = await zg(); if (z.seiten) await schreib(ordner, z.filename, z.bytes);
-        await schreib(ordner, 'Portal-Infos.txt', enc(info)); neuGebaut++;
-      } else if (infoAlt !== infoNeu) await schreib(ordner, 'Portal-Infos.txt', enc(info));
-      neu[name] = stand;
+        zeig(`wird gefüllt: ${i + 1} von ${plan.liste.length}, gerade ${x.a.firma || ''} …`);
+        ordner = ordner || await dir.getDirectoryHandle(x.name, {create: true});
+        for (const d of await dateien(x)) await schreib(ordner, d.name, d.bytes);
+        await schreib(ordner, 'Portal-Infos.txt', enc(x.info)); neuGebaut++;
+      } else if (infoAlt !== infoNeu) await schreib(ordner, 'Portal-Infos.txt', enc(x.info));
+      neu[x.name] = x.stand;
     }
-    const manifest = {hinweis: 'Von der Bewerbungszentrale angelegt. Ordner aus dieser Liste räumt sie selbst weg, wenn die Stelle erledigt ist.', profil: profilStand, ordner: neu};
+    const manifest = {hinweis: 'Von der Bewerbungszentrale angelegt. Ordner aus dieser Liste räumt sie selbst weg, wenn die Stelle erledigt ist.', profil: plan.profilStand, ordner: neu};
     if (JSON.stringify({...alt, stand: undefined}) !== JSON.stringify(manifest)) await schreib(dir, '.bewerbungszentrale.json', enc(JSON.stringify({...manifest, stand: new Date().toISOString()}, null, 1)));
-    ORDNER.sig = sig;
-    ORDNER.info = `${liste.length} ${liste.length === 1 ? 'Stelle' : 'Stellen'}, Stand ${new Date().toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'})}`;
+    ORDNER.sig = plan.sig;
+    ORDNER.info = `${plan.liste.length} ${plan.liste.length === 1 ? 'Stelle' : 'Stellen'}, Stand ${new Date().toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'})}`;
     if (neuGebaut || weg) toast(`Mappen-Ordner: ${[neuGebaut && `${neuGebaut} aktualisiert`, weg && `${weg} erledigte entfernt`].filter(Boolean).join(', ')}`);
   } catch (e) {
     ORDNER.fehler = e?.name === 'NotAllowedError' ? 'Edge hat den Zugriff entzogen, bitte Ordner neu wählen.' : `Abgleich hakt: ${e?.message || 'unbekannter Fehler'}`;
     if (e?.name === 'NotAllowedError') ORDNER.dir = null;
-  } finally {
-    ORDNER.laeuft = false;
-    const z = $('#ordner-zeile'); if (z) z.outerHTML = ordnerZeile(list().filter(istBereit));
-    if (ORDNER.nochmal) { ORDNER.nochmal = false; ordnerPlanen(1000); }
+  }
+}
+async function driveAbgleich(plan, dateien) { // Google Drive: Ordner „Bewerbungsmappen“, je Stelle ein Unterordner, Stand in appProperties
+  const enc = s => new TextEncoder().encode(s), zeig = t => { DRIVE.info = t; ordnerZeileNeu(); };
+  const inOrdner = id => GDRIVE.liste(`'${id}' in parents and trashed=false`);
+  let neuGebaut = 0, weg = 0; DRIVE.fehler = ''; DRIVE.wartet = false;
+  try {
+    zeig('wird abgeglichen …');
+    if (!DRIVE.wurzel) {
+      const w = await GDRIVE.liste("appProperties has { key='bz' and value='wurzel' } and trashed=false");
+      DRIVE.wurzel = (w[0] || await GDRIVE.ordner('Bewerbungsmappen', null, {bz: 'wurzel'})).id;
+    }
+    const kinder = (await inOrdner(DRIVE.wurzel)).filter(f => f.appProperties?.bz === 'stelle'), namen = new Set(plan.liste.map(x => x.name)), gesehen = new Set();
+    for (const f of kinder) if (!namen.has(f.name) || gesehen.has(f.name)) { await GDRIVE.aendern(f.id, {trashed: true}); weg++; } else gesehen.add(f.name); // erledigt oder doppelt: in den Papierkorb
+    const vorhanden = new Map(kinder.filter(f => namen.has(f.name)).map(f => [f.name, f]));
+    for (const [i, x] of plan.liste.entries()) {
+      if (!driveAn()) return;
+      const f = vorhanden.get(x.name), [pdfAlt, infoAlt] = String(f?.appProperties?.stand || '').split('#'), [pdfNeu, infoNeu] = x.stand.split('#');
+      if (f && pdfAlt === pdfNeu && infoAlt === infoNeu) continue;
+      if (f && pdfAlt === pdfNeu) { // nur die Portal-Infos haben sich geändert
+        const t = (await inOrdner(f.id)).find(k => k.name === 'Portal-Infos.txt');
+        if (t) await GDRIVE.ersetzen(t.id, enc(x.info), 'text/plain'); else await GDRIVE.hochladen({name: 'Portal-Infos.txt', parent: f.id, bytes: enc(x.info), typ: 'text/plain'});
+        await GDRIVE.aendern(f.id, {appProperties: {stand: x.stand}}); continue;
+      }
+      zeig(`wird hochgeladen: ${i + 1} von ${plan.liste.length}, gerade ${x.a.firma || ''} …`);
+      if (f) await GDRIVE.aendern(f.id, {trashed: true});
+      const o = await GDRIVE.ordner(x.name, DRIVE.wurzel, {bz: 'stelle', stand: ''}); // Stand erst am Ende: Abgebrochenes wird beim nächsten Mal neu gemacht
+      for (const d of await dateien(x)) await GDRIVE.hochladen({name: d.name, parent: o.id, bytes: d.bytes, typ: d.typ});
+      await GDRIVE.hochladen({name: 'Portal-Infos.txt', parent: o.id, bytes: enc(x.info), typ: 'text/plain'});
+      await GDRIVE.aendern(o.id, {appProperties: {stand: x.stand}}); neuGebaut++;
+    }
+    DRIVE.sig = plan.sig;
+    DRIVE.info = `${plan.liste.length} ${plan.liste.length === 1 ? 'Stelle' : 'Stellen'}, Stand ${new Date().toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'})}`;
+    if (neuGebaut || weg) toast(`Google Drive: ${[neuGebaut && `${neuGebaut} hochgeladen`, weg && `${weg} erledigte in den Papierkorb`].filter(Boolean).join(', ')}`);
+  } catch (e) {
+    if (e?.code === 'needs_reauth') { DRIVE.wartet = true; DRIVE.fehler = ''; driveAufKlickWarten(); return; }
+    if (e?.code === 'not_found') DRIVE.wurzel = ''; // Ordner gelöscht: beim nächsten Mal neu anlegen
+    DRIVE.fehler = /has not been used|is disabled/i.test(e?.message || '') ? 'Im Google-Cloud-Projekt die „Google Drive API“ einschalten (APIs & Dienste → Bibliothek), dann neu laden.' : `Drive hakt: ${e?.message || 'unbekannter Fehler'}`;
   }
 }
 function bereitPanel() {
@@ -2126,13 +2215,13 @@ const GMAIL = window.bzPlattform?.gmail || null;
 const GMAIL_FEHLER = {needs_reauth: 'Die Google-Anmeldung ist abgelaufen. Tipp noch einmal auf „Senden“.', forbidden: 'Google lässt den Versand nicht zu. Ist im Google-Cloud-Projekt die Gmail-API eingeschaltet?',
   rate_limited: 'Gmail bremst gerade. Versuch es in ein paar Minuten noch einmal.', unavailable: 'Keine Verbindung zu Google.', 'pdf-lib': 'Das PDF-Werkzeug konnte nicht geladen werden.'};
 const mailBereit = () => { const belegt = firmenMitVersand(); return list().filter(a => istBereit(a) && a.bewerbungsweg === 'email' && (a.kontakt?.email || '').trim() && !belegt.has(firmaGruppe(a.firma))); };
-function gmailEinrichtenModal(ids) {
-  const m = modal(`<div class="modal-head"><h2>Senden über Gmail einrichten</h2><button class="btn icon ghost" type="button" data-mclose aria-label="Schließen">${ic('x')}</button></div>
+function gmailEinrichtenModal(ids, weiter = null) {
+  const m = modal(`<div class="modal-head"><h2>${weiter ? 'Google-Anmeldung einrichten' : 'Senden über Gmail einrichten'}</h2><button class="btn icon ghost" type="button" data-mclose aria-label="Schließen">${ic('x')}</button></div>
     <div class="modal-body">
-      <p style="font-size:var(--t-sm)">Einmalig: Die App braucht eine eigene Google-Anmeldung, die nur Mails senden darf (lesen kann sie nichts).</p>
+      <p style="font-size:var(--t-sm)">Einmalig: Die App braucht eine eigene Google-Anmeldung. Sie darf nur Mails senden (lesen kann sie nichts) und in Google Drive nur die Dateien sehen, die sie selbst anlegt.</p>
       <ol style="font-size:var(--t-sm);padding-left:20px;display:flex;flex-direction:column;gap:4px">
         <li>console.cloud.google.com öffnen, oben ein neues Projekt anlegen.</li>
-        <li>„APIs &amp; Dienste“ → „Bibliothek“ → <b>Gmail API</b> → Aktivieren.</li>
+        <li>„APIs &amp; Dienste“ → „Bibliothek“ → <b>Gmail API</b> → Aktivieren, ebenso <b>Google Drive API</b> (für die Mappen aufs Handy).</li>
         <li>„Google Auth Platform“ → Branding: App-Name und deine Mail. Zielgruppe: Extern, unter Testnutzer deine Gmail-Adresse eintragen.</li>
         <li>„Clients“ → Client erstellen → Webanwendung. Autorisierte JavaScript-Quelle: <code>${esc(location.origin)}</code></li>
         <li>Die Client-ID kopieren und hier einfügen.</li>
@@ -2144,7 +2233,7 @@ function gmailEinrichtenModal(ids) {
   $$('[data-mclose]', m).forEach(b => b.onclick = closeModal);
   $('#ge-ok', m).onclick = () => {
     if (!GMAIL.einrichten($('#ge-id', m).value)) { $('#ge-st', m).textContent = 'Darin steckt keine Client-ID. Sie sieht so aus: 123456789012-abc…xyz.apps.googleusercontent.com (Zahlen, Bindestrich, Buchstaben und Ziffern). Nicht den Clientschlüssel nehmen, der beginnt mit GOCSPX.'; $('#ge-st', m).classList.add('err'); return; }
-    closeModal(); sammelMailModal(ids);
+    closeModal(); if (weiter) weiter(); else sammelMailModal(ids);
   };
 }
 function sammelMailModal(ids) {
@@ -3836,6 +3925,7 @@ document.addEventListener('click', async e => {
     if (act === 'pr-frei' || act === 'pr-neu' || act === 'pr-vorversion') return pruefAktion(act);
     if (act === 'bereit-alle') { state.zeigBereitAlle = !state.zeigBereitAlle; renderSoon(); return; }
     if (act === 'ordner-waehlen') return ordnerWaehlen();
+    if (act === 'drive-verbinden') return driveVerbinden();
     if (act === 'zurueckholen') { const rid = t.closest('[data-rid]')?.dataset.rid; if (rid) zurueckholen(rid); return; }
     if (act === 'sammel-mail') return sammelMailModal();
     if (act === 'gmail-api' && state.openId) return sammelMailModal([state.openId]);

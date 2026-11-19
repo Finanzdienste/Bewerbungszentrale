@@ -30,6 +30,11 @@ App fürs Handy, für Tobi.
   Zeugnisse, ganze Mappe, `Portal-Infos.txt`). Der Ordner-Zugriff liegt in IndexedDB; mit „Bei jedem Besuch zulassen“
   fragt Edge danach nicht mehr. Ordner erledigter Stellen räumt sie weg, aber nur die aus ihrer
   eigenen Liste `.bewerbungszentrale.json`. Ohne Änderung fasst sie das Laufwerk nicht an.
+- **Mappen fürs Handy** (Google Drive): Dieselben Ordner legt die App in Google Drive unter
+  „Bewerbungsmappen“ ab (`bzPlattform.drive`, Scope `drive.file`: die App sieht nur, was sie selbst
+  angelegt hat). Braucht im Google-Cloud-Projekt der Gmail-Anmeldung zusätzlich die Google Drive API.
+  Der Stand je Ordner steht in dessen `appProperties`; erledigte Ordner gehen in den Papierkorb. Die
+  Anmeldung hält eine Stunde, am PC erneuert sie sich danach beim nächsten Klick still.
 - **Teilen**: „Per WhatsApp teilen“ und „Per Mail-App senden“ geben die
   Bewerbungsmappe (PDF) über das Teilen-Menü des Handys weiter.
 - `karte/`: Kartenpakete (OpenStreetMap über Protomaps, Raum Hamburg) und

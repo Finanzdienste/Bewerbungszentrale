@@ -591,6 +591,40 @@ test('ordner', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('drive', async () => {
+  // dieselben Mappen fürs Handy in Google Drive: einmal verbinden, dann je Stelle ein Ordner; Erledigtes in den Papierkorb, Fremdes bleibt
+  const { seite, gh, drive, fehler } = await appStarten({ google: true, driveStart: [
+    { id: 'w1', name: 'Bewerbungsmappen', mimeType: 'application/vnd.google-apps.folder', appProperties: { bz: 'wurzel' } },
+    { id: 'alt1', name: '99 Alte Firma - Erledigt', mimeType: 'application/vnd.google-apps.folder', parents: ['w1'], appProperties: { bz: 'stelle', stand: 'x' } },
+    { id: 'eig1', name: 'Eigene Notizen', mimeType: 'application/vnd.google-apps.folder', parents: ['w1'] },
+  ] });
+  const a = json(gh, 'apps/test-mail.json');
+  gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...a, kontakt: { ...a.kontakt, email: '' } }, null, 1) + '\n'));
+  await seite.goto(`http://app.test/Bewerbungszentrale/#google=${GOOGLE_ID}`);
+  await seite.reload();
+  await seite.waitForSelector('#ordner-zeile [data-act="drive-verbinden"]', { timeout: 20000 });
+  assert.match(await seite.textContent('#ordner-zeile'), /Drive einmal verbinden/);
+  await seite.click('#ordner-zeile [data-act="drive-verbinden"]');
+  const fertig = () => drive.kinder('w1').find((f) => /Klima/.test(f.name) && f.appProperties.stand);
+  assert.ok(await bis(() => !!fertig(), 60000), 'Ordner der Stelle mit Stand: ' + drive.log.slice(-5).join(', '));
+  const o = fertig();
+  assert.match(o.name, /^\d{2} Klima Beispiel GmbH - Energiecontroller$/);
+  const drin = drive.kinder(o.id), namen = drin.map((f) => f.name).sort();
+  assert.equal(drin.length, 5, namen.join(', '));
+  assert.ok(['Anschreiben_', 'Lebenslauf_', 'Zeugnisse_', 'Bewerbung_'].every((v) => namen.some((n) => n.startsWith(v) && n.endsWith('.pdf'))));
+  for (const f of drin.filter((f) => f.name.endsWith('.pdf'))) { assert.equal(f.inhalt.subarray(0, 4).toString(), '%PDF', f.name); assert.equal(f.mimeType, 'application/pdf'); }
+  assert.match(drin.find((f) => f.name === 'Portal-Infos.txt').inhalt.toString('utf8'), /Gehaltsvorstellung: /);
+  assert.equal(drive.dateien.get('alt1').trashed, true, 'erledigter Ordner in den Papierkorb');
+  assert.equal(drive.dateien.get('eig1').trashed, false, 'fremder Ordner bleibt');
+  assert.equal([...drive.dateien.values()].filter((f) => f.appProperties?.bz === 'wurzel').length, 1, 'vorhandener Hauptordner wird weiterbenutzt');
+  await seite.waitForFunction(() => /Bewerbungsmappen“: 1 Stelle/.test(document.querySelector('#ordner-zeile')?.textContent || ''), null, { timeout: 10000 });
+  const uploads = drive.log.filter((x) => x.includes('upload')).length;
+  await seite.evaluate(() => { location.hash = '#pipeline'; });
+  await warte(6000);
+  assert.equal(drive.log.filter((x) => x.includes('upload')).length, uploads, 'ohne Änderung nichts neu hochladen');
+  assert.deepEqual(fehler, []);
+});
+
 test('gmail-merken', async () => {
   // die Erlaubnis zum Senden gilt eine Stunde: nach dem Neuladen ohne neue Anmeldung, mit dem Gmail-Konto aus dem Profil als Vorauswahl
   const { seite, gmail, fehler } = await appStarten({ google: true });
