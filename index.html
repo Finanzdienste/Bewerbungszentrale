@@ -1205,12 +1205,14 @@ const WEG_ART = {oepnv: 'mit ÖPNV und Rad', rad: 'nur mit dem Rad', auto: 'mit 
 const zahlDe = x => String(x).replace('.', ',');
 function pendelTage(x) { return Number.isFinite(x?.buerotage) ? x.buerotage : Number.isFinite(x?.anfahrt?.tage) ? x.anfahrt.tage : null; }
 function pendelStunden(x) { const t = pendelTage(x), m = x?.anfahrt?.min; if (t == null) return null; if (t === 0) return 0; if (!m) return null; return Math.round(2 * m * t / 60 * 2) / 2; }
-function pendelMalus(h) { return h == null ? 0 : Math.round(Math.min(12, Math.max(0, (h - 2.5) * 1.5))); }
+function pendelMalus(h) { return h == null ? 0 : Math.round(Math.min(15, Math.max(0, (h - 2.5) * 2))); }
+function pendelGeschaetzt(x) { const an = x?.anfahrt || {}; return !Number.isFinite(x?.buerotage) && an.tage !== 0 && !!(an.geschaetzt || /angenommen/.test(an.tageGrund || '')); }
 function fahrtChip(x) {
   const h = pendelStunden(x); if (h == null) return '';
   if (h === 0) return '<span class="chip good">ohne Pendeln</span>';
   const an = x.anfahrt || {}, pm = pendelMalus(h);
-  return `<span class="chip ${pm >= 6 ? 'warn' : ''}" title="${esc(`${an.min} min einfach ${WEG_ART[an.art] || ''}, ${zahlDe(pendelTage(x))} Bürotage${pm ? `, minus ${pm} in der Gesamtwertung` : ''}`)}">${zahlDe(h)} Std. Fahrt pro Woche</span>`;
+  const ca = pendelGeschaetzt(x);
+  return `<span class="chip ${pm >= 6 ? 'warn' : ''}" title="${esc(`${an.min} min einfach ${WEG_ART[an.art] || ''}, ${zahlDe(pendelTage(x))} Bürotage${ca ? ' (geschätzt, die Anzeige nennt keine)' : ''}${pm ? `, minus ${pm} in der Gesamtwertung` : ''}`)}">${ca ? '≈ ' : ''}${zahlDe(h)} Std. Fahrt pro Woche</span>`;
 }
 function fahrtHTML(a) {
   const an = a.anfahrt;
@@ -1231,7 +1233,7 @@ function fahrtStundenHTML(a) {
   if (h == null) return quelle;
   if (h === 0) return `${quelle} Kein Pendeln, kein Abzug in der Gesamtwertung.`;
   const pm = pendelMalus(h);
-  return `${quelle} Rund <b>${zahlDe(h)} Stunden pro Woche</b> unterwegs, hin und zurück. ${pm ? `Das zieht ${pm} ${pm === 1 ? 'Punkt' : 'Punkte'} von der Gesamtwertung ab.` : 'Bis 2,5 Stunden pro Woche gibt es keinen Abzug.'}`;
+  return `${quelle} Rund <b>${zahlDe(h)} Stunden pro Woche</b> unterwegs, hin und zurück${pendelGeschaetzt(a) ? ' (geschätzt, trag die Bürotage ein, sobald du sie kennst)' : ''}. ${pm ? `Das zieht ${pm} ${pm === 1 ? 'Punkt' : 'Punkte'} von der Gesamtwertung ab.` : 'Bis 2,5 Stunden pro Woche gibt es keinen Abzug.'}`;
 }
 function wertungVon(a) { const w = wertungBasis(a); if (w.wert == null) return w; const gb = grossAkte(a), bm = a.art === 'initiativ' ? 0 : beratMalus(a.position), pm = pendelMalus(pendelStunden(a)); return (gb || bm || pm) ? {...w, wert: Math.max(0, Math.min(100, w.wert + gb - bm - pm)), gross: gb > 0, beratung: bm > 0, fahrt: pm} : w; }
 function wertungBasis(a) {
@@ -1282,7 +1284,7 @@ function renderListe() {
     ${mehrStatus ? `<div class="filters scroll">${STUFEN.filter(s => counts[s.key]).map(s => `<button type="button" class="fchip" style="--stage:${stageVar(s.key)}" data-filter="${s.key}" aria-pressed="${state.listFilter.has(s.key)}"><i></i>${s.label}<span class="c">${counts[s.key]}</span></button>`).join('')}${state.listFilter.size ? `<button class="btn sm ghost" data-act="clear-filter" type="button">Filter zurücksetzen</button>` : ''}</div>` : ''}
     ${rows.length ? `${getrennt ? `<h2 class="rang-h">Stellen<span>${rows.filter(a => !istIni(a)).length} · nach Gesamtwertung</span></h2><div class="radar-list">${rows.filter(a => !istIni(a)).map(item).join('')}</div>
       <h2 class="rang-h">Initiativbewerbungen<span>${rows.filter(istIni).length} · nach Firmenwertung</span></h2><div class="radar-list">${rows.filter(istIni).map(item).join('')}</div>` : `<div class="radar-list">${rows.map(item).join('')}</div>`}
-    <details class="erklaer"><summary>Was die Zahlen bedeuten</summary><p>Der Kreis zeigt die Gesamtwertung: Reiz 50 % (wie gut der Job für dich wäre: Themen, Gehalt, Konditionen), Eignung 30 % (wie gut dein Profil passt) und Firma 20 %. Stellen und Initiativbewerbungen stehen in einer Rangliste. Bei Initiativbewerbungen gibt es keine Anzeige: Die Konditionen im Reiz (Tarif, Befristung, Homeoffice, Gehälter) stammen aus denselben Firmendaten wie die Firmenwertung. Damit die Firma nicht doppelt zählt, gilt dort 70 % Reiz und 30 % Eignung. Die Eignung ist mit 50 angesetzt („offen“), weil es keine Anforderungen gibt. Hat die Firma gerade keine Stellen ausgeschrieben, kennt die App nur die Branche, der Reiz ist dann grob geschätzt. Große Unternehmen (Konzerne, große öffentliche Arbeitgeber oder Firmen mit vielen offenen Stellen) bekommen 5 Punkte dazu, weil du dort gern arbeiten würdest. Die Fahrzeit zählt mit: der Weg ab deiner Wohnung mit ÖPNV und Rad hin und zurück, mal die Bürotage laut Anzeige. Die Autozeit steht in der Akte nur zur Info. Bis 2,5 Stunden pro Woche gibt es keinen Abzug, darüber 1,5 Punkte je Stunde, höchstens 12. Die Bürotage kannst du in der Akte ändern.</p></details>`
+    <details class="erklaer"><summary>Was die Zahlen bedeuten</summary><p>Der Kreis zeigt die Gesamtwertung: Reiz 50 % (wie gut der Job für dich wäre: Themen, Gehalt, Konditionen), Eignung 30 % (wie gut dein Profil passt) und Firma 20 %. Stellen und Initiativbewerbungen stehen in einer Rangliste. Bei Initiativbewerbungen gibt es keine Anzeige: Die Konditionen im Reiz (Tarif, Befristung, Homeoffice, Gehälter) stammen aus denselben Firmendaten wie die Firmenwertung. Damit die Firma nicht doppelt zählt, gilt dort 70 % Reiz und 30 % Eignung. Die Eignung ist mit 50 angesetzt („offen“), weil es keine Anforderungen gibt. Hat die Firma gerade keine Stellen ausgeschrieben, kennt die App nur die Branche, der Reiz ist dann grob geschätzt. Große Unternehmen (Konzerne, große öffentliche Arbeitgeber oder Firmen mit vielen offenen Stellen) bekommen 5 Punkte dazu, weil du dort gern arbeiten würdest. Die Fahrzeit zählt mit: der Weg ab deiner Wohnung mit ÖPNV und Rad hin und zurück, mal die Bürotage laut Anzeige. Die Autozeit steht in der Akte nur zur Info. Bis 2,5 Stunden pro Woche gibt es keinen Abzug, darüber 2 Punkte je Stunde, höchstens 15. Nennt die Anzeige keine Bürotage, sind sie geschätzt (≈), dann kannst du sie in der Akte eintragen.</p></details>`
     : `<div class="panel"><div class="empty-mini">${allL.length ? 'Keine Bewerbung passt zu Suche und Filter.' : 'Noch keine Bewerbungen. Leg oben rechts die erste an.'}</div></div>`}${aussortiertHTML()}`;
 }
 const RAUS_ART = {ort: 'Ort', anue: 'Zeitarbeit', gehalt: 'Gehalt', niveau: 'Niveau unter dem Abschluss', befristet: 'Befristung', fach: 'Fachlich zu weit weg', beratung: 'Arbeitsweise', klima: 'Arbeitsklima', weg: 'Nicht mehr offen', doppelt: 'Doppelt', firma: 'Eine Bewerbung je Firma', gegenlesen: 'Beim Gegenlesen', recherche: 'Bei der Recherche'};
@@ -3291,6 +3293,11 @@ Kündigungsfrist: ${p.kuendigung || '–'} · Frühester Eintritt: ${p.eintritt 
 Lebenslauf:
 ${(p.lebenslauf || '–').slice(0, 9000)}`;
 }
+function offeneFragen(a) { // aus den Notizen („Offene Frage fürs Gespräch: …“) und bei langem Weg mit geschätzten Bürotagen
+  const fr = (a.notizen || '').split('\n').filter(z => /^Offene Frage fürs Gespräch/.test(z)).map(z => '- ' + z.replace(/^Offene Frage fürs Gespräch[^:]*:\s*/, ''));
+  if (pendelGeschaetzt(a) && (a.anfahrt?.min || 0) >= 35 && !fr.some(z => /Tage pro Woche im Büro/.test(z))) fr.push(`- Wie viele Tage pro Woche im Büro? (Weg rund ${a.anfahrt.min} min pro Strecke)`);
+  return fr.join('\n');
+}
 function stelleText(a) {
   return `STELLE
 Unternehmen: ${a.firma || '–'}
@@ -3400,7 +3407,9 @@ ${profilText()}`;
       const prompt = `Bereite die Person (duzen) auf ein Vorstellungsgespräch für diese Stelle vor. Nutze die Anzeige und den Lebenslauf.
 Antworte nur mit einem JSON-Objekt in genau diesem Format:
 {"pitch": "60-Sekunden-Selbstvorstellung in Ich-Form, ca. 120 Wörter, konkret aus dem Lebenslauf", "fragen": [{"frage": "…", "warum": "was die Firma damit prüft", "tipp": "wie die Person antworten sollte, mit konkretem Beispiel aus ihrem Lebenslauf (STAR-Methode)"}], "rueckfragen": ["kluge Fragen an das Unternehmen"], "recherche": ["was vorher über die Firma recherchiert werden sollte"], "gehalt": "konkrete Strategie fürs Gehaltsgespräch mit Zahl, basierend auf Gehaltsvorstellung und Anzeige"}
-8 Fragen (fachlich, verhaltensbezogen, mindestens eine Stressfrage), 5 Rückfragen, 4 Recherchepunkte.
+8 Fragen (fachlich, verhaltensbezogen, mindestens eine Stressfrage), 5 Rückfragen, 4 Recherchepunkte.${offeneFragen(a) ? `
+Die Person fragt vor dem Gespräch nirgends nach. Diese offenen Punkte müssen deshalb unter den Rückfragen vorkommen, freundlich formuliert:
+${offeneFragen(a)}` : ''}
 
 ${stelleText(a)}
 

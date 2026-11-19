@@ -174,23 +174,40 @@ test('anfahrt', async () => {
   await seite.goto('http://app.test/Bewerbungszentrale/#liste');
   await seite.waitForFunction(() => /4 Std\. Fahrt pro Woche/.test(document.querySelector('#v-liste [data-open="test-portal"]')?.textContent || ''), null, { timeout: 10000 });
   const punkte = () => seite.evaluate(() => parseInt(document.querySelector('#v-liste [data-open="test-portal"] .radar-score')?.textContent || '', 10));
-  assert.equal(await punkte(), 78, 'Gesamt 80 minus 2 für 4 Stunden Fahrt');
+  assert.equal(await punkte(), 77, 'Gesamt 80 minus 3 für 4 Stunden Fahrt');
   await zuAkte(seite, 'test-portal');
   await seite.waitForSelector('#fahrtText', { timeout: 10000 });
   assert.match(await seite.textContent('#fahrtText'), /40 min einfach mit ÖPNV und Rad: Bus 1 bis Testplatz/);
   assert.match(await seite.textContent('#fahrtText'), /Auto 45 min/);
-  assert.match(await seite.textContent('#fahrtStunden'), /2 Tage Homeoffice\. Rund 4 Stunden pro Woche.*2 Punkte/);
+  assert.match(await seite.textContent('#fahrtStunden'), /2 Tage Homeoffice\. Rund 4 Stunden pro Woche.*3 Punkte/);
   await seite.fill('#d-btage', '5');
   for (let i = 0; i < 40 && json(gh, 'apps/test-portal.json').buerotage !== 5; i++) await warte(250);
   assert.equal(json(gh, 'apps/test-portal.json').buerotage, 5, 'eigene Bürotage werden gespeichert');
-  assert.match(await seite.textContent('#fahrtStunden'), /Deine Angabe\. Rund 6,5 Stunden pro Woche.*6 Punkte/);
+  assert.match(await seite.textContent('#fahrtStunden'), /Deine Angabe\. Rund 6,5 Stunden pro Woche.*8 Punkte/);
   await seite.fill('#d-btage', '0');
   await seite.waitForFunction(() => /Kein Pendeln/.test(document.querySelector('#fahrtStunden')?.textContent || ''), null, { timeout: 5000 });
   await seite.fill('#d-btage', '5');
   for (let i = 0; i < 40 && json(gh, 'apps/test-portal.json').buerotage !== 5; i++) await warte(250);
   await seite.goto('http://app.test/Bewerbungszentrale/#liste');
   await seite.waitForSelector('#v-liste [data-open="test-portal"]', { timeout: 10000 });
-  assert.equal(await punkte(), 74, 'mit 5 Bürotagen minus 6');
+  assert.equal(await punkte(), 72, 'mit 5 Bürotagen minus 8');
+  assert.deepEqual(fehler, []);
+});
+
+test('anfahrt-geschaetzt', async () => {
+  const { seite, gh, fehler } = await appStarten();
+  const a = json(gh, 'apps/test-portal.json');
+  gh.dateien.set('apps/test-portal.json', Buffer.from(JSON.stringify({ ...a, anfahrt: { min: 50, art: 'oepnv', weg: 'Bus 2 bis Teststraße', oepnv: 50, tage: 4,
+    tageGrund: 'keine Angabe zum Homeoffice (angenommen 4 Bürotage)', geschaetzt: true, stunden: 6.5, genau: true } }, null, 1) + '\n'));
+  await seite.waitForSelector('#bereitPanel, #v-liste', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.goto('http://app.test/Bewerbungszentrale/#liste');
+  await seite.waitForFunction(() => /≈ 6,5 Std\. Fahrt pro Woche/.test(document.querySelector('#v-liste [data-open="test-portal"]')?.textContent || ''), null, { timeout: 10000 });
+  await zuAkte(seite, 'test-portal');
+  await seite.waitForSelector('#fahrtStunden', { timeout: 10000 });
+  assert.match(await seite.textContent('#fahrtStunden'), /geschätzt, trag die Bürotage ein/);
+  await seite.fill('#d-btage', '2');
+  await seite.waitForFunction(() => !/geschätzt/.test(document.querySelector('#fahrtStunden')?.textContent || ''), null, { timeout: 5000 });
   assert.deepEqual(fehler, []);
 });
 
