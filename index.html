@@ -2068,15 +2068,18 @@ async function ordnerSync() {
       .map(x => { const info = portalInfos(x.a); return {...x, name: ordnerName(x.a, x.sc), info, stand: `${fassungVon(x.a)}|${profilStand}#${sha1Hex(info).slice(0, 10)}`}; });
     const sig = profilStand + '\n' + liste.map(x => x.name + '\t' + x.stand).join('\n');
     if (sig === ORDNER.sig) return; // nichts geändert: Laufwerk nicht anfassen (das erste Mal nach dem Laden prüft immer)
+    const zeig = t => { ORDNER.info = t; const z = $('#ordner-zeile'); if (z) z.outerHTML = ordnerZeile(list().filter(istBereit)); };
+    zeig('wird abgeglichen …');
     let alt = {}; try { alt = JSON.parse(await lies(dir, '.bewerbungszentrale.json') || '{}'); } catch { alt = {}; }
     const altO = alt.ordner || {}, neu = {}, namen = new Set(liste.map(x => x.name));
     for (const n of Object.keys(altO)) if (!namen.has(n)) { try { await dir.removeEntry(n, {recursive: true}); weg++; } catch { /* schon weg oder gerade offen */ } }
-    if (liste.length && alt.profil !== profilStand) { const z = await mappeBauen(liste[0].a, {teil: 'anlagen'}); if (alt.zeugnisse && alt.zeugnisse !== z.filename) { try { await dir.removeEntry(alt.zeugnisse); } catch { /* weg */ } } await schreib(dir, z.filename, z.bytes); alt.zeugnisse = z.filename; }
-    for (const {a, name, info, stand} of liste) {
+    if (liste.length && alt.profil !== profilStand) { zeig('Zeugnisse werden abgelegt …'); const z = await mappeBauen(liste[0].a, {teil: 'anlagen'}); if (alt.zeugnisse && alt.zeugnisse !== z.filename) { try { await dir.removeEntry(alt.zeugnisse); } catch { /* weg */ } } await schreib(dir, z.filename, z.bytes); alt.zeugnisse = z.filename; }
+    for (const [i, {a, name, info, stand}] of liste.entries()) {
       if (ORDNER.dir !== dir) return;
       const [pdfAlt, infoAlt] = String(altO[name] || '').split('#'), [pdfNeu, infoNeu] = stand.split('#');
       let ordner = null; try { ordner = await dir.getDirectoryHandle(name); } catch { /* fehlt (neu oder von Hand gelöscht) */ }
       if (!ordner || pdfAlt !== pdfNeu) {
+        zeig(`wird gefüllt: ${i + 1} von ${liste.length}, gerade ${a.firma || ''} …`);
         ordner = ordner || await dir.getDirectoryHandle(name, {create: true});
         for (const teil of ['brief', 'cv', 'alles']) { const r = await mappeBauen(a, {teil}); await schreib(ordner, r.filename, r.bytes); await pause(); }
         await schreib(ordner, 'Portal-Infos.txt', enc(info)); neuGebaut++;
