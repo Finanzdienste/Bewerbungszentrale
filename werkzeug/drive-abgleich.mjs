@@ -25,12 +25,15 @@ export async function driveLauf({ daten, token, clientId, echt = true, vorher, m
     localStorage.setItem('bewerbungszentrale.drive.an', JSON.stringify({ an: true }));
   }, { token, clientId });
   await seite.reload();
+  await seite.waitForSelector('#v-uebersicht', { timeout: 60_000 }).catch(() => {});
+  await seite.evaluate(() => window.bzPlattform?.abgleichen?.()).catch(() => {}); // alle Akten sicher geladen, bevor der Plan zählt
   const ende = Date.now() + maxMin * 60_000;
-  let stand = null;
+  let stand = null, fertigInFolge = 0;
   while (Date.now() < ende) {
     stand = await seite.evaluate(() => window.bzMappen?.() || null).catch(() => null);
     const d = stand?.drive;
-    if (d?.fertig || d?.wartet || (d?.fehler && !/keine Verbindung/i.test(d.fehler))) break; // Netzaussetzer: die App versucht es selbst noch einmal
+    fertigInFolge = d?.fertig ? fertigInFolge + 1 : 0;
+    if (fertigInFolge >= 3 || d?.wartet || (d?.fehler && !/keine Verbindung/i.test(d.fehler))) break; // dreimal in Folge fertig: kein Lauf mehr im Gang. Netzaussetzer: die App versucht es selbst noch einmal
     await warte(2000);
   }
   return { stand, fehler, app };

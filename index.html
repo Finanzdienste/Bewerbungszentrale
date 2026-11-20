@@ -2299,7 +2299,9 @@ async function lokalAbgleich(plan, dateien, allgemein) {
     if (e?.name === 'NotAllowedError') ORDNER.dir = null;
   }
 }
-window.bzMappen = () => ({drive: {info: DRIVE.info, fehler: DRIVE.fehler, fertig: !!DRIVE.sig, wartet: DRIVE.wartet, an: driveAn()}, ordner: {info: ORDNER.info, fehler: ORDNER.fehler}}); // Stand für werkzeug/drive-abgleich.mjs
+// fertig erst, wenn der zuletzt abgeschlossene Abgleich zum jetzigen Plan passt und gerade keiner läuft (sonst meldet sich ein Lauf mit halb geladenen Daten als fertig)
+const mappenFertig = () => { if (!DRIVE.sig || ORDNER.laeuft || !state.loaded || !state.profilLoaded) return false; try { return DRIVE.sig === mappenPlan().sig; } catch { return false; } };
+window.bzMappen = () => ({drive: {info: DRIVE.info, fehler: DRIVE.fehler, fertig: mappenFertig(), wartet: DRIVE.wartet, an: driveAn()}, ordner: {info: ORDNER.info, fehler: ORDNER.fehler}}); // Stand für werkzeug/drive-abgleich.mjs
 async function driveAbgleich(plan, dateien, allgemein) { // Google Drive: Ordner „Bewerbungsmappen“, je Stelle ein Unterordner, Stand in appProperties
   const enc = s => new TextEncoder().encode(s), zeig = t => { DRIVE.info = t; ordnerZeileNeu(); };
   const inOrdner = id => GDRIVE.liste(`'${id}' in parents and trashed=false`);
