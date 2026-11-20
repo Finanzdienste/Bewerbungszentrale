@@ -711,11 +711,20 @@ test('dashboard', async () => {
   await seite.waitForSelector('#dash [data-bereich="beworben"] [data-open="test-mail"]', { state: 'visible', timeout: 5000 });
   const hoehe = await seite.evaluate(() => document.querySelector('.dash-kopf .search').getBoundingClientRect().height);
   assert.ok(hoehe < 70, `Suchfeld ist ${hoehe}px hoch`);
+  // Filter als Auswahlfeld rechts neben der Suche, keine einzelnen Knöpfe
+  assert.equal(await seite.locator('#v-uebersicht [data-dweg]').count(), 0);
+  const [r1, r2] = await seite.evaluate(() => [document.querySelector('.dash-kopf .search'), document.querySelector('#dashWeg')].map((e) => e.getBoundingClientRect().toJSON()));
+  assert.ok(r2.left >= r1.right - 1 && Math.abs(r2.top - r1.top) < 12, 'Filter steht rechts neben der Suche');
+  assert.ok(r2.right <= 412, 'passt in die Breite');
+  await seite.selectOption('#dashWeg', 'mail');
+  await seite.waitForFunction(() => !document.querySelector('#dash [data-bereich="bereit"] [data-open="test-portal"]'), null, { timeout: 5000 });
+  await seite.selectOption('#dashWeg', '');
   await seite.fill('#dashQ', 'Hafen Muster');
   await seite.waitForFunction(() => !document.querySelector('#dash [data-open="test-mail"]') && document.querySelector('#dash [data-open="test-portal"]'), null, { timeout: 5000 });
   assert.equal(await seite.isVisible('#dash [data-open="test-portal"]'), true, 'Suche klappt die Bereiche mit Treffern auf');
   assert.doesNotMatch(await seite.textContent('#v-uebersicht'), /Jetzt dran|Brauchen deinen Blick/);
-  gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...json(gh, 'apps/test-mail.json'), aufgaben: [{ id: 'rr1', text: 'Testfirma zurückrufen (Fr bis 14 Uhr)', faellig: '2026-11-20', erledigt: false }] }, null, 1) + '\n'));
+  gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...json(gh, 'apps/test-mail.json'), aufgaben: [{ id: 'rr1', text: 'Testfirma zurückrufen (Fr bis 14 Uhr)', faellig: '2026-11-20', erledigt: false }],
+    verlauf: [{ id: 'v1', datum: '2026-11-19', typ: 'mail', text: 'Erfundene Mail der Testfirma mit einem längeren Text, der auf dem Handy über mehrere Zeilen umbricht und nicht unter die Kopfzeile rutschen darf.' }] }, null, 1) + '\n'));
   await seite.evaluate(() => window.bzPlattform.abgleichen());
   await seite.fill('#dashQ', '');
   await seite.waitForSelector('#dash [data-bereich="antwort"] [data-open="test-mail"]', { timeout: 10000 });
@@ -732,6 +741,10 @@ test('dashboard', async () => {
   await seite.waitForSelector('#duBistDran', { timeout: 5000 });
   assert.match(await seite.textContent('#duBistDran'), /zurückrufen/);
   assert.ok(await seite.evaluate(() => document.querySelector('#duBistDran').getBoundingClientRect().top < document.querySelector('.timeline, .empty-mini').getBoundingClientRect().top), 'Aufgabe steht über dem Verlauf');
+  // Kopfzeile (Art, Datum) steht über dem Text, nicht daneben
+  assert.ok(await seite.locator('.timeline li').count() > 0);
+  const ueber = await seite.evaluate(() => [...document.querySelectorAll('.timeline li')].every((li) => li.querySelector('.h').getBoundingClientRect().bottom <= li.querySelector('.b').getBoundingClientRect().top + 1));
+  assert.ok(ueber, 'Verlauf-Einträge überlappen nicht');
   assert.equal((await seite.textContent('#drStatus')).trim(), 'Beworben');
   assert.equal(await seite.locator('#drawer select').count(), 0, 'Status nur zum Ansehen');
   await seite.click('[data-act="close"]');
