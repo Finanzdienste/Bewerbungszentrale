@@ -3171,9 +3171,10 @@ function infosHTML(a) {
   const link = /^https?:\/\//.test(a.link || '') ? a.link : '', mail = (k.email || '').trim();
   const z = (l, inhalt) => inhalt ? `<div class="fz"><dt>${l}</dt><dd>${inhalt}</dd></div>` : '';
   const score = w.wert == null ? '' : `<b style="color:${ringColor(w.wert)}">${w.geschaetzt ? '≈ ' : ''}${w.wert}</b> <span class="muted">${w.geschaetzt ? 'grob geschätzt' : w.art === 'Gesamt' ? `Reiz ${w.reiz ?? '–'} · Eignung ${w.eignung ?? '–'} · Firma ${w.firma ?? '–'}${w.fahrt ? ` · minus ${w.fahrt} für die Fahrt` : ''}` : esc(w.art)}</span>${a.analyse?.fazit ? `<div class="fz-txt">${esc(a.analyse.fazit)}</div>` : ''}`;
-  const weg = `${mail ? `Per Mail an <span style="user-select:all">${esc(mail)}</span>` : istPortal(a) ? 'Über das Portal der Firma' : ''}${link ? `${mail || istPortal(a) ? ' · ' : ''}<a href="${esc(link)}" target="_blank" rel="noopener">Anzeige öffnen</a>` : ''}`;
+  const portal = istPortal(a); // eine Kontakt-Mailadresse allein heißt nicht, dass per Mail beworben wird
+  const weg = `${portal ? 'Über das Portal der Firma' : `Per Mail an <span style="user-select:all">${esc(mail)}</span>`}${link ? ` · <a href="${esc(link)}" target="_blank" rel="noopener">${portal ? 'Zur Anzeige und zum Portal' : 'Anzeige öffnen'}</a>` : ''}`;
   const anzeigeGehalt = (a.gehaltMin || a.gehaltMax) ? `${[a.gehaltMin, a.gehaltMax].filter(Boolean).map(eur).join(' bis ')} laut Anzeige` : 'Die Anzeige nennt kein Gehalt.';
-  const kontakt = [k.name ? `${esc(k.name)}${k.rolle ? ` <span class="muted">(${esc(k.rolle)})</span>` : ''}` : '', k.telefon ? `<a href="tel:${esc(String(k.telefon).replace(/[^\d+]/g, ''))}">${esc(k.telefon)}</a>` : '', !mail && k.email ? esc(k.email) : ''].filter(Boolean).join(' · ');
+  const kontakt = [k.name ? `${esc(k.name)}${k.rolle ? ` <span class="muted">(${esc(k.rolle)})</span>` : ''}` : '', k.telefon ? `<a href="tel:${esc(String(k.telefon).replace(/[^\d+]/g, ''))}">${esc(k.telefon)}</a>` : '', portal && mail ? `<span style="user-select:all">${esc(mail)}</span>` : ''].filter(Boolean).join(' · ');
   const beworben = a.status !== 'gemerkt' && a.beworbenAm ? `${fmtD(a.beworbenAm)}${a.eingangAm ? ` · Eingang bestätigt ${fmtDs(a.eingangAm)}` : ''}` : '';
   const anfahrt = a.art === 'initiativ' && !a.anfahrt ? '' : `<p id="fahrtText">${fahrtHTML(a)}</p>
       <p class="desc" id="fahrtStunden" style="margin-top:4px">${fahrtStundenHTML(a)}</p>`;

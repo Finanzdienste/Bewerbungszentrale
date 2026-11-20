@@ -161,6 +161,23 @@ test('gehalt', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('weg-portal-mit-mail', async () => {
+  // eine Kontakt-Mailadresse macht aus einer Portal-Bewerbung keine Mail-Bewerbung
+  const { seite, gh, fehler } = await appStarten();
+  const a = json(gh, 'apps/test-portal.json');
+  gh.dateien.set('apps/test-portal.json', Buffer.from(JSON.stringify({ ...a, kontakt: { name: 'Erika Beispiel', rolle: 'Recruiterin', email: 'karriere@beispiel.test', telefon: '' } }, null, 1) + '\n'));
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.waitForSelector('#dash, #v-liste', { timeout: 20000 });
+  await zuAkte(seite, 'test-portal');
+  await seite.waitForFunction(() => /Erika Beispiel/.test(document.querySelector('#drBody')?.textContent || ''), null, { timeout: 10000 });
+  const t = await seite.textContent('#drBody .fakten');
+  assert.match(t, /Über das Portal der Firma/);
+  assert.doesNotMatch(t, /Per Mail an/);
+  assert.match(t, /Erika Beispiel.*karriere@beispiel\.test/s, 'Mailadresse steht beim Kontakt');
+  assert.deepEqual(fehler, []);
+});
+
 test('anfahrt', async () => {
   const { seite, gh, fehler } = await appStarten();
   const a = json(gh, 'apps/test-portal.json');
