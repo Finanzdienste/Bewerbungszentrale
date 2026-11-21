@@ -284,6 +284,20 @@ test('aufgaben', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('firefox', async () => {
+  // Stellenanzeigen öffnen auf Android in Firefox (Intent), nicht im Fenster der App
+  const html = fs.readFileSync(path.join(WURZEL, 'index.html'), 'utf8');
+  const i = html.indexOf('function firefoxIntent'); const src = html.slice(i, html.indexOf('\n', i));
+  const firefoxIntent = new Function(`${src}; return firefoxIntent;`)();
+  assert.equal(firefoxIntent('https://www.doerner.de/job/test?x=1'), 'intent://www.doerner.de/job/test?x=1#Intent;scheme=https;package=org.mozilla.firefox;end');
+  assert.equal(firefoxIntent('mailto:a@b.test'), 'mailto:a@b.test');
+  const { seite, fehler } = await appStarten();
+  await zuAkte(seite, 'test-portal');
+  await seite.waitForSelector('.fakten', { timeout: 10000 });
+  assert.ok(await seite.locator('.fakten a[data-ff]').count() >= 1, 'Anzeige-Link ist markiert');
+  assert.deepEqual(fehler, []);
+});
+
 test('empfaenger', async () => {
   // reine Funktion aus index.html, ohne Browser
   const html = fs.readFileSync(path.join(WURZEL, 'index.html'), 'utf8');
@@ -759,7 +773,9 @@ test('dashboard', async () => {
   // Akte: nur „Infos“ und „Verlauf“; im Verlauf steht oben, was zu tun ist
   await seite.click('#dash [data-bereich="antwort"] [data-open="test-mail"]');
   await seite.waitForSelector('#drHead [data-tab]', { timeout: 5000 });
-  assert.deepEqual(await seite.$$eval('#drHead [data-tab]', (bs) => bs.map((x) => x.textContent.trim())), ['Infos', 'Verlauf']);
+  assert.deepEqual(await seite.$$eval('#drHead [data-tab]', (bs) => bs.map((x) => x.textContent.trim())), ['Infos', 'Unterlagen', 'Verlauf']);
+  const [rt, rc] = await seite.evaluate(() => [document.querySelector('#drHead .dr-tabs'), document.querySelector('#drStatus')].map((e) => e.getBoundingClientRect().toJSON()));
+  assert.ok(rt.right <= rc.left + 1 || rt.bottom <= rc.top + 1, 'Reiter und Status überlappen nicht');
   await seite.waitForSelector('.fakten', { timeout: 5000 });
   await seite.click('[data-tab="verlauf"]');
   await seite.waitForSelector('#duBistDran', { timeout: 5000 });
@@ -874,18 +890,25 @@ test('gesendet', async () => {
   await seite.evaluate(() => window.bzPlattform.abgleichen());
   await seite.waitForSelector('#dash, #v-liste', { timeout: 20000 });
   await zuAkte(seite, 'test-mail');
+  await seite.click('[data-tab="unterlagen"]');
   await seite.waitForSelector('#gesendetKarte', { timeout: 10000 });
-  assert.match(await seite.textContent('#gesendetKarte'), /Bewerbung_Erfunden\.pdf.*Genau die Datei, die am 18\.11\.2026 per Mail an bewerbung@beispiel\.test rausging.*Anschreiben.*Lebenslauf.*Zeugnisse/s);
+  assert.match(await seite.textContent('#gesendetKarte'), /Bewerbung_Erfunden\.pdf.*Genau die Datei, die am 18\.11\.2026 per Mail an bewerbung@beispiel\.test rausging/s);
+  assert.match(await seite.textContent('#pdfKarte'), /Anschreiben.*Motivationsschreiben.*Lebenslauf.*Zeugnisse.*Ganze Mappe/s);
   const [d1] = await Promise.all([seite.waitForEvent('download', { timeout: 20000 }), seite.click('#gesendetKarte [data-act="gesendet-datei"]')]);
   assert.equal(d1.suggestedFilename(), 'Bewerbung_Erfunden.pdf');
-  const [d2] = await Promise.all([seite.waitForEvent('download', { timeout: 60000 }), seite.click('#gesendetKarte [data-teil="brief"]')]);
+  const [d2] = await Promise.all([seite.waitForEvent('download', { timeout: 60000 }), seite.click('#pdfKarte [data-teil="brief"]')]);
   assert.match(d2.suggestedFilename(), /^Anschreiben_.*\.pdf$/);
-  // vor dem Versand stehen die Einzel-PDFs bei den Unterlagen, einen Bereich „Gesendet“ gibt es nicht
+  const [d3] = await Promise.all([seite.waitForEvent('download', { timeout: 60000 }), seite.click('#pdfKarte [data-teil="motiv"]')]);
+  assert.match(d3.suggestedFilename(), /^Motivationsschreiben_.*\.pdf$/);
+  // vor dem Versand: Unterlagen ohne Bereich „Gesendet“, Infos ohne Anschreiben
   await seite.click('#drClose');
   await zuAkte(seite, 'test-portal');
   await seite.waitForSelector('.fakten', { timeout: 10000 });
+  assert.equal(await seite.locator('#ki-anschreiben').count(), 0, 'Anschreiben steht unter Unterlagen');
+  await seite.click('[data-tab="unterlagen"]');
+  await seite.waitForSelector('#pdfKarte', { timeout: 10000 });
   assert.equal(await seite.locator('#gesendetKarte').count(), 0);
-  assert.ok(await seite.locator('#m-ki [data-teil="brief"]').count() === 1);
+  assert.equal(await seite.locator('#ki-anschreiben').count(), 1);
   assert.deepEqual(fehler, []);
 });
 

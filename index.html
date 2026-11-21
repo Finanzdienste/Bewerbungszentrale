@@ -742,6 +742,13 @@ const dayDiff = (a, b) => Math.round((parseD(isoDate(b)) - parseD(isoDate(a))) /
 const fmtD = s => { const d = parseD(s); return d ? d.toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'}) : '–'; };
 const fmtDs = s => { const d = parseD(s); return d ? d.toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit'}) : '–'; };
 const fmtT = d => d.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
+/** Stellenanzeigen und Portale auf Android direkt in Firefox öffnen, nicht im Browserfenster der App. */
+function firefoxIntent(url) { const m = /^(https?):\/\/(.+)$/i.exec(url || ''); return m ? `intent://${m[2]}#Intent;scheme=${m[1]};package=org.mozilla.firefox;end` : url; }
+document.addEventListener('click', e => {
+  const a = e.target?.closest?.('a[data-ff]');
+  if (!a || !/Android/i.test(navigator.userAgent) || !/^https?:/i.test(a.href)) return;
+  e.preventDefault(); e.stopPropagation(); location.href = firefoxIntent(a.href);
+}, true);
 const jetztISO = () => new Date().toISOString().replace(/\.\d+Z$/, 'Z');
 /** Die Mail genau so, wie sie rausging, für den Verlauf (nicht nur die Zusammenfassung). */
 const mailEintragNeu = ({an, betreff, text, anhaenge}) => ({von: P().gmailKonto || '', an: [an], betreff: betreff || '', datum: jetztISO(), text: text || '', richtung: 'raus', ...(anhaenge?.length ? {anhaenge} : {})});
@@ -1552,7 +1559,7 @@ function radarItem(r) {
         <div class="radar-werte"><span title="Wie gut der Job für dich wäre: Themen, Gehalt, Konditionen"><b>${Math.round(r.reiz)}</b> Reiz</span><span title="Wie gut dein Profil zu den Anforderungen passt"><b>${r.chance == null ? '–' : Math.round(r.chance)}</b> Eignung (${eignungText(r.chance) || 'offen'})</span><span title="Wertung des Unternehmens: Branche, Tarif, Befristung, Homeoffice, Gehälter"><b>${fz == null ? '–' : Math.round(fz)}</b> Firma${fz == null ? ' (Vermittler)' : ''}</span></div>
         <div class="radar-chips"><span class="chip acc">${esc(r.bereich)}</span>${r.gross ? '<span class="chip good">großes Unternehmen</span>' : ''}${r.beratung ? '<span class="chip warn">Beratung, viel Präsentieren</span>' : ''}${fahrtChip(r)}${(r.plus || []).filter(x => x !== r.bereich).map(x => `<span class="chip good">${esc(x)}</span>`).join('')}${(r.minus || []).map(x => `<span class="chip warn">${esc(x)}</span>`).join('')}</div>
         ${r.wahl === 'ja' ? `<p class="radar-hint">Wird beim nächsten Lauf (täglich 6:40 Uhr) als Bewerbung mit Analyse, Anschreiben und Lebenslauf angelegt.</p>` : ''}</div>
-      <div class="radar-act">${/^https?:\/\//.test(r.link || '') ? `<a class="btn sm" href="${esc(r.link)}" target="_blank" rel="noopener">${ic('ext')}Anzeige</a>` : ''}
+      <div class="radar-act">${/^https?:\/\//.test(r.link || '') ? `<a class="btn sm" href="${esc(r.link)}" target="_blank" rel="noopener" data-ff>${ic('ext')}Anzeige</a>` : ''}
         <button class="btn sm ${r.wahl === 'ja' ? 'primary' : ''}" type="button" data-radar="ja" aria-pressed="${r.wahl === 'ja'}">${r.wahl === 'ja' ? 'Vorgemerkt' : 'Interessant'}</button>
         <button class="btn sm ghost" type="button" data-radar="nein">${r.wahl === 'nein' ? 'Wieder anzeigen' : 'Nicht für mich'}</button></div>
     </article>`;
@@ -1919,7 +1926,7 @@ function openDrawer(id, tab) {
   const wasOpen = !!state.openId;
   if (state.openId !== id) state.drOffen = new Set();
   const [t, teil] = TAB_ZIEL[tab] || [tab || (wasOpen ? state.drawerTab : 'details')];
-  state.openId = id; state.drawerTab = t === 'verlauf' ? 'verlauf' : 'details'; if (teil) state.drOffen.add(teil);
+  state.openId = id; state.drawerTab = ['verlauf', 'unterlagen'].includes(t) ? t : 'details'; if (teil) state.drOffen.add(teil);
   const d = $('#drawer'), s = $('#scrim');
   d.innerHTML = `<div class="dr-head" id="drHead"></div><div class="dr-body" id="drBody"></div>`;
   d.hidden = false; s.hidden = false; d.setAttribute('aria-hidden', 'false');
@@ -1940,7 +1947,7 @@ function closeDrawer() {
   renderAll();
 }
 /* Akte: nur zwei Reiter. Was früher eigene Reiter waren, liegt aufgeklappt oder zugeklappt in „Infos“ oder „Verlauf“. */
-const TAB_ZIEL = {ki: ['details', 'm-ki'], unterlagen: ['details', 'm-ki'], anzeige: ['details', 'm-anzeige'], termine: ['verlauf'], training: ['verlauf', 'v-training'], mail: ['verlauf', 'v-neu']};
+const TAB_ZIEL = {ki: ['unterlagen'], anzeige: ['details', 'm-anzeige'], termine: ['verlauf'], training: ['verlauf', 'v-training'], mail: ['verlauf', 'v-neu']};
 const STATUS_REIHE = ['gemerkt', 'beworben', 'rueckmeldung', 'interview', 'angebot', 'zusage', 'absage', 'zurueckgezogen'];
 function zeigeTab(tab) {
   const [t, teil] = TAB_ZIEL[tab] || [tab];
@@ -1952,7 +1959,7 @@ function renderDrawerHead() {
   const id = state.openId; const a = state.apps[id]; const h = $('#drHead'); if (!a || !h) return;
   h.style.setProperty('--stage', stageVar(a.status));
   const cur = a.status, dran = wartetAufDich(a);
-  const tabs = [['details', 'Infos'], ['verlauf', 'Verlauf']];
+  const tabs = [['details', 'Infos'], ['unterlagen', 'Unterlagen'], ['verlauf', 'Verlauf']];
   h.innerHTML = `
     <div class="dr-top">
       <div style="min-width:0"><h2 id="drFirma">${esc(a.firma || 'Neue Bewerbung')}</h2><div class="pos" id="drPos">${esc(a.position || '')}</div></div>
@@ -2000,7 +2007,7 @@ function bereitHTML(a) {
            <p class="desc">Geht an <b>${esc(mail)}</b>, Anschreiben, Lebenslauf und Zeugnisse als eine PDF. Vor dem Senden siehst du alles noch einmal.</p>
            <span class="ki-status" id="mappeStatus"></span>
            ${manuell}`
-        : `<div class="ki-row">${mappeBtn}${link ? `<a class="btn primary" href="${esc(link)}" target="_blank" rel="noopener">${ic('ext')}Zum Bewerbungsportal</a>` : ''}<button class="btn" type="button" data-act="ki-tab">${ic('doc')}Anschreiben ansehen</button><button class="btn" type="button" data-act="wa-teilen">${ic('share')}Per WhatsApp teilen</button></div>
+        : `<div class="ki-row">${mappeBtn}${link ? `<a class="btn primary" href="${esc(link)}" target="_blank" rel="noopener" data-ff>${ic('ext')}Zum Bewerbungsportal</a>` : ''}<button class="btn" type="button" data-act="ki-tab">${ic('doc')}Anschreiben ansehen</button><button class="btn" type="button" data-act="wa-teilen">${ic('share')}Per WhatsApp teilen</button></div>
            <p class="desc">Mappe herunterladen und im Portal hochladen. Die Eingangsbestätigung trägt der Morgenlauf ein.</p>
            <span class="ki-status" id="mappeStatus"></span>
            ${portalHTML(a)}`}
@@ -3189,7 +3196,7 @@ function infosHTML(a) {
   const z = (l, inhalt) => inhalt ? `<div class="fz"><dt>${l}</dt><dd>${inhalt}</dd></div>` : '';
   const score = w.wert == null ? '' : `<b style="color:${ringColor(w.wert)}">${w.geschaetzt ? '≈ ' : ''}${w.wert}</b> <span class="muted">${w.geschaetzt ? 'grob geschätzt' : w.art === 'Gesamt' ? `Reiz ${w.reiz ?? '–'} · Eignung ${w.eignung ?? '–'} · Firma ${w.firma ?? '–'}${w.fahrt ? ` · minus ${w.fahrt} für die Fahrt` : ''}` : esc(w.art)}</span>${a.analyse?.fazit ? `<div class="fz-txt">${esc(a.analyse.fazit)}</div>` : ''}`;
   const portal = istPortal(a); // eine Kontakt-Mailadresse allein heißt nicht, dass per Mail beworben wird
-  const weg = `${portal ? 'Über das Portal der Firma' : `Per Mail an <span style="user-select:all">${esc(mail)}</span>`}${link ? ` · <a href="${esc(link)}" target="_blank" rel="noopener">${portal ? 'Zur Anzeige und zum Portal' : 'Anzeige öffnen'}</a>` : ''}`;
+  const weg = `${portal ? 'Über das Portal der Firma' : `Per Mail an <span style="user-select:all">${esc(mail)}</span>`}${link ? ` · <a href="${esc(link)}" target="_blank" rel="noopener" data-ff>${portal ? 'Zur Anzeige und zum Portal' : 'Anzeige öffnen'}</a>` : ''}`;
   const anzeigeGehalt = (a.gehaltMin || a.gehaltMax) ? `${[a.gehaltMin, a.gehaltMax].filter(Boolean).map(eur).join(' bis ')} laut Anzeige` : 'Die Anzeige nennt kein Gehalt.';
   const kontakt = [k.name ? `${esc(k.name)}${k.rolle ? ` <span class="muted">(${esc(k.rolle)})</span>` : ''}` : '', k.telefon ? `<a href="tel:${esc(String(k.telefon).replace(/[^\d+]/g, ''))}">${esc(k.telefon)}</a>` : '', portal && mail ? `<span style="user-select:all">${esc(mail)}</span>` : ''].filter(Boolean).join(' · ');
   const beworben = a.status !== 'gemerkt' && a.beworbenAm ? `${fmtD(a.beworbenAm)}${a.eingangAm ? ` · Eingang bestätigt ${fmtDs(a.eingangAm)}` : ''}` : '';
@@ -3209,7 +3216,6 @@ function infosHTML(a) {
     </dl>
     ${planHTML(a)}
     ${bereitHTML(a)}
-    ${gesendetHTML(a)}
     ${a.notizen ? `<section><h3 class="v-kopf">Notizen</h3><div class="lesetext" id="d-notizen">${esc(a.notizen)}</div></section>` : ''}
     ${unterlagenHTML(a)}
     ${a.stellenText ? `<details class="mehr" id="m-anzeige"><summary>Stellenanzeige</summary><div class="mehr-in"><div class="lesetext" id="d-stelle">${esc(a.stellenText)}</div></div></details>` : ''}`;
@@ -3220,18 +3226,20 @@ function gesendetHTML(a) {
   if (!a.status || a.status === 'gemerkt' || a.beispiel) return '';
   const g = a.gesendet || {}, gd = g.dateien || [];
   const wann = g.datum ? ` am ${fmtD(g.datum)}` : '';
-  const exakt = gd.length ? `<div class="ki-row">${gd.map((d, i) => `<button class="btn" type="button" data-act="gesendet-datei" data-i="${i}" ${DL ? '' : 'hidden'}>${ic('doc')}${esc(d.name)}</button>`).join('')}</div>
-    <p class="desc">Genau die Datei, die${wann} ${g.weg === 'portal' ? 'ins Portal ging' : `per Mail${g.an ? ` an ${esc(g.an)}` : ''} rausging`}.</p>` : `<p class="desc">${istPortal(a) ? 'Über das Portal hochgeladen. Die hochgeladenen Dateien selbst liegen hier nicht vor.' : 'Die verschickte Datei liegt hier nicht vor.'} Aus den gespeicherten Texten:</p>`;
-  const einzeln = a.anschreiben ? `<div class="ki-row">${gd.length ? '<span class="muted" style="font-size:var(--t-xs)">Einzeln:</span>' : ''}${teilKnopf('brief', 'Anschreiben')}<button class="btn sm" type="button" data-act="cv-akte" ${DL ? '' : 'hidden'}>${ic('down')}Lebenslauf</button>${teilKnopf('anlagen', 'Zeugnisse')}${gd.length ? '' : teilKnopf('alles', 'Ganze Mappe')}</div>` : '';
-  return `<section class="ki-card" id="gesendetKarte"><h3>${ic('doc')}Gesendete Unterlagen</h3>${exakt}${einzeln}<span class="ki-status" id="mappeStatus3"></span></section>`;
+  const inhalt = gd.length ? `<div class="ki-row">${gd.map((d, i) => `<button class="btn" type="button" data-act="gesendet-datei" data-i="${i}" ${DL ? '' : 'hidden'}>${ic('doc')}${esc(d.name)}</button>`).join('')}</div>
+    <p class="desc">Genau die Datei, die${wann} ${g.weg === 'portal' ? 'ins Portal ging' : `per Mail${g.an ? ` an ${esc(g.an)}` : ''} rausging`}.</p>`
+    : `<p class="desc">${istPortal(a) ? 'Über das Portal hochgeladen. Die hochgeladenen Dateien selbst liegen hier nicht vor.' : 'Die verschickte Datei liegt hier nicht vor.'}</p>`;
+  return `<section class="ki-card" id="gesendetKarte"><h3>${ic('doc')}Gesendet</h3>${inhalt}</section>`;
 }
 async function teilHerunterladen(a, teil, stEl) {
   const st = t => { if (stEl) stEl.innerHTML = t; };
   if (!DL) { st('Download ist in dieser Ansicht nicht verfügbar.'); return; }
   if (teil !== 'anlagen' && !a?.anschreiben?.trim()) { st('Kein Anschreiben gespeichert.'); return; }
   st('<span class="pulse"></span>PDF wird erstellt …');
-  try { const r = await mappeBauen(a, {teil}); await DL.save({filename: r.filename, data: r.bytes}); st(`Gespeichert: ${r.seiten} Seiten.`); }
-  catch (e) { st(e?.code === 'declined' ? '' : 'PDF konnte nicht erstellt werden.'); }
+  try {
+    const r = await mappeBauen(a, {teil: teil === 'motiv' ? 'brief' : teil}); // Motivationsschreiben: dasselbe Schreiben, für Portale mit diesem Feld
+    await DL.save({filename: teil === 'motiv' ? r.filename.replace(/^Anschreiben_/, 'Motivationsschreiben_') : r.filename, data: r.bytes}); st(`Gespeichert: ${r.seiten} Seiten.`);
+  } catch (e) { st(e?.code === 'declined' ? '' : 'PDF konnte nicht erstellt werden.'); }
 }
 async function gesendetOeffnen(a, i, stEl) {
   const d = a?.gesendet?.dateien?.[i]; if (!d) return;
@@ -3249,15 +3257,25 @@ async function gesendetSpeichern(cur, mappe, an) {
 }
 /** Anschreiben, Lebenslauf und was Claude zur Stelle herausgefunden hat: nur zum Ansehen und Kopieren. */
 function unterlagenHTML(a) {
-  const an = a.analyse, vb = a.vorbereitung, rc = a.recherche, p = P();
+  const an = a.analyse, vb = a.vorbereitung, rc = a.recherche;
   const teile = [];
-  if (a.anschreiben) teile.push(`<div><div class="ki-row" style="justify-content:space-between"><h3>Anschreiben</h3><button class="btn sm" type="button" data-copy="ki-anschreiben">${ic('copy')}Kopieren</button></div><div class="lesetext" id="ki-anschreiben">${esc(a.anschreiben)}</div></div>`);
-  if (p.cv && a.status === 'gemerkt') teile.push(`<div class="ki-row">${a.anschreiben ? teilKnopf('brief', 'Anschreiben (PDF)') : ''}<button class="btn sm" type="button" data-act="cv-akte" ${DL ? '' : 'hidden'}>${ic('down')}Lebenslauf (PDF)</button>${teilKnopf('anlagen', 'Zeugnisse (PDF)')}<span class="ki-status" id="mappeStatus3"></span></div>`);
   if (rc?.kurzprofil) teile.push(`<div><h3>Zur Firma</h3><p style="font-size:var(--t-sm);margin-top:6px">${esc(rc.kurzprofil)}</p>${rc.kultur ? `<p class="desc">${esc(rc.kultur)}</p>` : ''}</div>`);
   if (an && (an.staerken || an.luecken)) teile.push(`<div><h3>Passung</h3>${analyseHTML(an)}</div>`);
   if (vb) teile.push(`<div><h3>Gesprächsvorbereitung</h3>${prepHTML(vb)}</div>`);
   if (!teile.length) return '';
-  return `<details class="mehr" id="m-ki"><summary>${a.anschreiben ? 'Anschreiben und Unterlagen' : 'Unterlagen'}</summary><div class="mehr-in">${teile.join('')}</div></details>`;
+  return `<details class="mehr" id="m-ki"><summary>Zur Firma und Passung</summary><div class="mehr-in">${teile.join('')}</div></details>`;
+}
+/** Reiter Unterlagen: was rausging (die Datei selbst, wenn gespeichert), alles einzeln als PDF zum Hochladen, dazu die Texte zum Kopieren. */
+function unterlagenTabHTML(a) {
+  const p = P(), raus = !!a.status && a.status !== 'gemerkt', gd = a.gesendet?.dateien || [];
+  const cvKnopf = p.cv ? `<button class="btn sm" type="button" data-act="cv-akte" ${DL ? '' : 'hidden'}>${ic('down')}Lebenslauf</button>` : '';
+  const pdf = (a.anschreiben || p.cv) ? `<section class="ki-card" id="pdfKarte"><h3>${ic('doc')}Als PDF</h3>
+    <div class="ki-row">${a.anschreiben ? teilKnopf('brief', 'Anschreiben') + teilKnopf('motiv', 'Motivationsschreiben') : ''}${cvKnopf}${teilKnopf('anlagen', 'Zeugnisse')}${a.anschreiben ? teilKnopf('alles', 'Ganze Mappe') : ''}</div>
+    <p class="desc">${raus && !gd.length ? 'Aus den gespeicherten Texten neu erzeugt. ' : ''}Landet in den Downloads deines Geräts, von dort lädst du es ins Portal hoch.</p><span class="ki-status" id="mappeStatus3"></span></section>` : '';
+  const brief = a.anschreiben ? `<section><div class="ki-row" style="justify-content:space-between"><h3 class="v-kopf">Anschreiben</h3><button class="btn sm" type="button" data-copy="ki-anschreiben">${ic('copy')}Kopieren</button></div><div class="lesetext" id="ki-anschreiben">${esc(a.anschreiben)}</div></section>` : '';
+  const mail = a.mailtext && !istPortal(a) ? `<section><div class="ki-row" style="justify-content:space-between"><h3 class="v-kopf">Begleitmail</h3><button class="btn sm" type="button" data-copy="u-mailtext">${ic('copy')}Kopieren</button></div><div class="lesetext" id="u-mailtext">${esc(a.mailtext)}</div></section>` : '';
+  const html = (raus ? gesendetHTML(a) : '') + pdf + brief + mail;
+  return html || '<div class="empty-mini">Für diese Akte gibt es noch keine Unterlagen.</div>';
 }
 const DRAN_RX = /(?:^|\s)(?:antworten|zurückrufen|rückruf)\b/i;
 /** Im Gesprächsverlauf steht nur der Austausch mit der Firma: Mails, Anrufe, Einladungen, Absagen. Notizen und Status nicht. */
@@ -3320,6 +3338,7 @@ function renderDrawerBody(reset = false) {
   const t = state.drawerTab;
   let html = '';
   if (t === 'verlauf') html = verlaufHTML(a);
+  else if (t === 'unterlagen') html = unterlagenTabHTML(a);
   else html = infosHTML(a);
   const keep = b.scrollTop;
   b.innerHTML = html;
@@ -3588,13 +3607,6 @@ ${briefOhneBetreff(a0)}`, {signal: ctl.signal, cache: false});
     saveApp(id, false);
   } catch (e) { if (e?.code !== 'cancelled') { kiJobs.delete(key); rer(); setKiStatus('kurz', esc(kiFehler(e)), true); return; } }
   kiJobs.delete(key); rer();
-}
-async function teilHerunterladen(a, teil) {
-  const st = t => { const el = $('#teilStatus'); if (el) el.innerHTML = t; };
-  if (!DL) { st('Download ist in dieser Ansicht nicht verfügbar.'); return; }
-  st('<span class="pulse"></span>Wird erstellt …');
-  try { const r = await mappeBauen(a, {teil}); await DL.save({filename: r.filename, data: r.bytes}); st(`Gespeichert: ${r.seiten} Seiten.`); }
-  catch (e) { st(e?.code === 'declined' ? '' : 'Konnte nicht erstellt werden.'); }
 }
 
 /* ================= LinkedIn & XING ================= */
@@ -4147,7 +4159,7 @@ document.addEventListener('click', async e => {
     }
     if (act === 'fill-from-ad') return fillFromAd();
     if (act === 'mappe' && state.openId) return mappeErstellen(state.openId);
-    if (act === 'dl-teil' && state.openId) return teilHerunterladen(state.apps[state.openId], el.dataset.teil);
+    if (act === 'dl-teil' && state.openId) return teilHerunterladen(state.apps[state.openId], el.dataset.teil, $('#teilStatus'));
     if (act === 'kurzfassung' && state.openId) return kurzfassungErstellen();
     if (act === 'li-neu') return linkedinErstellen();
     if (act === 'mail-gmail' && state.openId) return mailGmailModal(state.openId);

@@ -4,7 +4,7 @@
  * KI-Anfragen, Supabase (Bildschirmzeit). Bei jeder Änderung an index.html
  * oder js/ VERSION hochzählen.
  */
-const VERSION = 'v54';
+const VERSION = 'v55';
 const HUELLE = `bz-huelle-${VERSION}`;
 const DAUER = 'bz-dauer-v1'; // Karte, Schriften, Bibliotheken von CDNs (versioniert, ändern sich nicht)
 const SHELL = ['./', 'index.html', 'js/plattform.js', 'js/bildschirmzeit.js', 'js/bildschirmzeit-start.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'datenschutz.html'];

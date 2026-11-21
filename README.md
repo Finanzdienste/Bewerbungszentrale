@@ -12,9 +12,12 @@ App fürs Handy, für Tobi.
   lässt Portal-Angaben kopieren, liefert die Mappen und sendet vorbereitete Mails per Knopf.
   Status, Notizen, Bürotage, Anschreiben und Antworten schreiben Morgenlauf, Postfach-Routine
   und Claude-Sitzungen ins Daten-Repo. Den Status setzt die App nur selbst, wenn sie eine Mail sendet.
-- **Akte:** zwei Reiter. „Infos“ (Score, Ort, Anfahrt, Gehalt, Weg, Kontakt, Abschicken,
-  Notizen, zugeklappt Unterlagen und Anzeige) und „Verlauf“ (oben „Du bist dran“ mit
-  Antwortvorschlag oder Rückruf, dann Termine, Offenes, Verlauf).
+- **Akte:** drei Reiter. „Infos“ (Score, Ort, Anfahrt, Gehalt, Weg, Kontakt, Termine, Offenes,
+  Briefing, Abschicken, Notizen, zugeklappt Firma/Passung und Anzeige), „Unterlagen“ (nach dem
+  Versand die verschickte PDF, dazu Anschreiben, Motivationsschreiben, Lebenslauf, Zeugnisse und
+  ganze Mappe als PDF, Anschreiben und Begleitmail zum Kopieren) und „Verlauf“ (oben „Du bist dran“
+  mit Antwortvorschlag oder Rückruf, darunter nur der Gesprächsverlauf mit den Mails im Wortlaut).
+  Links zu Anzeigen und Portalen öffnen auf Android direkt in Firefox.
 - **Vanilla-JS-PWA ohne Bauschritt**, live über GitHub Pages. Alles hier ist
   öffentlich lesbar, darum stehen hier keine persönlichen Daten.
 - `index.html` ist die App (ursprünglich ein Claude-Artifact, das mit
