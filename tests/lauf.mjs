@@ -747,6 +747,10 @@ test('dashboard', async () => {
   await seite.fill('#dashQ', '');
   await seite.waitForSelector('#dash [data-bereich="antwort"] [data-open="test-mail"]', { timeout: 10000 });
   assert.match(await seite.textContent('#dash [data-bereich="antwort"]'), /Warten auf deine Antwort\s*1.*zurückrufen/s);
+  assert.equal(await seite.locator('#dash [data-bereich="beworben"] [data-open="test-mail"]').count(), 0, 'steht nur unter „Warten auf deine Antwort“');
+  assert.match(await seite.textContent('#dash [data-bereich="rueckmeldung"] summary'), /Warten auf deren Rückmeldung/);
+  const doppelt = await seite.evaluate(() => { const ids = [...document.querySelectorAll('#dash .bereich:not([data-bereich="alle"]) [data-open]')].map((li) => li.dataset.open); return ids.filter((x, i) => ids.indexOf(x) !== i); });
+  assert.deepEqual(doppelt, [], 'jede Bewerbung nur in einem Bereich');
   assert.equal(await seite.locator('#mailFeld').count(), 0, 'keine Mail-Bewerbung bereit');
   // „Alle“: jede Akte außer Aussortierten und Beispielen
   assert.match(await seite.textContent('#dash [data-bereich="alle"] summary'), /Alle\s*\d+/);

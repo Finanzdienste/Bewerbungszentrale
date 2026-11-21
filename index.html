@@ -1087,7 +1087,7 @@ function renderUebersicht() {
 /** Kacheln im Dashboard: je Stufe die Zahl, ein Tipp öffnet die Liste genau dieser Bewerbungen. */
 /** Pipeline direkt im Dashboard: erste Spalte nur, was sich abschicken lässt, dann die Stufen nach dem Abschicken.
     Was der Morgenlauf noch vorbereitet, steht nur als Zahl darüber. Ein Tipp auf den Spaltenkopf öffnet die Liste. */
-const DASH_BEREICHE = [['antwort', 'Warten auf deine Antwort'], ['bereit', 'Vorbereitet'], ['beworben', 'Beworben'], ['rueckmeldung', 'Rückmeldung'], ['interview', 'Gespräch'], ['angebot', 'Angebot'], ['zusage', 'Zusage'], ['absage', 'Absage'], ['alle', 'Alle']];
+const DASH_BEREICHE = [['antwort', 'Warten auf deine Antwort'], ['bereit', 'Vorbereitet'], ['beworben', 'Beworben'], ['rueckmeldung', 'Warten auf deren Rückmeldung'], ['interview', 'Gespräch'], ['angebot', 'Angebot'], ['zusage', 'Zusage'], ['absage', 'Absage'], ['alle', 'Alle']];
 const dashOffen = (() => { try { const o = JSON.parse(localStorage.getItem('bz-dash-offen') || 'null'); if (Array.isArray(o)) return new Set(o); } catch {} return new Set(['antwort', 'bereit']); })();
 let dashWeg = (() => { try { return localStorage.getItem('bz-dash-weg') || ''; } catch { return ''; } })();
 const dashMerken = () => { try { localStorage.setItem('bz-dash-offen', JSON.stringify([...dashOffen])); localStorage.setItem('bz-dash-weg', dashWeg); } catch {} };
@@ -1119,8 +1119,10 @@ function dashBereicheHTML() {
     const auf = k === 'antwort' ? (a.aufgaben || []).find(x => !x.erledigt && /(?:^|\s)(?:antworten|zurückrufen|rückruf)\b/i.test(x.text || '')) : null;
     return `<li data-open="${a.id}" tabindex="0" style="--tone:${w.wert != null ? ringColor(w.wert) : 'var(--muted)'}"><span class="ico" style="font-family:var(--f-mono);font-size:12px;font-weight:600">${w.wert != null ? (w.geschaetzt ? '≈' : '') + w.wert : '–'}</span><span style="min-width:0"><div class="t">${esc(a.position || 'Position fehlt')} · ${esc(a.firma || 'Ohne Firma')}</div><div class="d">${esc(auf ? auf.text.replace(/\s*\((?:Antwort liegt in der App bereit)\)/, '') : d)}</div></span></li>`; };
   const gezeigt = new Set(); // bei der Suche klappt „Alle“ nur auf, wenn ein Treffer in keinem anderen Bereich steht
+  const vergeben = new Set(); // jede Bewerbung steht nur im ersten passenden Bereich, „Alle“ zeigt alle
   const html = DASH_BEREICHE.map(([k, label]) => {
-    const alleDrin = alle.filter(gehoert[k] || (a => a.status === k));
+    const alleDrin = alle.filter(a => (k === 'alle' || !vergeben.has(a.id)) && (gehoert[k] || (x => x.status === k))(a));
+    if (k !== 'alle') alleDrin.forEach(a => vergeben.add(a.id));
     if (!alleDrin.length && ['antwort', 'angebot', 'zusage'].includes(k)) return '';
     const items = alleDrin.filter(passt).sort(['bereit', 'vorbereitung', 'alle'].includes(k) ? (x, y) => sc(y) - sc(x) || (x.fristBis || '9999').localeCompare(y.fristBis || '9999') : (x, y) => lastActivity(y).localeCompare(lastActivity(x)));
     if (k !== 'alle') items.forEach(a => gezeigt.add(a.id));
