@@ -2231,7 +2231,7 @@ function mappenPlan() { // was in die Ordner gehört: freigegebene Portal-Bewerb
     .map(x => {
       let name = ordnerName(x.a, x.sc); for (let i = 2; namen.has(name); i++) name = `${ordnerName(x.a, x.sc).slice(0, 85)} (${i})`; namen.add(name);
       const info = portalInfos(x.a);
-      return {...x, name, info, stand: `m3|${fassungVon(x.a)}|${profilStand}#${sha1Hex(info).slice(0, 10)}`}; // m2: Zeugnisse in jedem Ordner, m3: kurze Dateinamen
+      return {...x, name, info, stand: `m4|${fassungVon(x.a)}|${profilStand}#${sha1Hex(info).slice(0, 10)}`}; // m2: Zeugnisse in jedem Ordner, m3: kurze Dateinamen, m4: dazu Anschreiben und Zeugnisse
     });
   const allgemein = 'a3|' + profilStand; // „Allgemein“: allgemeiner Lebenslauf und Zeugnisse, z. B. fürs Profil bei Jobbörsen
   return {liste, profilStand, allgemein, sig: allgemein + '\n' + liste.map(x => x.name + '\t' + x.stand).join('\n')};
@@ -2247,7 +2247,7 @@ async function ordnerSync() {
     const gebaut = new Map(); // PDFs je Stelle nur einmal bauen, auch wenn PC-Ordner und Drive sie brauchen
     const dateien = x => { if (!gebaut.has(x.name)) gebaut.set(x.name, (async () => {
       const aus = [];
-      for (const teil of ['brief', 'cv', 'alles']) { const r = await mappeBauen(x.a, {teil}); aus.push({name: r.filename, bytes: r.bytes, typ: 'application/pdf'}); await pause(); }
+      for (const teil of ['brief', 'cv', 'ohnecv', 'alles']) { const r = await mappeBauen(x.a, {teil}); aus.push({name: r.filename, bytes: r.bytes, typ: 'application/pdf'}); await pause(); }
       const z = await zg(); if (z.seiten) aus.push({name: z.filename, bytes: z.bytes, typ: 'application/pdf'});
       return aus;
     })()); return gebaut.get(x.name); };
@@ -2870,7 +2870,8 @@ async function mappeBauen(a, opt = {}) {
   const ds = (p.dateien || []).filter(d => d.mappe !== false && !(cv && d.typ === 'lebenslauf'));
   const [PDFLib, fk, schriften] = await Promise.all([loadPdfLib(), loadFontkit(), ladeSchriften()]);
   const dateien = [];
-  if (teil === 'alles' || teil === 'anlagen') for (const d of ds) { const r = await fetch(opt.kompakt && d.mailUrl ? d.mailUrl : d.url); if (!r.ok) throw new Error('Datei ' + d.name); dateien.push({name: d.name, bytes: new Uint8Array(await r.arrayBuffer())}); }
+  const mitBrief = ['alles', 'brief', 'ohnecv'].includes(teil), mitAnlagen = ['alles', 'anlagen', 'ohnecv'].includes(teil); // ohnecv: Anschreiben und Zeugnisse, für Portale mit eigenem Feld für den Lebenslauf
+  if (mitAnlagen) for (const d of ds) { const r = await fetch(opt.kompakt && d.mailUrl ? d.mailUrl : d.url); if (!r.ok) throw new Error('Datei ' + d.name); dateien.push({name: d.name, bytes: new Uint8Array(await r.arrayBuffer())}); }
   let foto = null;
   if (cv && p.fotoAn !== false && p.foto?.url) { try { const r = await fetch(p.foto.url); if (r.ok) foto = new Uint8Array(await r.arrayBuffer()); } catch { /* ohne Foto */ } }
   const ort = (String(p.adresse || '').match(/\b\d{5}\s+([^,]+)\s*$/) || [])[1];
@@ -2880,11 +2881,11 @@ async function mappeBauen(a, opt = {}) {
   const kontakt = en ? empfaengerName(a).replace(/^Herrn?\s+/, 'Mr ').replace(/^Frau\s+/, 'Ms ') : empfaengerName(a);
   const anschrift = String(a.anschrift || '').split(/\n|,\s*/).map(x => x.trim()).filter(Boolean);
   const gen = makeDocGen(PDFLib, fk);
-  const r = await gen.buildMappe({anschreiben: teil === 'alles' || teil === 'brief' ? a.anschreiben : '', absender: {name: p.name, titel: cv?.titel || p.titel, adresse: p.adresse, telefon: p.telefon, email: p.email},
+  const r = await gen.buildMappe({anschreiben: mitBrief ? a.anschreiben : '', absender: {name: p.name, titel: cv?.titel || p.titel, adresse: p.adresse, telefon: p.telefon, email: p.email},
     empfaenger: [String(a.firma || '').replace(/\s*\([^)]*\)\s*$/, ''), kontakt, ...(anschrift.length ? anschrift : [a.ort])], datumOrt: ort ? `${ort}, ${datum}` : datum, anlagen,
     titel: opt.nurCv ? `${en ? 'CV' : 'Lebenslauf'} ${p.name || ''}` : `${en ? 'Application' : 'Bewerbung'} ${p.name || ''}, ${a.position || ''}`, design: {layout: opt.layout || (a.layout === 'klassisch' ? 'klassisch' : 'modern'), akzent: a.akzent}, sprache: en ? 'en' : 'de',
     cv: teil === 'alles' || teil === 'cv' ? cv : null, foto, schriften, dateien});
-  const fn = teil === 'anlagen' ? dateiName('Zeugnisse', {}) : dateiName(teil === 'brief' ? (opt.motiv ? 'Motivationsschreiben' : 'Anschreiben') : opt.nurCv ? 'Lebenslauf' : 'Bewerbung', a);
+  const fn = teil === 'anlagen' ? dateiName('Zeugnisse', {}) : teil === 'ohnecv' ? dateiName('Anschreiben_Zeugnisse', a) : dateiName(teil === 'brief' ? (opt.motiv ? 'Motivationsschreiben' : 'Anschreiben') : opt.nurCv ? 'Lebenslauf' : 'Bewerbung', a);
   return {...r, ds, cv: !!cv, filename: fn};
 }
 async function cvHerunterladen(a, layout, stEl) {
@@ -3270,7 +3271,7 @@ function unterlagenTabHTML(a) {
   const p = P(), raus = !!a.status && a.status !== 'gemerkt', gd = a.gesendet?.dateien || [];
   const cvKnopf = p.cv ? `<button class="btn sm" type="button" data-act="cv-akte" ${DL ? '' : 'hidden'}>${ic('down')}Lebenslauf</button>` : '';
   const pdf = (a.anschreiben || p.cv) ? `<section class="ki-card" id="pdfKarte"><h3>${ic('doc')}Als PDF</h3>
-    <div class="ki-row">${a.anschreiben ? teilKnopf('brief', 'Anschreiben') + teilKnopf('motiv', 'Motivationsschreiben') : ''}${cvKnopf}${teilKnopf('anlagen', 'Zeugnisse')}${a.anschreiben ? teilKnopf('alles', 'Ganze Mappe') : ''}${p.foto?.url ? teilKnopf('foto', 'Bewerbungsfoto') : ''}</div>
+    <div class="ki-row">${a.anschreiben ? teilKnopf('brief', 'Anschreiben') + teilKnopf('motiv', 'Motivationsschreiben') : ''}${cvKnopf}${teilKnopf('anlagen', 'Zeugnisse')}${a.anschreiben ? teilKnopf('ohnecv', 'Anschreiben und Zeugnisse') + teilKnopf('alles', 'Ganze Mappe') : ''}${p.foto?.url ? teilKnopf('foto', 'Bewerbungsfoto') : ''}</div>
     <p class="desc">${raus && !gd.length ? 'Aus den gespeicherten Texten neu erzeugt. ' : ''}Landet in den Downloads deines Geräts, von dort lädst du es ins Portal hoch.</p><span class="ki-status" id="mappeStatus3"></span></section>` : '';
   const brief = a.anschreiben ? `<section><div class="ki-row" style="justify-content:space-between"><h3 class="v-kopf">Anschreiben</h3><button class="btn sm" type="button" data-copy="ki-anschreiben">${ic('copy')}Kopieren</button></div><div class="lesetext" id="ki-anschreiben">${esc(a.anschreiben)}</div></section>` : '';
   const mail = a.mailtext && !istPortal(a) ? `<section><div class="ki-row" style="justify-content:space-between"><h3 class="v-kopf">Begleitmail</h3><button class="btn sm" type="button" data-copy="u-mailtext">${ic('copy')}Kopieren</button></div><div class="lesetext" id="u-mailtext">${esc(a.mailtext)}</div></section>` : '';

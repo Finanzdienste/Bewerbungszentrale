@@ -631,8 +631,8 @@ test('ordner', async () => {
   assert.match(stelle, /^\d{2} Klima Beispiel GmbH - Energiecontroller$/, 'Score davor, ohne (m/w/d)');
   const inhalt = stand[stelle];
   const pdfs = Object.keys(inhalt).filter((n) => n.endsWith('.pdf')).sort();
-  assert.equal(pdfs.length, 4, 'Anschreiben, Lebenslauf, Zeugnisse, Mappe: ' + pdfs.join(', '));
-  assert.ok(['Anschreiben_', 'Lebenslauf_', 'Zeugnisse_', 'Bewerbung_'].every((v) => pdfs.some((n) => n.startsWith(v))), 'alles in jedem Ordner');
+  assert.equal(pdfs.length, 5, 'Anschreiben, Lebenslauf, Zeugnisse, Anschreiben mit Zeugnissen, Mappe: ' + pdfs.join(', '));
+  assert.ok(['Anschreiben_', 'Anschreiben_Zeugnisse_', 'Lebenslauf_', 'Zeugnisse_', 'Bewerbung_'].every((v) => pdfs.some((n) => n.startsWith(v))), 'alles in jedem Ordner');
   for (const n of pdfs) assert.ok(inhalt[n].startsWith('%PDF'), n + ' ist ein PDF');
   const info = inhalt['Portal-Infos.txt'];
   assert.match(info, /Link zur Anzeige: https:\/\/example\.org\/stelle\/1\r\n/);
@@ -680,8 +680,8 @@ test('drive', async () => {
   const o = fertig();
   assert.match(o.name, /^\d{2} Klima Beispiel GmbH - Energiecontroller$/);
   const drin = drive.kinder(o.id), namen = drin.map((f) => f.name).sort();
-  assert.equal(drin.length, 5, namen.join(', '));
-  assert.ok(['Anschreiben_', 'Lebenslauf_', 'Zeugnisse_', 'Bewerbung_'].every((v) => namen.some((n) => n.startsWith(v) && n.endsWith('.pdf'))));
+  assert.equal(drin.length, 6, namen.join(', '));
+  assert.ok(['Anschreiben_', 'Anschreiben_Zeugnisse_', 'Lebenslauf_', 'Zeugnisse_', 'Bewerbung_'].every((v) => namen.some((n) => n.startsWith(v) && n.endsWith('.pdf'))));
   for (const f of drin.filter((f) => f.name.endsWith('.pdf'))) { assert.equal(f.inhalt.subarray(0, 4).toString(), '%PDF', f.name); assert.equal(f.mimeType, 'application/pdf'); }
   assert.match(drin.find((f) => f.name === 'Portal-Infos.txt').inhalt.toString('utf8'), /Gehaltsvorstellung: /);
   assert.equal(drive.log.filter((x) => x === 'abgebrochen').length, 2, 'zwei Netzaussetzer, trotzdem durchgelaufen');
@@ -918,13 +918,21 @@ test('gesendet', async () => {
   await seite.click('[data-tab="unterlagen"]');
   await seite.waitForSelector('#gesendetKarte', { timeout: 10000 });
   assert.match(await seite.textContent('#gesendetKarte'), /Bewerbung_Erfunden\.pdf.*Genau die Datei, die am 18\.11\.2026 per Mail an bewerbung@beispiel\.test rausging/s);
-  assert.match(await seite.textContent('#pdfKarte'), /Anschreiben.*Motivationsschreiben.*Lebenslauf.*Zeugnisse.*Ganze Mappe/s);
+  assert.match(await seite.textContent('#pdfKarte'), /Anschreiben.*Motivationsschreiben.*Lebenslauf.*Zeugnisse.*Anschreiben und Zeugnisse.*Ganze Mappe/s);
   const [d1] = await Promise.all([seite.waitForEvent('download', { timeout: 20000 }), seite.click('#gesendetKarte [data-act="gesendet-datei"]')]);
   assert.equal(d1.suggestedFilename(), 'Bewerbung_Erfunden.pdf');
   const [d2] = await Promise.all([seite.waitForEvent('download', { timeout: 60000 }), seite.click('#pdfKarte [data-teil="brief"]')]);
   assert.match(d2.suggestedFilename(), /^Anschreiben_.*\.pdf$/);
   const [d3] = await Promise.all([seite.waitForEvent('download', { timeout: 60000 }), seite.click('#pdfKarte [data-teil="motiv"]')]);
   assert.match(d3.suggestedFilename(), /^Motivationsschreiben_.*\.pdf$/);
+  // Anschreiben und Zeugnisse in einer PDF, ohne Lebenslauf: so viele Seiten wie Anschreiben und Zeugnisse einzeln
+  const { PDFDocument } = await import('pdf-lib');
+  const seiten = async (d) => (await PDFDocument.load(fs.readFileSync(await d.path()))).getPageCount();
+  const [d4] = await Promise.all([seite.waitForEvent('download', { timeout: 60000 }), seite.click('#pdfKarte [data-teil="ohnecv"]')]);
+  assert.match(d4.suggestedFilename(), /^Anschreiben_Zeugnisse_Max_Muster.*\.pdf$/);
+  const [d5] = await Promise.all([seite.waitForEvent('download', { timeout: 60000 }), seite.click('#pdfKarte [data-teil="anlagen"]')]);
+  const [n2, n4, n5] = [await seiten(d2), await seiten(d4), await seiten(d5)];
+  assert.ok(n5 > 0 && n4 === n2 + n5, `Seiten: Anschreiben ${n2}, Zeugnisse ${n5}, zusammen ${n4}`);
   assert.equal(await seite.locator('#pdfKarte [data-teil="foto"]').count(), 0, 'ohne Foto im Profil kein Foto-Knopf');
   // vor dem Versand: Unterlagen ohne Bereich „Gesendet“, Infos ohne Anschreiben
   await seite.click('#drClose');
