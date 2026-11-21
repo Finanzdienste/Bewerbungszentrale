@@ -900,6 +900,7 @@ test('gesendet', async () => {
   assert.match(d2.suggestedFilename(), /^Anschreiben_.*\.pdf$/);
   const [d3] = await Promise.all([seite.waitForEvent('download', { timeout: 60000 }), seite.click('#pdfKarte [data-teil="motiv"]')]);
   assert.match(d3.suggestedFilename(), /^Motivationsschreiben_.*\.pdf$/);
+  assert.equal(await seite.locator('#pdfKarte [data-teil="foto"]').count(), 0, 'ohne Foto im Profil kein Foto-Knopf');
   // vor dem Versand: Unterlagen ohne Bereich „Gesendet“, Infos ohne Anschreiben
   await seite.click('#drClose');
   await zuAkte(seite, 'test-portal');
@@ -909,6 +910,24 @@ test('gesendet', async () => {
   await seite.waitForSelector('#pdfKarte', { timeout: 10000 });
   assert.equal(await seite.locator('#gesendetKarte').count(), 0);
   assert.equal(await seite.locator('#ki-anschreiben').count(), 1);
+  assert.deepEqual(fehler, []);
+});
+
+test('foto', async () => {
+  // Bewerbungsfoto aus dem Profil als Datei, z. B. fürs Feld „Passbild“ im Portal
+  const { seite, gh, fehler } = await appStarten();
+  const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0xff, 0xd9]);
+  gh.dateien.set('dateien/fedcba9876543210.jpg', jpg);
+  const p = json(gh, 'profil/main.json');
+  gh.dateien.set('profil/main.json', Buffer.from(JSON.stringify({ ...p, foto: { id: 'fedcba9876543210', url: '/_blob/fedcba9876543210' } }, null, 1) + '\n'));
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.waitForSelector('#dash, #v-liste', { timeout: 20000 });
+  await zuAkte(seite, 'test-portal');
+  await seite.click('[data-tab="unterlagen"]');
+  await seite.waitForSelector('#pdfKarte [data-teil="foto"]', { timeout: 10000 });
+  const [d] = await Promise.all([seite.waitForEvent('download', { timeout: 20000 }), seite.click('#pdfKarte [data-teil="foto"]')]);
+  assert.match(d.suggestedFilename(), /^Bewerbungsfoto_.*\.jpg$/);
   assert.deepEqual(fehler, []);
 });
 
