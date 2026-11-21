@@ -559,17 +559,8 @@ fieldset legend{font-size:var(--t-xs);font-weight:600;color:var(--muted);padding
 .steps{margin:0;padding-left:1.25em;display:flex;flex-direction:column;gap:14px;font-size:var(--t-sm)}
 .steps li{padding-left:4px}
 .manuell{border-top:1px dashed var(--line-strong);padding-top:10px;margin-top:4px;font-size:var(--t-sm)}
-.pruef{border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:var(--t-sm);display:flex;flex-direction:column;gap:6px;background:var(--sheet-2)}
-.pruef.frei{border-color:color-mix(in srgb,var(--good) 45%,var(--line));background:color-mix(in srgb,var(--good) 7%,var(--sheet))}
-.pruef.maengel,.pruef.geaendert{border-color:color-mix(in srgb,var(--warn) 45%,var(--line));background:color-mix(in srgb,var(--warn) 7%,var(--sheet))}
-.pruef .pr-kopf{display:flex;gap:8px;align-items:flex-start;font-weight:500}
-.pruef .pr-kopf svg.i{flex:none;margin-top:2px;width:16px;height:16px}
-.pruef.frei .pr-kopf svg.i{color:var(--good)}
-.pruef.maengel .pr-kopf svg.i,.pruef.geaendert .pr-kopf svg.i{color:var(--warn)}
-.pruef ul{margin:0;padding-left:18px}
-.pruef li{margin:4px 0}
-.pruef q{color:var(--muted)}
-.pruef summary{cursor:pointer;color:var(--muted)}
+.pruef{display:flex;gap:8px;align-items:flex-start;font-size:var(--t-sm);color:var(--muted);margin:0}
+.pruef svg.i{flex:none;margin-top:2px;width:16px;height:16px;color:var(--warn)}
 .manuell summary{cursor:pointer;color:var(--muted);font-weight:500}
 .copyline{display:grid;grid-template-columns:60px minmax(0,1fr) auto;gap:8px;align-items:center;margin-top:6px}
 .copyline span{font-size:var(--t-xs);color:var(--muted);font-weight:600}
@@ -1985,7 +1976,7 @@ function bereitHTML(a) {
   if (a.status !== 'gemerkt' || !(a.vorschlag || a.anschreiben || a.entwurfUrl)) return '';
   const sc = Number(a.analyse?.score) || null;
   const link = /^https?:\/\//.test(a.link || '') ? a.link : '';
-  const mail = (a.kontakt?.email || '').trim();
+  const mail = istPortal(a) ? '' : (a.kontakt?.email || '').trim(); // eine Kontaktadresse allein macht keine Mail-Bewerbung
   const betreff = betreffFuer(a), text = mailtextFuer(a);
   const mailto = mail ? `mailto:${encodeURIComponent(mail)}?subject=${encodeURIComponent(betreff)}&body=${encodeURIComponent(text.replace(/\n/g, '\r\n'))}` : '';
   const ohneAnschreiben = !a.anschreiben?.trim();
@@ -2116,27 +2107,10 @@ const laeuftBei = a => !a.beispiel && (AKTIV.has(a.status) || (a.status === 'gem
 const laufendBeiFirma = (a, id) => { const g = firmaGruppe(a.firma); return Object.entries(state.apps).map(([i, x]) => ({...x, id: i})).find(x => x.id !== id && laeuftBei(x) && firmaGruppe(x.firma) === g) || null; };
 const firmenMitVersand = () => new Set(Object.values(state.apps).filter(x => AKTIV.has(x.status) && !x.beispiel).map(x => firmaGruppe(x.firma)));
 const istBereit = a => !a.verworfen && !a.beispiel && pruefStand(a) === 'frei';
-const PR_WO = {anschreiben: 'Anschreiben', betreff: 'Betreff', mailtext: 'Begleitmail', lebenslauf: 'Lebenslauf', bewerbungsweg: 'Bewerbungsweg', sonstiges: 'Sonstiges'};
-function maengelHTML(ms) {
-  return `<ul>${ms.map(m => `<li><span class="chip ${m.schwere === 'hoch' ? 'bad' : m.schwere === 'mittel' ? 'warn' : ''}">${esc(m.schwere)}</span> <b>${esc(PR_WO[m.wo] || m.wo || '')}:</b> ${esc(m.problem)}${m.zitat ? ` <q>${esc(m.zitat)}</q>` : ''}${m.vorschlag ? `<div class="muted">Vorschlag: ${esc(m.vorschlag)}</div>` : ''}</li>`).join('')}</ul>`;
-}
+/** Gegenlese-Ergebnisse (Note, Inhalt, Fragen) gehören nicht in die App. Nur wenn eine Bewerbung noch nicht fertig ist, eine Zeile. */
 function pruefungHTML(a) {
-  const s = pruefStand(a); if (!s) return '';
-  const p = a.pruefung || {}; const mg = p.maengel || [];
-  const ernst = mg.filter(m => m.schwere !== 'gering'), klein = mg.filter(m => m.schwere === 'gering');
-  const fragen = (p.fragen || []).length ? `<div><b>Vor dem Abschicken klären:</b><ul>${p.fragen.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>` : '';
-  const vor = '';
-  const wann = p.datum ? ` am ${fmtDs(p.datum)}` : '';
-  const box = (kl, icon, kopf, rest = '', knoepfe = '') => `<div class="pruef ${kl}" id="pruefung"><div class="pr-kopf">${ic(icon)}<span>${kopf}</span></div>${rest}${knoepfe || vor ? `<div class="ki-row">${knoepfe}${vor}</div>` : ''}</div>`;
-  if (s === 'neu') return box('', 'clock', 'Noch nicht gegengelesen. Das macht der nächste Morgenlauf.', '', '');
-  if (s === 'wird') return box('', 'clock', 'Beim Gegenlesen sind Punkte aufgefallen. Der nächste Morgenlauf schreibt die Bewerbung neu und liest sie dann noch einmal gegen.',
-    a.ueberarbeiten?.maengel?.length ? `<details><summary>Was geändert wird</summary><ul>${a.ueberarbeiten.maengel.map(m => `<li>${esc(m)}</li>`).join('')}</ul></details>` : '');
-  if (s === 'frei') return box('frei', 'check', `Gegengelesen${wann} und freigegeben${p.note != null ? `, Note ${esc(p.note)} von 100` : ''}${p.manuell ? ' (von dir)' : ''}.`,
-    `${p.staerke ? `<div>${esc(p.staerke)}</div>` : ''}${fragen}${klein.length ? `<details><summary>${klein.length === 1 ? 'Ein kleiner Hinweis' : `${klein.length} kleine Hinweise`}</summary>${maengelHTML(klein)}</details>` : ''}`);
-  if (s === 'geaendert') return box('geaendert', 'alert', 'Seit dem Gegenlesen geändert. Der nächste Morgenlauf liest die neue Fassung gegen.',
-    mg.length ? `<details><summary>Ergebnis zur vorigen Fassung</summary>${maengelHTML(mg)}</details>` : '');
-  return box('maengel', 'alert', `Gegengelesen${wann}: ${ernst.length === 1 ? 'ein Punkt ist' : `${ernst.length} Punkte sind`} noch offen${p.note != null ? ` (Note ${esc(p.note)})` : ''}. ${(a.pruefRunden || 0) >= 2 ? 'Claude überarbeitet die Bewerbung von Hand.' : 'Der Morgenlauf überarbeitet die Bewerbung.'}`,
-    `${maengelHTML(ernst)}${fragen}${klein.length ? `<details><summary>${klein.length} kleine Hinweise</summary>${maengelHTML(klein)}</details>` : ''}`);
+  const s = pruefStand(a); if (!s || s === 'frei') return '';
+  return `<p class="pruef" id="pruefung">${ic('clock')}<span>Noch nicht fertig. Claude überarbeitet die Bewerbung, bitte noch nicht abschicken.</span></p>`;
 }
 function pruefAktion(act) {
   const id = state.openId; const a = state.apps[id]; if (!a) return;

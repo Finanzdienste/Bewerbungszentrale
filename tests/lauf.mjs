@@ -175,6 +175,10 @@ test('weg-portal-mit-mail', async () => {
   assert.match(t, /Über das Portal der Firma/);
   assert.doesNotMatch(t, /Per Mail an/);
   assert.match(t, /Erika Beispiel.*karriere@beispiel\.test/s, 'Mailadresse steht beim Kontakt');
+  const abs = await seite.textContent('#drBody .abschicken');
+  assert.match(abs, /Zum Bewerbungsportal/);
+  assert.doesNotMatch(abs, /Per Gmail|Geht an/, 'kein Mail-Versand bei Portal-Bewerbung');
+  assert.equal(await seite.locator('#drBody [data-act="gmail-api"], #drBody [data-act="gmail-senden"]').count(), 0);
   assert.deepEqual(fehler, []);
 });
 
@@ -444,13 +448,15 @@ test('gegenlesen', async () => {
   assert.equal(await seite.locator('#dash [data-bereich="bereit"] [data-open="test-mail"]').count(), 1, 'freigegebene Mail-Bewerbung steht unter Vorbereitet');
   assert.equal(await seite.locator('#mailFeld [data-act="sammel-mail"]').count(), 1);
   await zuAkte(seite, 'test-mail');
-  assert.equal(await seite.getAttribute('#pruefung', 'class'), 'pruef frei', 'App erkennt dieselbe Fassung wie der Morgenlauf');
-  assert.match(await seite.textContent('#pruefung'), /Note 94.*frühesten Eintritt/s);
+  // App erkennt dieselbe Fassung wie der Morgenlauf: freigegeben, und dann kein Prüfergebnis in der Akte
+  assert.equal(await seite.locator('#pruefung').count(), 0, 'freigegeben: kein Prüfkasten');
+  const abs = await seite.textContent('#drBody .abschicken');
+  assert.doesNotMatch(abs, /Gegengelesen|Note \d|klären|frühesten Eintritt/, 'keine Note, kein Inhalt, keine Fragen');
   await seite.click('#drClose');
   await zuAkte(seite, 'test-portal');
-  assert.match(await seite.getAttribute('#pruefung', 'class'), /maengel/);
-  assert.match(await seite.textContent('#pruefung'), /Claude überarbeitet die Bewerbung von Hand.*zehn Jahre Erfahrung/s);
-  assert.equal(await seite.locator('#pruefung button').count(), 0, 'freigeben oder neu schreiben macht der Morgenlauf');
+  assert.match(await seite.textContent('#pruefung'), /^Noch nicht fertig\. Claude überarbeitet die Bewerbung/);
+  assert.doesNotMatch(await seite.textContent('#drBody .abschicken'), /zehn Jahre|Klarer Einstieg|Note 71/, 'keine Mängel und keine Note');
+  assert.equal(await seite.locator('#pruefung button, #pruefung details').count(), 0);
   assert.deepEqual(fehler, []);
 });
 
@@ -461,7 +467,7 @@ test('gegenlesen-neu', async () => {
   await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
   await seite.evaluate(() => window.bzPlattform.abgleichen());
   await zuAkte(seite, 'test-portal');
-  await seite.waitForFunction(() => /nächste Morgenlauf schreibt/.test(document.querySelector('#pruefung')?.textContent || ''), null, { timeout: 10000 });
+  await seite.waitForFunction(() => /Noch nicht fertig/.test(document.querySelector('#pruefung')?.textContent || ''), null, { timeout: 10000 });
   assert.deepEqual(fehler, []);
 });
 
