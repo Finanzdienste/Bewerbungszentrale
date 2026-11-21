@@ -2463,6 +2463,7 @@ function sammelMailModal(ids) {
           unterlagenAbhaken(cur, mappe.ds);
           cur.aufgaben = (cur.aufgaben || []).map(k => /bewerbungsmappe|portal/i.test(k.text) ? {...k, erledigt: true} : k);
           cur.verlauf.push({id: uid(), datum: jetztISO(), typ: 'mail', text: `Bewerbung per Gmail an ${an} verschickt (${mappe.seiten} Seiten)`, mail: mailEintragNeu({an, betreff: betreffFuer(a), text: mailtextFuer(a), anhaenge: [mappe.filename]})});
+          await gesendetSpeichern(cur, mappe, an);
           saveApp(id, false); setStatus(id, 'beworben', {quiet: true});
           z.rs.innerHTML = '<span class="pulse"></span>Gesendet, wird eingetragen …';
           const ok2 = await speichernJetzt(id);
@@ -3095,6 +3096,7 @@ async function gmailModal(id) {
       unterlagenAbhaken(cur, mappe.ds);
       cur.aufgaben = (cur.aufgaben || []).map(k => /bewerbungsmappe|portal/i.test(k.text) ? {...k, erledigt: true} : k);
       cur.verlauf.push({id:uid(), datum:jetztISO(), typ:'mail', text:`Bewerbung per Gmail an ${an} verschickt (${mappe.seiten} Seiten)`, mail: mailEintragNeu({an, betreff, text, anhaenge: [mappe.filename]})});
+      await gesendetSpeichern(cur, mappe, an);
       saveApp(id, false);
       setStatus(id, 'beworben', {quiet:true});
       closeModal();
@@ -3208,16 +3210,50 @@ function infosHTML(a) {
       ${z('Kontakt', kontakt)}
     </dl>
     ${bereitHTML(a)}
+    ${gesendetHTML(a)}
     ${a.notizen ? `<section><h3 class="v-kopf">Notizen</h3><div class="lesetext" id="d-notizen">${esc(a.notizen)}</div></section>` : ''}
     ${unterlagenHTML(a)}
     ${a.stellenText ? `<details class="mehr" id="m-anzeige"><summary>Stellenanzeige</summary><div class="mehr-in"><div class="lesetext" id="d-stelle">${esc(a.stellenText)}</div></div></details>` : ''}`;
+}
+const teilKnopf = (teil, label) => `<button class="btn sm" type="button" data-act="teil-pdf" data-teil="${teil}" ${DL ? '' : 'hidden'}>${ic('down')}${label}</button>`;
+/** Nach dem Versand: die Datei, die rausging (wenn sie gespeichert ist), dazu Anschreiben, Lebenslauf und Zeugnisse einzeln. */
+function gesendetHTML(a) {
+  if (!a.status || a.status === 'gemerkt' || a.beispiel) return '';
+  const g = a.gesendet || {}, gd = g.dateien || [];
+  const wann = g.datum ? ` am ${fmtD(g.datum)}` : '';
+  const exakt = gd.length ? `<div class="ki-row">${gd.map((d, i) => `<button class="btn" type="button" data-act="gesendet-datei" data-i="${i}" ${DL ? '' : 'hidden'}>${ic('doc')}${esc(d.name)}</button>`).join('')}</div>
+    <p class="desc">Genau die Datei, die${wann} ${g.weg === 'portal' ? 'ins Portal ging' : `per Mail${g.an ? ` an ${esc(g.an)}` : ''} rausging`}.</p>` : `<p class="desc">${istPortal(a) ? 'Über das Portal hochgeladen. Die hochgeladenen Dateien selbst liegen hier nicht vor.' : 'Die verschickte Datei liegt hier nicht vor.'} Aus den gespeicherten Texten:</p>`;
+  const einzeln = a.anschreiben ? `<div class="ki-row">${gd.length ? '<span class="muted" style="font-size:var(--t-xs)">Einzeln:</span>' : ''}${teilKnopf('brief', 'Anschreiben')}<button class="btn sm" type="button" data-act="cv-akte" ${DL ? '' : 'hidden'}>${ic('down')}Lebenslauf</button>${teilKnopf('anlagen', 'Zeugnisse')}${gd.length ? '' : teilKnopf('alles', 'Ganze Mappe')}</div>` : '';
+  return `<section class="ki-card" id="gesendetKarte"><h3>${ic('doc')}Gesendete Unterlagen</h3>${exakt}${einzeln}<span class="ki-status" id="mappeStatus3"></span></section>`;
+}
+async function teilHerunterladen(a, teil, stEl) {
+  const st = t => { if (stEl) stEl.innerHTML = t; };
+  if (!DL) { st('Download ist in dieser Ansicht nicht verfügbar.'); return; }
+  if (teil !== 'anlagen' && !a?.anschreiben?.trim()) { st('Kein Anschreiben gespeichert.'); return; }
+  st('<span class="pulse"></span>PDF wird erstellt …');
+  try { const r = await mappeBauen(a, {teil}); await DL.save({filename: r.filename, data: r.bytes}); st(`Gespeichert: ${r.seiten} Seiten.`); }
+  catch (e) { st(e?.code === 'declined' ? '' : 'PDF konnte nicht erstellt werden.'); }
+}
+async function gesendetOeffnen(a, i, stEl) {
+  const d = a?.gesendet?.dateien?.[i]; if (!d) return;
+  if (!DL) { window.open(d.url, '_blank', 'noopener'); return; }
+  try { const r = await fetch(d.url); if (!r.ok) throw new Error('fetch'); await DL.save({filename: d.name, data: new Uint8Array(await r.arrayBuffer())}); }
+  catch (e) { if (e?.code !== 'declined' && stEl) stEl.textContent = 'Datei konnte nicht geladen werden.'; }
+}
+/** Die verschickte PDF im Daten-Repo ablegen, damit sie in der Akte genau so wieder abrufbar ist. Scheitert das, bleibt der Versand gültig. */
+async function gesendetSpeichern(cur, mappe, an) {
+  try {
+    if (!AS || !mappe?.bytes) return;
+    const up = await AS.upload(new File([mappe.bytes], mappe.filename, {type: 'application/pdf'}));
+    cur.gesendet = {datum: jetztISO(), weg: 'mail', an, dateien: [{id: up.id, name: mappe.filename, url: up.url, groesse: up.sizeBytes}]};
+  } catch (e) { console.warn('Gesendete Datei nicht gespeichert', e); }
 }
 /** Anschreiben, Lebenslauf und was Claude zur Stelle herausgefunden hat: nur zum Ansehen und Kopieren. */
 function unterlagenHTML(a) {
   const an = a.analyse, vb = a.vorbereitung, rc = a.recherche, p = P();
   const teile = [];
   if (a.anschreiben) teile.push(`<div><div class="ki-row" style="justify-content:space-between"><h3>Anschreiben</h3><button class="btn sm" type="button" data-copy="ki-anschreiben">${ic('copy')}Kopieren</button></div><div class="lesetext" id="ki-anschreiben">${esc(a.anschreiben)}</div></div>`);
-  if (p.cv) teile.push(`<div class="ki-row"><button class="btn sm" type="button" data-act="cv-akte" ${DL ? '' : 'hidden'}>${ic('down')}Lebenslauf für diese Stelle ansehen</button><span class="ki-status" id="mappeStatus3"></span></div>`);
+  if (p.cv && a.status === 'gemerkt') teile.push(`<div class="ki-row">${a.anschreiben ? teilKnopf('brief', 'Anschreiben (PDF)') : ''}<button class="btn sm" type="button" data-act="cv-akte" ${DL ? '' : 'hidden'}>${ic('down')}Lebenslauf (PDF)</button>${teilKnopf('anlagen', 'Zeugnisse (PDF)')}<span class="ki-status" id="mappeStatus3"></span></div>`);
   if (rc?.kurzprofil) teile.push(`<div><h3>Zur Firma</h3><p style="font-size:var(--t-sm);margin-top:6px">${esc(rc.kurzprofil)}</p>${rc.kultur ? `<p class="desc">${esc(rc.kultur)}</p>` : ''}</div>`);
   if (an && (an.staerken || an.luecken)) teile.push(`<div><h3>Passung</h3>${analyseHTML(an)}</div>`);
   if (vb) teile.push(`<div><h3>Gesprächsvorbereitung</h3>${prepHTML(vb)}</div>`);
@@ -4105,6 +4141,8 @@ document.addEventListener('click', async e => {
     if (act === 'li-neu') return linkedinErstellen();
     if (act === 'mail-gmail' && state.openId) return mailGmailModal(state.openId);
     if (act === 'cv-akte' && state.openId) return cvHerunterladen(state.apps[state.openId], null, $('#mappeStatus3') || $('#mappeStatus2'));
+    if (act === 'teil-pdf' && state.openId) return teilHerunterladen(state.apps[state.openId], el.dataset.teil, $('#mappeStatus3') || $('#mappeStatus2'));
+    if (act === 'gesendet-datei' && state.openId) return gesendetOeffnen(state.apps[state.openId], +el.dataset.i, $('#mappeStatus3'));
     if (act === 'cv-vorschau') return cvHerunterladen({}, el.dataset.layout, $('#cvStatus'));
     if (act === 'cv-reset' && state.openId) { const a = state.apps[state.openId]; delete a.cv; saveApp(state.openId, false); renderDrawerBody(); toast('Lebenslauf wieder in der Standardfassung'); return; }
     if (act === 'gmail-senden' && state.openId) return gmailModal(state.openId);

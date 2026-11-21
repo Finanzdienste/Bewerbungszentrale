@@ -860,6 +860,32 @@ test('linkedin', async () => {
 });
 
 
+test('gesendet', async () => {
+  // Nach dem Versand: die verschickte PDF genau so abrufbar, dazu Anschreiben, Lebenslauf und Zeugnisse einzeln
+  const { seite, gh, fehler } = await appStarten();
+  const pdf = Buffer.from('%PDF-1.4\n% erfundene Testdatei\n%%EOF\n');
+  gh.dateien.set('dateien/abcdef1234567890.pdf', pdf);
+  gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...json(gh, 'apps/test-mail.json'), status: 'beworben',
+    gesendet: { datum: '2026-11-18T09:14:40Z', weg: 'mail', an: 'bewerbung@beispiel.test', dateien: [{ id: 'abcdef1234567890', name: 'Bewerbung_Erfunden.pdf', url: '/_blob/abcdef1234567890', groesse: pdf.length }] } }, null, 1) + '\n'));
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.waitForSelector('#dash, #v-liste', { timeout: 20000 });
+  await zuAkte(seite, 'test-mail');
+  await seite.waitForSelector('#gesendetKarte', { timeout: 10000 });
+  assert.match(await seite.textContent('#gesendetKarte'), /Bewerbung_Erfunden\.pdf.*Genau die Datei, die am 18\.11\.2026 per Mail an bewerbung@beispiel\.test rausging.*Anschreiben.*Lebenslauf.*Zeugnisse/s);
+  const [d1] = await Promise.all([seite.waitForEvent('download', { timeout: 20000 }), seite.click('#gesendetKarte [data-act="gesendet-datei"]')]);
+  assert.equal(d1.suggestedFilename(), 'Bewerbung_Erfunden.pdf');
+  const [d2] = await Promise.all([seite.waitForEvent('download', { timeout: 60000 }), seite.click('#gesendetKarte [data-teil="brief"]')]);
+  assert.match(d2.suggestedFilename(), /^Anschreiben_.*\.pdf$/);
+  // vor dem Versand stehen die Einzel-PDFs bei den Unterlagen, einen Bereich „Gesendet“ gibt es nicht
+  await seite.click('#drClose');
+  await zuAkte(seite, 'test-portal');
+  await seite.waitForSelector('.fakten', { timeout: 10000 });
+  assert.equal(await seite.locator('#gesendetKarte').count(), 0);
+  assert.ok(await seite.locator('#m-ki [data-teil="brief"]').count() === 1);
+  assert.deepEqual(fehler, []);
+});
+
 test('lesemodus', async () => {
   const { seite, gh, fehler } = await appStarten({ nurLesen: true });
   await seite.waitForSelector('#lesemodus', { timeout: 20000 });
