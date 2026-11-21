@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
-import { appStarten, schliessen, warte, WURZEL } from './hilfe.mjs';
+import { appStarten, schliessen, warte, WURZEL, FIREFOX } from './hilfe.mjs';
 
 const tests = {};
 const test = (name, f) => { tests[name] = f; };
@@ -319,6 +319,47 @@ test('dateinamen', async () => {
   for (const f of ['Erfundene Beispiel Versorgungsgesellschaft mbH & Co. KG', 'Ä', 'A B C D E F G H', '']) for (const art of ['Anschreiben', 'Motivationsschreiben', 'Lebenslauf', 'Bewerbung']) {
     const n = dateiName(art, { firma: f }); assert.ok(n.length <= 50 && /^[A-Za-z0-9_-]+\.pdf$/.test(n), n);
   }
+});
+
+test('nach-firefox', async () => {
+  // Chrome auf Android: ein Knopf übergibt den Zugang per Link an Firefox; Firefox liest ihn ein und löscht ihn aus der Adresse
+  const ua = 'Mozilla/5.0 (Linux; Android 14; SM-S921B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36';
+  const { seite, ctx, gh, fehler } = await appStarten();
+  await ctx.addInitScript((u) => { Object.defineProperty(navigator, 'userAgent', { get: () => u }); window.__ziel = []; }, ua);
+  await seite.goto(`http://app.test/Bewerbungszentrale/#google=${GOOGLE_ID}`);
+  await seite.reload();
+  await seite.waitForSelector('#dash', { timeout: 20000 });
+  await seite.goto('http://app.test/Bewerbungszentrale/#profil');
+  await seite.waitForSelector('#firefoxPanel [data-act="nach-firefox"]', { timeout: 20000 });
+  const link = await seite.evaluate(() => window.bzPlattform.uebergabeLink());
+  assert.match(link, new RegExp(`^http://app\\.test/Bewerbungszentrale/#zugang=${gh.token}&ki=sk-ant-test-0+&google=${GOOGLE_ID.replace(/\./g, '\\.')}$`));
+  // der Knopf geht über einen Intent an Firefox; den Sprung selbst fängt der Test ab
+  const [anfrage] = await Promise.all([seite.waitForEvent('request', { predicate: (r) => r.url().startsWith('intent:'), timeout: 10000 }).catch(() => null), seite.click('[data-act="nach-firefox"]')]);
+  if (!FIREFOX) assert.ok(anfrage && anfrage.url().startsWith('intent://app.test/Bewerbungszentrale/'), 'Sprung an Firefox'); // Firefox meldet unbekannte Schemata nicht als Anfrage
+  // der Anker mit dem Zugang steht vor dem Intent-Teil (Android nimmt beim Lesen das letzte #)
+  const html = fs.readFileSync(path.join(WURZEL, 'index.html'), 'utf8'); const i = html.indexOf('function firefoxIntent');
+  const firefoxIntent = new Function(`${html.slice(i, html.indexOf('\n', i))}; return firefoxIntent;`)();
+  assert.equal(firefoxIntent(link), `intent://${link.slice('http://'.length)}#Intent;scheme=http;package=org.mozilla.firefox;end`);
+  assert.equal(await seite.evaluate(() => navigator.clipboard.readText()), link, 'Link liegt auch in der Zwischenablage');
+  // Firefox: leerer Speicher, der Link richtet alles ein und verschwindet aus der Adresse
+  const ff = await appStarten({ speicher: {} });
+  await ff.seite.goto(link);
+  await ff.seite.reload();
+  await ff.seite.waitForSelector('#dash', { timeout: 20000 });
+  assert.equal(await ff.seite.locator('#bz-einrichten').count(), 0, 'kein Einrichten-Fenster');
+  assert.doesNotMatch(ff.seite.url(), /zugang=/, 'Zugang nicht mehr in der Adresse');
+  assert.equal(await ff.seite.evaluate(() => JSON.parse(localStorage.getItem('bewerbungszentrale.google.v1')).clientId), GOOGLE_ID);
+  // Firefox selbst zeigt den Knopf nicht
+  assert.equal(await ff.seite.locator('#firefoxPanel').count(), 0);
+  // ging der Anker unterwegs verloren: den Link aus der Zwischenablage ins Schlüsselfeld einfügen reicht
+  const ff2 = await appStarten({ speicher: {} });
+  await ff2.seite.waitForSelector('#bz-einrichten #bz-e-token', { timeout: 20000 });
+  await ff2.seite.fill('#bz-e-token', link);
+  await ff2.seite.click('#bz-e-los');
+  await ff2.seite.waitForSelector('#dash', { timeout: 20000 });
+  assert.equal(await ff2.seite.evaluate(() => JSON.parse(localStorage.getItem('bewerbungszentrale.google.v1')).clientId), GOOGLE_ID);
+  assert.equal(await ff2.seite.evaluate(() => JSON.parse(localStorage.getItem('bewerbungszentrale.zugang.v1')).token), gh.token);
+  assert.deepEqual([...fehler, ...ff.fehler, ...ff2.fehler], []);
 });
 
 test('empfaenger', async () => {

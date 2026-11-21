@@ -1893,8 +1893,24 @@ function renderProfil(force) {
     <span class="ki-status" id="wohnortSt" style="margin-top:8px">${p.heim ? `Gespeichert: ${Number(p.heim.lat).toFixed(4)}, ${Number(p.heim.lon).toFixed(4)}${p.heimStand ? `, geändert am ${fmtD(p.heimStand)}` : ''}` : 'Noch kein Wohnort gespeichert.'}</span>
   </section>
   ${(() => { const z = ordnerZeile(list().filter(istBereit)); return z ? `<section class="panel" id="mappenPanel"><div class="panel-head"><h2>Bewerbungsmappen</h2><span class="sub">als Ordner auf dem PC und in Google Drive</span></div>${z}</section>` : ''; })()}
+  ${firefoxPanel()}
   <div class="profil-rest">${cvPanel()}${linkedinPanel()}${bildschirmzeitPanel()}</div>`;
   wohnortKarte();
+}
+/** Nur in Chrome auf Android: die App mit Zugang an Firefox übergeben, damit Links dort ohne Nachfrage aufgehen. */
+function firefoxPanel() {
+  if (!mitIntent(navigator.userAgent) || !window.bzPlattform?.uebergabeLink?.()) return '';
+  return `<section class="panel" id="firefoxPanel"><div class="panel-head"><h2>In Firefox nutzen</h2><span class="sub">Links gehen dann ohne Nachfrage in Firefox auf</span></div>
+    <div class="ki-row" style="margin:0 0 8px"><button class="btn sm primary" type="button" data-act="nach-firefox">${ic('ext')}App mit Zugang in Firefox öffnen</button></div>
+    <p class="desc" id="firefoxSt" style="margin:0">Fragt Android nach der App, tippe auf Firefox. In Firefox dann im Menü ⋮ auf „Zum Startbildschirm hinzufügen“ und die alte App vom Startbildschirm löschen. Beim ersten Senden per Gmail fragt Firefox einmal nach deinem Google-Konto.</p>
+  </section>`;
+}
+async function nachFirefox() {
+  const link = window.bzPlattform?.uebergabeLink?.() || '', st = $('#firefoxSt');
+  if (!link) { if (st) st.textContent = 'Auf diesem Handy ist kein Zugang gespeichert.'; return; }
+  try { await navigator.clipboard.writeText(link); } catch { /* geht auch ohne */ } // falls der Anker unterwegs verloren geht: in Firefox ins Schlüsselfeld einfügen
+  if (st) st.textContent = 'Firefox geht auf. Fragt Firefox trotzdem nach dem GitHub-Schlüssel: ins Feld tippen und „Einfügen“, der Link liegt in der Zwischenablage.';
+  location.href = firefoxIntent(link);
 }
 document.addEventListener('input', e => {
   const ks = e.target.dataset?.ps;
@@ -4182,6 +4198,7 @@ document.addEventListener('click', async e => {
     if (act === 'pr-frei' || act === 'pr-neu' || act === 'pr-vorversion') return pruefAktion(act);
     if (act === 'ordner-waehlen') return ordnerWaehlen();
     if (act === 'wohnort-gps') return wohnortGps();
+    if (act === 'nach-firefox') return nachFirefox();
     if (act === 'drive-verbinden') return driveVerbinden();
     if (act === 'zurueckholen') { const rid = t.closest('[data-rid]')?.dataset.rid; if (rid) zurueckholen(rid); return; }
     if (act === 'sammel-mail') return sammelMailModal();

@@ -18,7 +18,8 @@ App fürs Handy, für Tobi.
   Anschreiben mit Zeugnissen (ohne Lebenslauf) und ganze Mappe als PDF, alles davon auch in
   jedem Drive-Ordner, Dateinamen höchstens 50 Zeichen, Anschreiben und Begleitmail zum Kopieren) und „Verlauf“ (oben „Du bist dran“
   mit Antwortvorschlag oder Rückruf, darunter nur der Gesprächsverlauf mit den Mails im Wortlaut).
-  Links zu Anzeigen und Portalen öffnen auf Android direkt in Firefox.
+  Links zu Anzeigen und Portalen öffnen auf Android direkt in Firefox. In Chrome auf Android
+  übergibt „In Firefox nutzen“ im Profil den Zugang per Link (nur im Anker) an Firefox.
 - **Vanilla-JS-PWA ohne Bauschritt**, live über GitHub Pages. Alles hier ist
   öffentlich lesbar, darum stehen hier keine persönlichen Daten.
 - `index.html` ist die App (ursprünglich ein Claude-Artifact, das mit

@@ -76,6 +76,14 @@
     if (b && KI_MUSTER.test(b.schluessel || '') && b.geteilt !== true) return b.schluessel;
     return '';
   }
+  /** Link, der Zugang, KI-Schlüssel und Google-Client-ID an einen anderen Browser auf diesem Handy übergibt.
+   *  Alles steht nur im Anker (#…), der geht an keinen Server; die App liest ihn beim Start und löscht ihn aus der Adresse. */
+  function uebergabeLink() {
+    const t = eigenerToken() || boxToken(); if (!t) return '';
+    const k = kiSchluessel(), g = (lies(GOOGLE) || {}).clientId || '';
+    const teile = [`zugang=${encodeURIComponent(t)}`, k ? `ki=${encodeURIComponent(k)}` : '', GOOGLE_MUSTER.test(g) ? `google=${encodeURIComponent(g)}` : ''].filter(Boolean);
+    return `${location.origin}${location.pathname}#${teile.join('&')}`;
+  }
   const anbieterVon = (s) => (s.startsWith('sk-ant-') ? 'anthropic' : s ? 'gemini' : '');
 
   let token = '', nurLesen = false;
@@ -141,7 +149,9 @@
     if (kiSchluessel()) kIn.placeholder = 'schon vorhanden';
     setTimeout(() => tIn.focus(), 30);
     d.querySelector('#bz-e-los').onclick = async () => {
-      const t = tIn.value.trim().replace(/^.*[#&]zugang=([^&\s]+).*$/, '$1'), k = kIn.value.trim();
+      const roh = tIn.value.trim(), aus = (n) => { const m = new RegExp(`[#&]${n}=([^&\\s]+)`).exec(roh); try { return m ? decodeURIComponent(m[1]).trim() : ''; } catch { return ''; } };
+      const t = aus('zugang') || roh, k = kIn.value.trim() || (KI_MUSTER.test(aus('ki')) ? aus('ki') : ''); // ganzer Übergabe-Link eingefügt: alles daraus übernehmen
+      if (googleId(aus('google'))) schreib(GOOGLE, { clientId: googleId(aus('google')), stand: new Date().toISOString() });
       if (k && !KI_MUSTER.test(k)) { f.textContent = 'Der KI-Schlüssel sieht nicht richtig aus.'; return; }
       if (!TOKEN_MUSTER.test(t)) { f.textContent = 'Der GitHub-Schlüssel sieht nicht richtig aus.'; return; }
       f.textContent = 'Prüfe …';
@@ -718,7 +728,7 @@
     mcp: async () => { throw fehler('not_granted', 'In der App gibt es keinen direkten Gmail-Versand.'); },
   };
   window.claude = { use: (name) => (faehig[name] ? faehig[name]() : Promise.reject(fehler('not_granted', name))) };
-  window.bzPlattform = { abgleichen: () => abgleichen(), einrichten: () => einrichtenZeigen(''), offen: () => warteschlange.size + (nurLesen ? 0 : lokal.size), speichern: () => sofortSchreiben(), kiDa: () => !!kiSchluessel(), nurLesen: () => nurLesen, gmail, drive };
+  window.bzPlattform = { uebergabeLink, abgleichen: () => abgleichen(), einrichten: () => einrichtenZeigen(''), offen: () => warteschlange.size + (nurLesen ? 0 : lokal.size), speichern: () => sofortSchreiben(), kiDa: () => !!kiSchluessel(), nurLesen: () => nurLesen, gmail, drive };
 
   zugangHerstellen();
   start();
