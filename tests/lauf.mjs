@@ -742,6 +742,7 @@ test('dashboard', async () => {
   assert.doesNotMatch(await seite.textContent('#v-uebersicht'), /Jetzt dran|Brauchen deinen Blick/);
   gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...json(gh, 'apps/test-mail.json'), aufgaben: [{ id: 'rr1', text: 'Testfirma zurückrufen (Fr bis 14 Uhr)', faellig: '2026-11-20', erledigt: false }],
     verlauf: [{ id: 'v1', datum: '2026-11-19', typ: 'mail', text: 'Erfundene Mail der Testfirma mit einem längeren Text, der auf dem Handy über mehrere Zeilen umbricht und nicht unter die Kopfzeile rutschen darf.' },
+      { id: 'v3', datum: '2026-11-21', typ: 'notiz', text: 'Interne Notiz, gehört nicht in den Gesprächsverlauf' },
       { id: 'v2', datum: '2026-11-20T07:55:56Z', typ: 'mail', text: 'Zusammenfassung, die nicht erscheinen soll', mail: { von: 'Erika Beispiel <erika@beispiel.test>', an: ['ich@beispiel.test'], betreff: 'AW: Erfundene Stelle', datum: '2026-11-20T07:55:56Z', text: 'Hallo,\n\nhätten Sie nächste Woche Zeit für ein Kennenlernen?\n\nViele Grüße\nErika Beispiel', richtung: 'rein' } }] }, null, 1) + '\n'));
   await seite.evaluate(() => window.bzPlattform.abgleichen());
   await seite.fill('#dashQ', '');
@@ -766,16 +767,18 @@ test('dashboard', async () => {
   assert.ok(await seite.evaluate(() => document.querySelector('#duBistDran').getBoundingClientRect().top < document.querySelector('.timeline, .empty-mini').getBoundingClientRect().top), 'Aufgabe steht über dem Verlauf');
   // Kopfzeile (Art, Datum) steht über dem Text, nicht daneben
   assert.ok(await seite.locator('.timeline li').count() > 0);
-  const ueber = await seite.evaluate(() => [...document.querySelectorAll('.timeline li')].every((li) => li.querySelector('.h').getBoundingClientRect().bottom <= li.querySelector('.b, .mailv').getBoundingClientRect().top + 1));
+  const ueber = await seite.evaluate(() => [...document.querySelectorAll('.timeline li')].every((li) => li.querySelector('.h').getBoundingClientRect().bottom <= li.querySelector('.b, .mv').getBoundingClientRect().top + 1));
   assert.ok(ueber, 'Verlauf-Einträge überlappen nicht');
-  // Mails stehen im Verlauf im Wortlaut, nicht als Zusammenfassung
+  // Gesprächsverlauf: Mails im Wortlaut und gleich offen, neueste oben, keine Notizen
   const mv = seite.locator('#vm-v2');
-  assert.match(await mv.locator('summary').textContent(), /Erika Beispiel.*AW: Erfundene Stelle.*hätten Sie nächste Woche Zeit/s);
+  assert.match(await mv.textContent(), /Erika Beispiel.*AW: Erfundene Stelle.*hätten Sie nächste Woche Zeit/s);
   assert.doesNotMatch(await seite.textContent('.timeline'), /Zusammenfassung, die nicht erscheinen soll/);
-  assert.equal(await mv.locator('.mv-t').isVisible(), false, 'Volltext erst nach dem Aufklappen');
-  await mv.locator('summary').click();
+  assert.doesNotMatch(await seite.textContent('.timeline'), /Interne Notiz/);
+  assert.equal(await mv.locator('.mv-t').isVisible(), true, 'Volltext ohne Aufklappen');
   assert.equal(await mv.locator('.mv-t').textContent(), 'Hallo,\n\nhätten Sie nächste Woche Zeit für ein Kennenlernen?\n\nViele Grüße\nErika Beispiel');
-  assert.match(await mv.locator('.mv-meta').textContent(), /Von Erika Beispiel <erika@beispiel\.test>.*An ich@beispiel\.test/s);
+  assert.match(await mv.locator('.mv-meta').textContent(), /Erika Beispiel <erika@beispiel\.test> an ich@beispiel\.test/);
+  assert.equal(await seite.locator('.timeline li:first-child #vm-v2').count(), 1, 'neueste oben');
+  assert.equal(await seite.locator('#drBody details').count(), 0, 'im Verlauf muss nichts aufgeklappt werden');
   assert.match(await seite.textContent('.timeline li:first-child .h'), /20\.11\.2026, \d\d:\d\d/);
   assert.equal((await seite.textContent('#drStatus')).trim(), 'Beworben');
   assert.equal(await seite.locator('#drawer select').count(), 0, 'Status nur zum Ansehen');

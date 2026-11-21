@@ -515,12 +515,10 @@ fieldset legend{font-size:var(--t-xs);font-weight:600;color:var(--muted);padding
 .timeline .h{font-size:var(--t-xs);color:var(--muted);font-family:var(--f-mono)}
 .timeline .h b{color:var(--tone,var(--ink));font-family:var(--f-body);font-weight:600;font-size:var(--t-xs);text-transform:uppercase;letter-spacing:.05em;margin-right:6px}
 .timeline .b{font-size:var(--t-sm);white-space:pre-wrap;overflow-wrap:anywhere}
-.mailv summary{cursor:pointer;list-style:none;display:flex;flex-direction:column;gap:1px;font-size:var(--t-sm);min-width:0}
-.mailv summary::-webkit-details-marker{display:none}
-.mv-k{font-weight:600}
-.mv-v{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mailv[open] .mv-v{display:none}
-.mv-meta{font-size:var(--t-xs);color:var(--muted);margin-top:6px;overflow-wrap:anywhere}
+.mv{display:flex;flex-direction:column;gap:1px;font-size:var(--t-sm);min-width:0}
+.mv-k{font-weight:600;overflow-wrap:anywhere}
+.mv-meta{font-size:var(--t-xs);color:var(--muted);overflow-wrap:anywhere}
+.mv.raus .mv-t{border-color:color-mix(in srgb,var(--accent) 35%,var(--line))}
 .mv-t{margin-top:6px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--sheet);font-size:var(--t-sm);white-space:pre-wrap;overflow-wrap:anywhere}
 .mv-a{display:flex;gap:6px;align-items:center;font-size:var(--t-xs);color:var(--muted);margin-top:6px}
 .mv-a svg{width:14px;height:14px}
@@ -3209,6 +3207,7 @@ function infosHTML(a) {
       ${z('Kennziffer', esc(a.kennziffer || ''))}
       ${z('Kontakt', kontakt)}
     </dl>
+    ${planHTML(a)}
     ${bereitHTML(a)}
     ${gesendetHTML(a)}
     ${a.notizen ? `<section><h3 class="v-kopf">Notizen</h3><div class="lesetext" id="d-notizen">${esc(a.notizen)}</div></section>` : ''}
@@ -3261,6 +3260,22 @@ function unterlagenHTML(a) {
   return `<details class="mehr" id="m-ki"><summary>${a.anschreiben ? 'Anschreiben und Unterlagen' : 'Unterlagen'}</summary><div class="mehr-in">${teile.join('')}</div></details>`;
 }
 const DRAN_RX = /(?:^|\s)(?:antworten|zurückrufen|rückruf)\b/i;
+/** Im Gesprächsverlauf steht nur der Austausch mit der Firma: Mails, Anrufe, Einladungen, Absagen. Notizen und Status nicht. */
+const GESPRAECH = new Set(['mail', 'anruf', 'eingang', 'einladung', 'nachgefasst', 'angebot', 'absage']);
+/** Infos: kommende Termine, offene Aufgaben (ohne die, bei denen du gerade dran bist) und das Briefing fürs Gespräch. */
+function planHTML(a) {
+  const heute = today();
+  const auf = [...(a.aufgaben || [])].filter(k => !k.erledigt).sort((x, y) => (x.faellig || '9999').localeCompare(y.faellig || '9999'));
+  const dran = wartetAufDich(a) ? auf.filter(k => DRAN_RX.test(k.text || '')) : [];
+  const ruf = dran.find(k => /zurückrufen|rückruf/i.test(k.text || ''));
+  const kommend = [...(a.termine || [])].filter(x => (x.datum || '').slice(0, 10) >= heute).sort((x, y) => (x.datum || '').localeCompare(y.datum || ''));
+  const aufgabe = k => { const n = k.faellig ? dayDiff(new Date(), parseD(k.faellig)) : null; return `<li class="lese"><span class="tx">${esc(k.text)}</span><span class="due ${n != null && n < 0 ? 'over' : ''}">${k.faellig ? fmtDs(k.faellig) : ''}</span></li>`; };
+  const termine = kommend.length ? `<section><h3 class="v-kopf">Termine</h3><div class="agenda">${kommend.map(x => { const d = parseDT(x.datum); return d ? `<div class="ag-day"><div class="ag-date"><div class="m">${MON[d.getMonth()]}</div><div class="d">${d.getDate()}</div><div class="w">${WT[d.getDay()]}</div></div><div class="ag-items"><div class="ag-item" style="--stage:${stageVar('interview')};cursor:default"><span class="tm">${fmtT(d)}</span><span class="tt">${esc(x.art)}</span><span class="ts">${esc(x.ort || '')}${x.notiz ? `<br>${esc(x.notiz)}` : ''}</span><span class="tl">${calLinks(a, x)}</span></div></div></div>` : ''; }).join('')}</div></section>` : '';
+  const rest = auf.filter(k => !dran.includes(k) && !/^(?:Über das Portal bewerben|Bewerbungsmappe in der App herunterladen|Initiativbewerbung an .* schicken)/.test(k.text || ''));
+  const aufgaben = rest.length ? `<section><h3 class="v-kopf">Offen</h3><ul class="tasks">${rest.map(aufgabe).join('')}</ul></section>` : '';
+  const briefing = a.briefing && !ruf ? `<details class="mehr" id="v-briefing" ${kommend.length ? 'open' : ''}><summary>Briefing fürs Gespräch</summary><div class="mehr-in md" style="font-size:var(--t-sm)">${md(a.briefing)}</div></details>` : '';
+  return termine + aufgaben + briefing;
+}
 /** Verlauf: oben, was du als Nächstes tun sollst (Antwortvorschlag, Rückruf), dann Termine und offene Aufgaben,
     dann der Verlauf selbst. Eintragen liegt zugeklappt darunter. */
 function verlaufHTML(a) {
@@ -3276,13 +3291,10 @@ function verlaufHTML(a) {
       ${ruf && tel ? `<div class="ki-row"><a class="btn primary" href="tel:${esc(tel.replace(/[^\d+]/g, ''))}">${ic('phone')}${esc(tel)} anrufen</a></div>` : ''}
       ${ruf && a.briefing ? `<details id="v-briefing-ruf" open><summary>Briefing für den Anruf</summary><div class="md" style="font-size:var(--t-sm)">${md(a.briefing)}</div></details>` : ''}
     </section>${dran.length && a.mail?.text ? antwortHTML(a) : ''}` : '';
-  const termine = kommend.length ? `<section><h3 class="v-kopf">Termine</h3><div class="agenda">${kommend.map(x => { const d = parseDT(x.datum); return d ? `<div class="ag-day"><div class="ag-date"><div class="m">${MON[d.getMonth()]}</div><div class="d">${d.getDate()}</div><div class="w">${WT[d.getDay()]}</div></div><div class="ag-items"><div class="ag-item" style="--stage:${stageVar('interview')};cursor:default"><span class="tm">${fmtT(d)}</span><span class="tt">${esc(x.art)}</span><span class="ts">${esc(x.ort || '')}${x.notiz ? `<br>${esc(x.notiz)}` : ''}</span><span class="tl">${calLinks(a, x)}</span></div></div></div>` : ''; }).join('')}</div></section>` : '';
-  const rest = auf.filter(k => !dran.includes(k));
-  const aufgaben = rest.length ? `<section><h3 class="v-kopf">Offen</h3><ul class="tasks">${rest.map(aufgabe).join('')}</ul></section>` : '';
-  const briefing = a.briefing && !ruf ? `<details class="mehr" id="v-briefing" ${kommend.length ? 'open' : ''}><summary>Briefing fürs Gespräch</summary><div class="mehr-in md" style="font-size:var(--t-sm)">${md(a.briefing)}</div></details>` : '';
-  const vs = [...a.verlauf].map((v, i) => ({...v, i})).sort((x, y) => (y.datum || '').localeCompare(x.datum || '') || y.i - x.i);
-  const timeline = vs.length ? `<ol class="timeline">${vs.map(v => `<li style="--tone:${VTYP[v.typ]?.tone || 'var(--line-strong)'}"><div class="h"><b>${esc(VTYP[v.typ]?.l || v.typ)}</b>${fmtD(v.datum)}${zeitVon(v.datum)} · ${relTage(v.datum)}</div>${v.mail?.text ? mailImVerlauf(v) : `<div class="b">${esc(v.text)}</div>`}</li>`).join('')}</ol>` : `<div class="empty-mini">Noch keine Einträge.</div>`;
-  return `${oben}${termine}${aufgaben}${briefing}<section><h3 class="v-kopf">Verlauf</h3>${timeline}</section>`;
+  const zeit = v => v.mail?.datum || v.datum || '';
+  const vs = [...a.verlauf].map((v, i) => ({...v, i})).filter(v => v.mail?.text || GESPRAECH.has(v.typ)).sort((x, y) => zeit(y).localeCompare(zeit(x)) || y.i - x.i);
+  const timeline = vs.length ? `<ol class="timeline">${vs.map(v => `<li style="--tone:${VTYP[v.typ]?.tone || 'var(--line-strong)'}"><div class="h"><b>${esc(VTYP[v.typ]?.l || v.typ)}</b>${fmtD(zeit(v))}${zeitVon(zeit(v))} · ${relTage(zeit(v))}</div>${v.mail?.text ? mailImVerlauf(v) : `<div class="b">${esc(v.text)}</div>`}</li>`).join('')}</ol>` : `<div class="empty-mini">Noch kein Austausch mit der Firma.</div>`;
+  return `${oben}<section><h3 class="v-kopf">Gesprächsverlauf</h3>${timeline}</section>`;
 }
 /** Vorbereitete Antwort: ansehen, kopieren oder per Gmail senden. */
 const zeitVon = s => { const m = /T(\d\d):(\d\d)/.test(s || '') ? new Date(s) : null; return m && !isNaN(m) ? `, ${fmtT(m)}` : ''; };
@@ -3290,11 +3302,10 @@ const zeitVon = s => { const m = /T(\d\d):(\d\d)/.test(s || '') ? new Date(s) : 
 function mailImVerlauf(v) {
   const m = v.mail, raus = m.richtung === 'raus';
   const an = Array.isArray(m.an) ? m.an.join(', ') : (m.an || '');
-  const wer = raus ? `Du an ${an}` : (m.von || '').replace(/\s*<[^>]+>\s*$/, '') || m.von || '';
-  const vor = String(m.text).replace(/\s+/g, ' ').trim().slice(0, 160);
+  const name = (m.von || '').replace(/\s*<[^>]+>\s*$/, '') || m.von || '';
   const anh = (m.anhaenge || []).length ? `<div class="mv-a">${ic('paperclip')}${esc(m.anhaenge.join(', '))}</div>` : '';
-  return `<details class="mailv" id="vm-${esc(v.id)}"><summary><span class="mv-k">${esc(wer)}</span>${m.betreff ? `<span class="mv-b">${esc(m.betreff)}</span>` : ''}<span class="mv-v">${esc(vor)}</span></summary>`
-    + `<div class="mv-meta">${raus ? '' : `Von ${esc(m.von || '')}<br>`}An ${esc(an)}</div><div class="mv-t">${esc(m.text)}</div>${anh}</details>`;
+  return `<div class="mv${raus ? ' raus' : ''}" id="vm-${esc(v.id)}"><div class="mv-k">${raus ? `Du an ${esc(an)}` : esc(name)}</div>${m.betreff ? `<div class="mv-b">${esc(m.betreff)}</div>` : ''}`
+    + `${raus ? '' : `<div class="mv-meta">${esc(m.von || '')}${an ? ` an ${esc(an)}` : ''}</div>`}<div class="mv-t">${esc(m.text)}</div>${anh}</div>`;
 }
 function antwortHTML(a) {
   const darf = (MCP || GMAIL?.eingerichtet()) && a.kontakt?.email;
