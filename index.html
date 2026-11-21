@@ -515,6 +515,15 @@ fieldset legend{font-size:var(--t-xs);font-weight:600;color:var(--muted);padding
 .timeline .h{font-size:var(--t-xs);color:var(--muted);font-family:var(--f-mono)}
 .timeline .h b{color:var(--tone,var(--ink));font-family:var(--f-body);font-weight:600;font-size:var(--t-xs);text-transform:uppercase;letter-spacing:.05em;margin-right:6px}
 .timeline .b{font-size:var(--t-sm);white-space:pre-wrap;overflow-wrap:anywhere}
+.mailv summary{cursor:pointer;list-style:none;display:flex;flex-direction:column;gap:1px;font-size:var(--t-sm);min-width:0}
+.mailv summary::-webkit-details-marker{display:none}
+.mv-k{font-weight:600}
+.mv-v{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mailv[open] .mv-v{display:none}
+.mv-meta{font-size:var(--t-xs);color:var(--muted);margin-top:6px;overflow-wrap:anywhere}
+.mv-t{margin-top:6px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--sheet);font-size:var(--t-sm);white-space:pre-wrap;overflow-wrap:anywhere}
+.mv-a{display:flex;gap:6px;align-items:center;font-size:var(--t-xs);color:var(--muted);margin-top:6px}
+.mv-a svg{width:14px;height:14px}
 
 .doc-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 @media (max-width:560px){.doc-list{grid-template-columns:minmax(0,1fr)}}
@@ -667,6 +676,7 @@ const clone = o => JSON.parse(JSON.stringify(o ?? null));
 
 const ICONS = {
   plus:'<path d="M12 5v14M5 12h14"/>',
+  paperclip:'<path d="m21 11.5-8.6 8.6a5 5 0 0 1-7.1-7.1l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/>',
   search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   x:'<path d="M6 6l12 12M18 6 6 18"/>',
   cal:'<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
@@ -734,6 +744,9 @@ const dayDiff = (a, b) => Math.round((parseD(isoDate(b)) - parseD(isoDate(a))) /
 const fmtD = s => { const d = parseD(s); return d ? d.toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'}) : '–'; };
 const fmtDs = s => { const d = parseD(s); return d ? d.toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit'}) : '–'; };
 const fmtT = d => d.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
+const jetztISO = () => new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+/** Die Mail genau so, wie sie rausging, für den Verlauf (nicht nur die Zusammenfassung). */
+const mailEintragNeu = ({an, betreff, text, anhaenge}) => ({von: P().gmailKonto || '', an: [an], betreff: betreff || '', datum: jetztISO(), text: text || '', richtung: 'raus', ...(anhaenge?.length ? {anhaenge} : {})});
 const WT = ['So','Mo','Di','Mi','Do','Fr','Sa'];
 const MON = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
 function kw(d) { const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const n = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - n); const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1)); return Math.ceil(((t - y0) / 864e5 + 1) / 7); }
@@ -2445,7 +2458,7 @@ function sammelMailModal(ids) {
           if (r?.threadId || r?.id) cur.gmailThreadId = r.threadId || r.id;
           unterlagenAbhaken(cur, mappe.ds);
           cur.aufgaben = (cur.aufgaben || []).map(k => /bewerbungsmappe|portal/i.test(k.text) ? {...k, erledigt: true} : k);
-          cur.verlauf.push({id: uid(), datum: today(), typ: 'mail', text: `Bewerbung per Gmail an ${an} verschickt (${mappe.seiten} Seiten)`});
+          cur.verlauf.push({id: uid(), datum: jetztISO(), typ: 'mail', text: `Bewerbung per Gmail an ${an} verschickt (${mappe.seiten} Seiten)`, mail: mailEintragNeu({an, betreff: betreffFuer(a), text: mailtextFuer(a), anhaenge: [mappe.filename]})});
           saveApp(id, false); setStatus(id, 'beworben', {quiet: true});
           z.rs.innerHTML = '<span class="pulse"></span>Gesendet, wird eingetragen …';
           const ok2 = await speichernJetzt(id);
@@ -3077,7 +3090,7 @@ async function gmailModal(id) {
       cur.kontakt = {...cur.kontakt, email: an};
       unterlagenAbhaken(cur, mappe.ds);
       cur.aufgaben = (cur.aufgaben || []).map(k => /bewerbungsmappe|portal/i.test(k.text) ? {...k, erledigt: true} : k);
-      cur.verlauf.push({id:uid(), datum:today(), typ:'mail', text:`Bewerbung per Gmail an ${an} verschickt (${mappe.seiten} Seiten)`});
+      cur.verlauf.push({id:uid(), datum:jetztISO(), typ:'mail', text:`Bewerbung per Gmail an ${an} verschickt (${mappe.seiten} Seiten)`, mail: mailEintragNeu({an, betreff, text, anhaenge: [mappe.filename]})});
       saveApp(id, false);
       setStatus(id, 'beworben', {quiet:true});
       closeModal();
@@ -3228,10 +3241,21 @@ function verlaufHTML(a) {
   const aufgaben = rest.length ? `<section><h3 class="v-kopf">Offen</h3><ul class="tasks">${rest.map(aufgabe).join('')}</ul></section>` : '';
   const briefing = a.briefing && !ruf ? `<details class="mehr" id="v-briefing" ${kommend.length ? 'open' : ''}><summary>Briefing fürs Gespräch</summary><div class="mehr-in md" style="font-size:var(--t-sm)">${md(a.briefing)}</div></details>` : '';
   const vs = [...a.verlauf].map((v, i) => ({...v, i})).sort((x, y) => (y.datum || '').localeCompare(x.datum || '') || y.i - x.i);
-  const timeline = vs.length ? `<ol class="timeline">${vs.map(v => `<li style="--tone:${VTYP[v.typ]?.tone || 'var(--line-strong)'}"><div class="h"><b>${esc(VTYP[v.typ]?.l || v.typ)}</b>${fmtD(v.datum)} · ${relTage(v.datum)}</div><div class="b">${esc(v.text)}</div></li>`).join('')}</ol>` : `<div class="empty-mini">Noch keine Einträge.</div>`;
+  const timeline = vs.length ? `<ol class="timeline">${vs.map(v => `<li style="--tone:${VTYP[v.typ]?.tone || 'var(--line-strong)'}"><div class="h"><b>${esc(VTYP[v.typ]?.l || v.typ)}</b>${fmtD(v.datum)}${zeitVon(v.datum)} · ${relTage(v.datum)}</div>${v.mail?.text ? mailImVerlauf(v) : `<div class="b">${esc(v.text)}</div>`}</li>`).join('')}</ol>` : `<div class="empty-mini">Noch keine Einträge.</div>`;
   return `${oben}${termine}${aufgaben}${briefing}<section><h3 class="v-kopf">Verlauf</h3>${timeline}</section>`;
 }
 /** Vorbereitete Antwort: ansehen, kopieren oder per Gmail senden. */
+const zeitVon = s => { const m = /T(\d\d):(\d\d)/.test(s || '') ? new Date(s) : null; return m && !isNaN(m) ? `, ${fmtT(m)}` : ''; };
+/** Eine Mail im Verlauf: Absender bzw. Empfänger, Betreff und der Anfang des echten Texts, aufgeklappt der ganze Text. */
+function mailImVerlauf(v) {
+  const m = v.mail, raus = m.richtung === 'raus';
+  const an = Array.isArray(m.an) ? m.an.join(', ') : (m.an || '');
+  const wer = raus ? `Du an ${an}` : (m.von || '').replace(/\s*<[^>]+>\s*$/, '') || m.von || '';
+  const vor = String(m.text).replace(/\s+/g, ' ').trim().slice(0, 160);
+  const anh = (m.anhaenge || []).length ? `<div class="mv-a">${ic('paperclip')}${esc(m.anhaenge.join(', '))}</div>` : '';
+  return `<details class="mailv" id="vm-${esc(v.id)}"><summary><span class="mv-k">${esc(wer)}</span>${m.betreff ? `<span class="mv-b">${esc(m.betreff)}</span>` : ''}<span class="mv-v">${esc(vor)}</span></summary>`
+    + `<div class="mv-meta">${raus ? '' : `Von ${esc(m.von || '')}<br>`}An ${esc(an)}</div><div class="mv-t">${esc(m.text)}</div>${anh}</details>`;
+}
 function antwortHTML(a) {
   const darf = (MCP || GMAIL?.eingerichtet()) && a.kontakt?.email;
   return `<section class="ki-card dran" id="mailKarte"><h3>${ic('mail')}Antwortvorschlag</h3>
@@ -3611,7 +3635,7 @@ function mailGmailModal(id) {
       const cur = state.apps[id] || a;
       if (cur.mail?.typ === 'antwort') cur.aufgaben = (cur.aufgaben || []).map(k => /antworten/i.test(k.text) && !k.erledigt ? {...k, erledigt: true} : k);
       const nach = cur.mail?.typ === 'nachfassen';
-      cur.verlauf.push({id: uid(), datum: today(), typ: nach ? 'nachgefasst' : 'mail', text: `${nach ? 'Nachgefragt per Gmail' : 'Mail per Gmail gesendet'}: „${betreff}“ an ${an}`});
+      cur.verlauf.push({id: uid(), datum: jetztISO(), typ: nach ? 'nachgefasst' : 'mail', text: `${nach ? 'Nachgefragt per Gmail' : 'Mail per Gmail gesendet'}: „${betreff}“ an ${an}`, mail: mailEintragNeu({an, betreff, text})});
       if (nach) cur.aufgaben = (cur.aufgaben || []).map(k => /nachfrag|nachfass/i.test(k.text) ? {...k, erledigt: true} : k);
       saveApp(id, false); closeModal();
       if (state.openId === id) { renderDrawerHead(); renderDrawerBody(); }
