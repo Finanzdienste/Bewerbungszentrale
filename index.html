@@ -1087,7 +1087,7 @@ function renderUebersicht() {
 /** Kacheln im Dashboard: je Stufe die Zahl, ein Tipp öffnet die Liste genau dieser Bewerbungen. */
 /** Pipeline direkt im Dashboard: erste Spalte nur, was sich abschicken lässt, dann die Stufen nach dem Abschicken.
     Was der Morgenlauf noch vorbereitet, steht nur als Zahl darüber. Ein Tipp auf den Spaltenkopf öffnet die Liste. */
-const DASH_BEREICHE = [['antwort', 'Warten auf deine Antwort'], ['bereit', 'Vorbereitet'], ['vorbereitung', 'In Vorbereitung'], ['beworben', 'Beworben'], ['rueckmeldung', 'Rückmeldung'], ['interview', 'Gespräch'], ['angebot', 'Angebot'], ['zusage', 'Zusage'], ['absage', 'Absage'], ['alle', 'Alle']];
+const DASH_BEREICHE = [['antwort', 'Warten auf deine Antwort'], ['bereit', 'Vorbereitet'], ['beworben', 'Beworben'], ['rueckmeldung', 'Rückmeldung'], ['interview', 'Gespräch'], ['angebot', 'Angebot'], ['zusage', 'Zusage'], ['absage', 'Absage'], ['alle', 'Alle']];
 const dashOffen = (() => { try { const o = JSON.parse(localStorage.getItem('bz-dash-offen') || 'null'); if (Array.isArray(o)) return new Set(o); } catch {} return new Set(['antwort', 'bereit']); })();
 let dashWeg = (() => { try { return localStorage.getItem('bz-dash-weg') || ''; } catch { return ''; } })();
 const dashMerken = () => { try { localStorage.setItem('bz-dash-offen', JSON.stringify([...dashOffen])); localStorage.setItem('bz-dash-weg', dashWeg); } catch {} };
@@ -1118,11 +1118,13 @@ function dashBereicheHTML() {
     const d = [a.ort, an.min ? `${an.min} min` : '', a.status === 'gemerkt' ? (istPortal(a) ? 'über Portal' : 'per Mail') : '', a.fristBis && a.status === 'gemerkt' ? `Frist ${fmtDs(a.fristBis)}` : '', nt ? `${WT[nt.d.getDay()]} ${fmtDs(isoDate(nt.d))}, ${fmtT(nt.d)}` : '', a.eingangAm && a.status === 'beworben' ? 'Eingang bestätigt' : '', a.status !== 'gemerkt' && a.beworbenAm ? `beworben ${relTage(a.beworbenAm)}` : ''].filter(Boolean).join(' · ');
     const auf = k === 'antwort' ? (a.aufgaben || []).find(x => !x.erledigt && /(?:^|\s)(?:antworten|zurückrufen|rückruf)\b/i.test(x.text || '')) : null;
     return `<li data-open="${a.id}" tabindex="0" style="--tone:${w.wert != null ? ringColor(w.wert) : 'var(--muted)'}"><span class="ico" style="font-family:var(--f-mono);font-size:12px;font-weight:600">${w.wert != null ? (w.geschaetzt ? '≈' : '') + w.wert : '–'}</span><span style="min-width:0"><div class="t">${esc(a.position || 'Position fehlt')} · ${esc(a.firma || 'Ohne Firma')}</div><div class="d">${esc(auf ? auf.text.replace(/\s*\((?:Antwort liegt in der App bereit)\)/, '') : d)}</div></span></li>`; };
+  const gezeigt = new Set(); // bei der Suche klappt „Alle“ nur auf, wenn ein Treffer in keinem anderen Bereich steht
   const html = DASH_BEREICHE.map(([k, label]) => {
     const alleDrin = alle.filter(gehoert[k] || (a => a.status === k));
     if (!alleDrin.length && ['antwort', 'angebot', 'zusage'].includes(k)) return '';
     const items = alleDrin.filter(passt).sort(['bereit', 'vorbereitung', 'alle'].includes(k) ? (x, y) => sc(y) - sc(x) || (x.fristBis || '9999').localeCompare(y.fristBis || '9999') : (x, y) => lastActivity(y).localeCompare(lastActivity(x)));
-    const offen = q ? items.length > 0 && (k !== 'alle' || dashOffen.has(k)) : dashOffen.has(k);
+    if (k !== 'alle') items.forEach(a => gezeigt.add(a.id));
+    const offen = q ? items.length > 0 && (k !== 'alle' || dashOffen.has(k) || items.some(a => !gezeigt.has(a.id))) : dashOffen.has(k);
     const farbe = k === 'antwort' ? 'var(--warn)' : k === 'bereit' ? 'var(--accent)' : k === 'vorbereitung' ? stageVar('gemerkt') : stageVar(k);
     return `<details class="bereich" data-bereich="${k}" style="--stage:${farbe}" ${offen ? 'open' : ''}><summary><span class="b-titel">${label}</span><span class="b-n">${items.length}</span></summary>
       ${items.length ? `<ul class="todo">${items.map(a => zeile(a, k)).join('')}</ul>` : `<div class="empty-mini">${q || dashWeg ? 'Nichts passt zu Suche und Filter.' : k === 'bereit' ? 'Gerade ist nichts fertig zum Abschicken.' : 'Gerade nichts.'}</div>`}</details>`;

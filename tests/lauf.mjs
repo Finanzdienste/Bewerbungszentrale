@@ -750,6 +750,7 @@ test('dashboard', async () => {
   assert.equal(await seite.locator('#mailFeld').count(), 0, 'keine Mail-Bewerbung bereit');
   // „Alle“: jede Akte außer Aussortierten und Beispielen
   assert.match(await seite.textContent('#dash [data-bereich="alle"] summary'), /Alle\s*\d+/);
+  assert.equal(await seite.locator('#dash [data-bereich="vorbereitung"]').count(), 0, 'kein Bereich „In Vorbereitung“');
   // Akte: nur „Infos“ und „Verlauf“; im Verlauf steht oben, was zu tun ist
   await seite.click('#dash [data-bereich="antwort"] [data-open="test-mail"]');
   await seite.waitForSelector('#drHead [data-tab]', { timeout: 5000 });
