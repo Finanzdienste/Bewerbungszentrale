@@ -2231,9 +2231,9 @@ function mappenPlan() { // was in die Ordner gehört: freigegebene Portal-Bewerb
     .map(x => {
       let name = ordnerName(x.a, x.sc); for (let i = 2; namen.has(name); i++) name = `${ordnerName(x.a, x.sc).slice(0, 85)} (${i})`; namen.add(name);
       const info = portalInfos(x.a);
-      return {...x, name, info, stand: `m2|${fassungVon(x.a)}|${profilStand}#${sha1Hex(info).slice(0, 10)}`}; // m2: Zeugnisse in jedem Ordner
+      return {...x, name, info, stand: `m3|${fassungVon(x.a)}|${profilStand}#${sha1Hex(info).slice(0, 10)}`}; // m2: Zeugnisse in jedem Ordner, m3: kurze Dateinamen
     });
-  const allgemein = 'a2|' + profilStand; // „Allgemein“: allgemeiner Lebenslauf und Zeugnisse, z. B. fürs Profil bei Jobbörsen
+  const allgemein = 'a3|' + profilStand; // „Allgemein“: allgemeiner Lebenslauf und Zeugnisse, z. B. fürs Profil bei Jobbörsen
   return {liste, profilStand, allgemein, sig: allgemein + '\n' + liste.map(x => x.name + '\t' + x.stand).join('\n')};
 }
 async function ordnerSync() {
