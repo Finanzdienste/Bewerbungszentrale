@@ -295,11 +295,30 @@ test('firefox', async () => {
   const firefoxIntent = new Function(`${src}; return firefoxIntent;`)();
   assert.equal(firefoxIntent('https://www.doerner.de/job/test?x=1'), 'intent://www.doerner.de/job/test?x=1#Intent;scheme=https;package=org.mozilla.firefox;end');
   assert.equal(firefoxIntent('mailto:a@b.test'), 'mailto:a@b.test');
+  const j = html.indexOf('function mitIntent'); const mitIntent = new Function(`${html.slice(j, html.indexOf('\n', j))}; return mitIntent;`)();
+  assert.equal(mitIntent('Mozilla/5.0 (Linux; Android 14; SM-S921B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36'), true, 'Chrome auf Android: an Firefox geben');
+  assert.equal(mitIntent('Mozilla/5.0 (Android 14; Mobile; rv:145.0) Gecko/145.0 Firefox/145.0'), false, 'schon in Firefox: normaler Tab');
+  assert.equal(mitIntent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'), false);
   const { seite, fehler } = await appStarten();
   await zuAkte(seite, 'test-portal');
   await seite.waitForSelector('.fakten', { timeout: 10000 });
   assert.ok(await seite.locator('.fakten a[data-ff]').count() >= 1, 'Anzeige-Link ist markiert');
   assert.deepEqual(fehler, []);
+});
+
+test('dateinamen', async () => {
+  // höchstens 50 Zeichen, Firma ohne Rechtsform und ohne halbe Wörter (ein Portal hat einen 51 Zeichen langen Lebenslauf abgelehnt)
+  const html = fs.readFileSync(path.join(WURZEL, 'index.html'), 'utf8');
+  const g = (n, e = '\n') => { const i = html.indexOf(n); return html.slice(i, html.indexOf(e, i) + e.length); };
+  const { dateiName } = new Function('P', `${g('const RECHTSFORM')}${g('function firmaKurz', '\n}\n')}${g('function dateiName', '\n}\n')}${g('const asciiName')}; return { dateiName };`)(() => ({ name: 'Max Muster' }));
+  assert.equal(dateiName('Lebenslauf', { firma: 'MUSTER DÖRNER GmbH & Co. KG' }), 'Lebenslauf_Max_Muster_MUSTER_DOERNER.pdf');
+  assert.equal(dateiName('Motivationsschreiben', { firma: 'Hafen Muster AG' }), 'Motivationsschreiben_Max_Muster_Hafen_Muster.pdf');
+  assert.equal(dateiName('Motivationsschreiben', { firma: 'Testklinikum Beispielstadt-Musterhausen (TBM)' }), 'Motivationsschreiben_Max_Muster_Testklinikum.pdf', 'an der Wortgrenze gekürzt');
+  assert.equal(dateiName('Motivationsschreiben', { firma: 'Beispieluniversitätsklinikum Musterstadt' }), 'Motivationsschreiben_Max_Muster.pdf', 'lieber ohne Firma als ein halbes Wort');
+  assert.equal(dateiName('Zeugnisse', {}), 'Zeugnisse_Max_Muster.pdf');
+  for (const f of ['Erfundene Beispiel Versorgungsgesellschaft mbH & Co. KG', 'Ä', 'A B C D E F G H', '']) for (const art of ['Anschreiben', 'Motivationsschreiben', 'Lebenslauf', 'Bewerbung']) {
+    const n = dateiName(art, { firma: f }); assert.ok(n.length <= 50 && /^[A-Za-z0-9_-]+\.pdf$/.test(n), n);
+  }
 });
 
 test('empfaenger', async () => {
@@ -357,7 +376,7 @@ test('teilen', async () => {
   await zuAkte(seite, 'test-portal');
   await seite.click('[data-act="wa-teilen"]');
   await seite.waitForFunction(() => { const e = document.querySelector('#wa-anhang'); return e && !e.querySelector('.pulse'); }, null, { timeout: 60000 });
-  assert.match(await seite.textContent('#wa-anhang'), /Bewerbung_Max_Muster_Hafen_Muster_AG\.pdf/);
+  assert.match(await seite.textContent('#wa-anhang'), /Bewerbung_Max_Muster_Hafen_Muster\.pdf/);
   await seite.click('#wa-share');
   await seite.waitForFunction(() => window.__geteilt, null, { timeout: 5000 });
   const g = await seite.evaluate(() => window.__geteilt);

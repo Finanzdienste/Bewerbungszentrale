@@ -735,9 +735,11 @@ const fmtDs = s => { const d = parseD(s); return d ? d.toLocaleDateString('de-DE
 const fmtT = d => d.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
 /** Stellenanzeigen und Portale auf Android direkt in Firefox öffnen, nicht im Browserfenster der App. */
 function firefoxIntent(url) { const m = /^(https?):\/\/(.+)$/i.exec(url || ''); return m ? `intent://${m[2]}#Intent;scheme=${m[1]};package=org.mozilla.firefox;end` : url; }
+/** Nur in Chrome auf Android an Firefox weitergeben. Läuft die App schon in Firefox, öffnet der Link dort einfach einen Tab. */
+function mitIntent(ua) { return /Android/i.test(ua) && !/Firefox\//i.test(ua); }
 document.addEventListener('click', e => {
   const a = e.target?.closest?.('a[data-ff]');
-  if (!a || !/Android/i.test(navigator.userAgent) || !/^https?:/i.test(a.href)) return;
+  if (!a || !mitIntent(navigator.userAgent) || !/^https?:/i.test(a.href)) return;
   e.preventDefault(); e.stopPropagation(); location.href = firefoxIntent(a.href);
 }, true);
 const jetztISO = () => new Date().toISOString().replace(/\.\d+Z$/, 'Z');
@@ -2818,6 +2820,20 @@ function makeDocGen(PDFLib, fontkit) {
 }
 
 const AKZENT_NAMEN = [['petrol', 'Petrol'], ['navy', 'Marineblau'], ['blau', 'Blau'], ['gruen', 'Dunkelgrün'], ['bordeaux', 'Bordeaux'], ['anthrazit', 'Anthrazit'], ['gold', 'Sand / Gold'], ['orange', 'Kupfer']];
+/** Firma für Dateinamen: ohne Rechtsform, höchstens zwei Wörter. Ganz groß geschriebene Wörter behalten die Großschreibung (DÖRNER → DOERNER). */
+const RECHTSFORM = /^(?:gmbh|ag|kg|kgaa|se|co|mbh|ohg|gbr|ug|ev|eg|aör|haftungsbeschränkt|&|\+|und|and|deutschland|germany)$/i;
+function firmaKurz(f) {
+  const w = String(f || '').replace(/\([^)]*\)/g, ' ').split(/[\s,./]+/).filter(x => x && !RECHTSFORM.test(x));
+  return asciiName(w.slice(0, 2).map(x => x === x.toUpperCase() ? x.replace(/Ä/g, 'AE').replace(/Ö/g, 'OE').replace(/Ü/g, 'UE') : x).join(' '));
+}
+/** Dateiname höchstens 50 Zeichen: manche Portale nehmen längere Namen nicht an (Otto Dörner). Die Firma wird dafür an einer Wortgrenze gekürzt. */
+function dateiName(art, a) {
+  const basis = `${art}_${asciiName(P().name) || 'Bewerbung'}`, platz = 50 - basis.length - 5;
+  let f = a?.firma && platz >= 3 ? firmaKurz(a.firma) : '';
+  if (f.length > platz) { const c = f.slice(0, platz); f = f[platz] === '_' ? c : c.includes('_') ? c.slice(0, c.lastIndexOf('_')) : ''; } // kein halbes Wort
+  f = f.replace(/_+$/, '');
+  return `${basis}${f ? '_' + f : ''}.pdf`;
+}
 const asciiName = x => String(x || '').replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/Ä/g, 'Ae').replace(/Ö/g, 'Oe').replace(/Ü/g, 'Ue').replace(/ß/g, 'ss').replace(/[^A-Za-z0-9-]+/g, '_').replace(/^_+|_+$/g, '').replace(/^(.{40}).+$/, (m, k) => k.includes('_') ? k.slice(0, k.lastIndexOf('_')) : k);
 function cvFuer(a) { // Lebenslauf-Daten aus dem Profil, angepasst an die Bewerbung
   const p = P(); if (!p.cv || !Array.isArray(p.cv.stationen)) return null;
@@ -2868,7 +2884,7 @@ async function mappeBauen(a, opt = {}) {
     empfaenger: [String(a.firma || '').replace(/\s*\([^)]*\)\s*$/, ''), kontakt, ...(anschrift.length ? anschrift : [a.ort])], datumOrt: ort ? `${ort}, ${datum}` : datum, anlagen,
     titel: opt.nurCv ? `${en ? 'CV' : 'Lebenslauf'} ${p.name || ''}` : `${en ? 'Application' : 'Bewerbung'} ${p.name || ''}, ${a.position || ''}`, design: {layout: opt.layout || (a.layout === 'klassisch' ? 'klassisch' : 'modern'), akzent: a.akzent}, sprache: en ? 'en' : 'de',
     cv: teil === 'alles' || teil === 'cv' ? cv : null, foto, schriften, dateien});
-  const fn = teil === 'brief' ? `Anschreiben_${asciiName(p.name) || 'Bewerbung'}_${asciiName(a.firma) || 'Firma'}.pdf` : teil === 'anlagen' ? `Zeugnisse_${asciiName(p.name) || 'Unterlagen'}.pdf` : opt.nurCv ? `Lebenslauf_${asciiName(p.name) || 'CV'}${a.firma ? '_' + asciiName(a.firma) : ''}.pdf` : `Bewerbung_${asciiName(p.name) || 'Unterlagen'}_${asciiName(a.firma) || 'Firma'}.pdf`;
+  const fn = teil === 'anlagen' ? dateiName('Zeugnisse', {}) : dateiName(teil === 'brief' ? (opt.motiv ? 'Motivationsschreiben' : 'Anschreiben') : opt.nurCv ? 'Lebenslauf' : 'Bewerbung', a);
   return {...r, ds, cv: !!cv, filename: fn};
 }
 async function cvHerunterladen(a, layout, stEl) {
@@ -3221,8 +3237,8 @@ async function teilHerunterladen(a, teil, stEl) {
   if (teil !== 'anlagen' && !a?.anschreiben?.trim()) { st('Kein Anschreiben gespeichert.'); return; }
   st('<span class="pulse"></span>PDF wird erstellt …');
   try {
-    const r = await mappeBauen(a, {teil: teil === 'motiv' ? 'brief' : teil}); // Motivationsschreiben: dasselbe Schreiben, für Portale mit diesem Feld
-    await DL.save({filename: teil === 'motiv' ? r.filename.replace(/^Anschreiben_/, 'Motivationsschreiben_') : r.filename, data: r.bytes}); st(`Gespeichert: ${r.seiten} Seiten.`);
+    const r = await mappeBauen(a, {teil: teil === 'motiv' ? 'brief' : teil, motiv: teil === 'motiv'}); // Motivationsschreiben: dasselbe Schreiben, für Portale mit diesem Feld
+    await DL.save({filename: r.filename, data: r.bytes}); st(`Gespeichert: ${r.seiten} Seiten.`);
   } catch (e) { st(e?.code === 'declined' ? '' : 'PDF konnte nicht erstellt werden.'); }
 }
 async function gesendetOeffnen(a, i, stEl) {

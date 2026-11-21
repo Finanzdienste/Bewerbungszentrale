@@ -119,3 +119,5 @@ ihn genauso nach und merkt so, wenn seitdem etwas geändert wurde).
 `npm install`, dann `npm test` (alle) oder `node tests/lauf.mjs teilen ki`
 (einzelne). Die Tests arbeiten mit Attrappen für GitHub und KI
 (`tests/attrappe.mjs`) und nur mit erfundenen Daten (`tests/daten/`).
+Mit `BZ_BROWSER=firefox` laufen dieselben Tests in Firefox (Playwright-Firefox
+nötig, z. B. in einem eigenen `PLAYWRIGHT_BROWSERS_PATH`).

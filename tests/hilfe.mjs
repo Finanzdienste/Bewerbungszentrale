@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright';
+import { chromium, firefox } from 'playwright';
 import { githubAttrappe, kiAttrappe, ladeOrdner } from './attrappe.mjs';
 
 export const WURZEL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -16,8 +16,11 @@ const CDN = [
 const TYP = { '.html': 'text/html', '.js': 'application/javascript', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ttf': 'font/ttf', '.txt': 'text/plain', '.css': 'text/css' };
 
 let browser = null;
+/** BZ_BROWSER=firefox: dieselben Tests in Firefox (die App läuft auch dort). */
+export const FIREFOX = process.env.BZ_BROWSER === 'firefox';
 export async function browserStarten() {
   if (browser) return browser;
+  if (FIREFOX) { browser = await firefox.launch(); return browser; }
   try { browser = await chromium.launch(); } catch { browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }); }
   return browser;
 }
@@ -30,7 +33,7 @@ export async function schliessen() { if (browser) await browser.close(); browser
  */
 export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false, graphql = true, google = false, gmailFehler = 0, nurLesen = false, driveStart = [], driveAbbruch = 0, driveEcht = false } = {}) {
   const b = await browserStarten();
-  const ctx = await b.newContext({ viewport: { width: breite, height: hoehe }, serviceWorkers: 'block', acceptDownloads: true, permissions: ['clipboard-read', 'clipboard-write'] });
+  const ctx = await b.newContext({ viewport: { width: breite, height: hoehe }, serviceWorkers: 'block', acceptDownloads: true, ...(FIREFOX ? {} : { permissions: ['clipboard-read', 'clipboard-write'] }) });
   const gh = githubAttrappe(ladeOrdner(daten), { graphql, nurLesen });
   const kia = kiAttrappe(ki);
   const fehler = [], gmail = [];
@@ -70,7 +73,8 @@ export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), spe
   });
   const seite = await ctx.newPage();
   seite.on('pageerror', (e) => fehler.push('Seitenfehler: ' + e.message));
-  seite.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) fehler.push('Konsole: ' + m.text().slice(0, 300)); });
+  // Netzaussetzer melden Chrome („Failed to load resource“) und Firefox („CORS request did not succeed“) verschieden
+  seite.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|CORS request did not succeed/.test(m.text())) fehler.push('Konsole: ' + m.text().slice(0, 300)); });
   await seite.goto('http://app.test/Bewerbungszentrale/');
   return { seite, ctx, gh, ki: kia, fehler, gmail, drive };
 }
