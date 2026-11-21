@@ -2231,7 +2231,7 @@ function mappenPlan() { // was in die Ordner gehört: freigegebene Portal-Bewerb
     .map(x => {
       let name = ordnerName(x.a, x.sc); for (let i = 2; namen.has(name); i++) name = `${ordnerName(x.a, x.sc).slice(0, 85)} (${i})`; namen.add(name);
       const info = portalInfos(x.a);
-      return {...x, name, info, stand: `m4|${fassungVon(x.a)}|${profilStand}#${sha1Hex(info).slice(0, 10)}`}; // m2: Zeugnisse in jedem Ordner, m3: kurze Dateinamen, m4: dazu Anschreiben und Zeugnisse
+      return {...x, name, info, stand: `m5|${fassungVon(x.a)}|${profilStand}#${sha1Hex(info).slice(0, 10)}`}; // m2: Zeugnisse in jedem Ordner, m3: kurze Dateinamen, m4: dazu Anschreiben und Zeugnisse, m5: Motivationsschreiben
     });
   const allgemein = 'a3|' + profilStand; // „Allgemein“: allgemeiner Lebenslauf und Zeugnisse, z. B. fürs Profil bei Jobbörsen
   return {liste, profilStand, allgemein, sig: allgemein + '\n' + liste.map(x => x.name + '\t' + x.stand).join('\n')};
@@ -2247,7 +2247,7 @@ async function ordnerSync() {
     const gebaut = new Map(); // PDFs je Stelle nur einmal bauen, auch wenn PC-Ordner und Drive sie brauchen
     const dateien = x => { if (!gebaut.has(x.name)) gebaut.set(x.name, (async () => {
       const aus = [];
-      for (const teil of ['brief', 'cv', 'ohnecv', 'alles']) { const r = await mappeBauen(x.a, {teil}); aus.push({name: r.filename, bytes: r.bytes, typ: 'application/pdf'}); await pause(); }
+      for (const teil of ['brief', 'cv', 'ohnecv', 'alles']) { const r = await mappeBauen(x.a, {teil}); aus.push({name: r.filename, bytes: r.bytes, typ: 'application/pdf'}); if (teil === 'brief') aus.push({name: dateiName('Motivationsschreiben', x.a), bytes: r.bytes, typ: 'application/pdf'}); await pause(); } // Motivationsschreiben: dasselbe Schreiben, für Portale mit diesem Feld
       const z = await zg(); if (z.seiten) aus.push({name: z.filename, bytes: z.bytes, typ: 'application/pdf'});
       return aus;
     })()); return gebaut.get(x.name); };
@@ -2303,6 +2303,10 @@ window.bzMappen = () => ({drive: {info: DRIVE.info, fehler: DRIVE.fehler, fertig
 async function driveAbgleich(plan, dateien, allgemein) { // Google Drive: Ordner „Bewerbungsmappen“, je Stelle ein Unterordner, Stand in appProperties
   const enc = s => new TextEncoder().encode(s), zeig = t => { DRIVE.info = t; ordnerZeileNeu(); };
   const inOrdner = id => GDRIVE.liste(`'${id}' in parents and trashed=false`);
+  // Die App sieht und darf nur ihre eigenen Dateien. Liegt etwas Fremdes im Ordner (von Hand oder einer anderen App), lässt Drive den Ordner nicht in den Papierkorb.
+  const fremdDrin = e => /access to the child|appNotAuthorizedToChild/i.test(e?.message || '');
+  const leeren = async id => { for (const k of await inOrdner(id)) await GDRIVE.aendern(k.id, {trashed: true}); };
+  const ordnerWeg = async f => { try { await GDRIVE.aendern(f.id, {trashed: true}); } catch (e) { if (!fremdDrin(e)) throw e; await leeren(f.id); await GDRIVE.aendern(f.id, {appProperties: {bz: 'fremd'}}); } };
   let neuGebaut = 0, weg = 0; DRIVE.fehler = ''; DRIVE.wartet = false;
   try {
     zeig('wird abgeglichen …');
@@ -2311,13 +2315,13 @@ async function driveAbgleich(plan, dateien, allgemein) { // Google Drive: Ordner
       DRIVE.wurzel = (w[0] || await GDRIVE.ordner('Bewerbungsmappen', null, {bz: 'wurzel'})).id;
     }
     const kinder = (await inOrdner(DRIVE.wurzel)).filter(f => f.appProperties?.bz === 'stelle'), namen = new Set(plan.liste.map(x => x.name)), gesehen = new Set();
-    for (const f of kinder) if (!namen.has(f.name) || gesehen.has(f.name)) { await GDRIVE.aendern(f.id, {trashed: true}); weg++; } else gesehen.add(f.name); // erledigt oder doppelt: in den Papierkorb
+    for (const f of kinder) if (!namen.has(f.name) || gesehen.has(f.name)) { await ordnerWeg(f); weg++; } else gesehen.add(f.name); // erledigt oder doppelt: in den Papierkorb
     const vorhanden = new Map(kinder.filter(f => namen.has(f.name)).map(f => [f.name, f]));
     { const alle = (await inOrdner(DRIVE.wurzel)).filter(f => f.appProperties?.bz === 'allgemein'), ag = alle[0];
-      for (const f of alle.slice(1)) await GDRIVE.aendern(f.id, {trashed: true});
-      if (!ag || ag.appProperties?.stand !== plan.allgemein) {
-        if (ag) await GDRIVE.aendern(ag.id, {trashed: true});
-        const o = await GDRIVE.ordner('Allgemein', DRIVE.wurzel, {bz: 'allgemein', stand: ''});
+      for (const f of alle.slice(1)) await ordnerWeg(f);
+      if (!ag || ag.appProperties?.stand !== plan.allgemein) { // im selben Ordner neu befüllen
+        if (ag) { await GDRIVE.aendern(ag.id, {appProperties: {stand: ''}}); await leeren(ag.id); }
+        const o = ag || await GDRIVE.ordner('Allgemein', DRIVE.wurzel, {bz: 'allgemein', stand: ''});
         for (const d of await allgemein()) await GDRIVE.hochladen({name: d.name, parent: o.id, bytes: d.bytes, typ: d.typ});
         await GDRIVE.aendern(o.id, {appProperties: {stand: plan.allgemein}});
       } }
@@ -2331,8 +2335,8 @@ async function driveAbgleich(plan, dateien, allgemein) { // Google Drive: Ordner
         await GDRIVE.aendern(f.id, {appProperties: {stand: x.stand}}); continue;
       }
       zeig(`wird hochgeladen: ${i + 1} von ${plan.liste.length}, gerade ${x.a.firma || ''} …`);
-      if (f) await GDRIVE.aendern(f.id, {trashed: true});
-      const o = await GDRIVE.ordner(x.name, DRIVE.wurzel, {bz: 'stelle', stand: ''}); // Stand erst am Ende: Abgebrochenes wird beim nächsten Mal neu gemacht
+      if (f) { await GDRIVE.aendern(f.id, {appProperties: {stand: ''}}); await leeren(f.id); } // im selben Ordner neu befüllen, Fremdes bleibt liegen
+      const o = f || await GDRIVE.ordner(x.name, DRIVE.wurzel, {bz: 'stelle', stand: ''}); // Stand erst am Ende: Abgebrochenes wird beim nächsten Mal neu gemacht
       for (const d of await dateien(x)) await GDRIVE.hochladen({name: d.name, parent: o.id, bytes: d.bytes, typ: d.typ});
       await GDRIVE.hochladen({name: 'Portal-Infos.txt', parent: o.id, bytes: enc(x.info), typ: 'text/plain'});
       await GDRIVE.aendern(o.id, {appProperties: {stand: x.stand}}); neuGebaut++;

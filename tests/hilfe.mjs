@@ -94,7 +94,7 @@ function driveAttrappe(start = [], abbruch = 0) {
     log.push(`${m} ${upload ? 'upload ' : ''}${id ? 'files/' + id : 'files'}`);
     if (m === 'GET' && !id) {
       const q = u.searchParams.get('q') || '', p = (q.match(/'([^']+)' in parents/) || [])[1], w = (q.match(/key='([^']+)' and value='([^']+)'/) || []).slice(1);
-      const files = [...dateien.values()].filter((f) => !f.trashed && (!p || f.parents.includes(p)) && (!w.length || f.appProperties[w[0]] === w[1])).map(aus);
+      const files = [...dateien.values()].filter((f) => !f.trashed && !f.fremd && (!p || f.parents.includes(p)) && (!w.length || f.appProperties[w[0]] === w[1])).map(aus);
       return json(route, 200, { files });
     }
     if (m === 'POST' && !upload) { const b = JSON.parse(r.postData() || '{}'), f = { id: 'd' + ++n, trashed: false, parents: [], appProperties: {}, inhalt: Buffer.alloc(0), ...b }; dateien.set(f.id, f); return json(route, 200, aus(f)); }
@@ -109,12 +109,14 @@ function driveAttrappe(start = [], abbruch = 0) {
     }
     if (m === 'PATCH' && id) {
       const f = dateien.get(id); if (!f) return json(route, 404, { error: { code: 404, message: 'File not found' } });
-      if (upload) f.inhalt = r.postDataBuffer(); else { const b = JSON.parse(r.postData() || '{}'); if ('trashed' in b) f.trashed = b.trashed; if (b.appProperties) f.appProperties = { ...f.appProperties, ...b.appProperties }; if (b.name) f.name = b.name; }
+      if (upload) f.inhalt = r.postDataBuffer(); else { const b = JSON.parse(r.postData() || '{}');
+        if (b.trashed && [...dateien.values()].some((k) => k.fremd && !k.trashed && k.parents.includes(id))) return json(route, 403, { error: { code: 403, message: `The user has not granted the app 123 write access to the child file x, which would be affected by the operation on the parent.` } });
+        if ('trashed' in b) f.trashed = b.trashed; if (b.appProperties) f.appProperties = { ...f.appProperties, ...b.appProperties }; if (b.name) f.name = b.name; }
       return json(route, 200, { id });
     }
     return json(route, 400, { error: { code: 400, message: 'nicht nachgebaut' } });
   }
-  return { handler, dateien, log, kinder: (pid) => [...dateien.values()].filter((f) => !f.trashed && f.parents.includes(pid)) };
+  return { handler, dateien, log, kinder: (pid) => [...dateien.values()].filter((f) => !f.trashed && !f.fremd && f.parents.includes(pid)) };
 }
 
 export const warte = (ms) => new Promise((r) => setTimeout(r, ms));

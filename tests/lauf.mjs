@@ -631,8 +631,8 @@ test('ordner', async () => {
   assert.match(stelle, /^\d{2} Klima Beispiel GmbH - Energiecontroller$/, 'Score davor, ohne (m/w/d)');
   const inhalt = stand[stelle];
   const pdfs = Object.keys(inhalt).filter((n) => n.endsWith('.pdf')).sort();
-  assert.equal(pdfs.length, 5, 'Anschreiben, Lebenslauf, Zeugnisse, Anschreiben mit Zeugnissen, Mappe: ' + pdfs.join(', '));
-  assert.ok(['Anschreiben_', 'Anschreiben_Zeugnisse_', 'Lebenslauf_', 'Zeugnisse_', 'Bewerbung_'].every((v) => pdfs.some((n) => n.startsWith(v))), 'alles in jedem Ordner');
+  assert.equal(pdfs.length, 6, 'Anschreiben, Motivationsschreiben, Lebenslauf, Zeugnisse, Anschreiben mit Zeugnissen, Mappe: ' + pdfs.join(', '));
+  assert.ok(['Anschreiben_', 'Motivationsschreiben_', 'Anschreiben_Zeugnisse_', 'Lebenslauf_', 'Zeugnisse_', 'Bewerbung_'].every((v) => pdfs.some((n) => n.startsWith(v))), 'alles in jedem Ordner');
   for (const n of pdfs) assert.ok(inhalt[n].startsWith('%PDF'), n + ' ist ein PDF');
   const info = inhalt['Portal-Infos.txt'];
   assert.match(info, /Link zur Anzeige: https:\/\/example\.org\/stelle\/1\r\n/);
@@ -665,6 +665,14 @@ test('drive', async () => {
     { id: 'w1', name: 'Bewerbungsmappen', mimeType: 'application/vnd.google-apps.folder', appProperties: { bz: 'wurzel' } },
     { id: 'alt1', name: '99 Alte Firma - Erledigt', mimeType: 'application/vnd.google-apps.folder', parents: ['w1'], appProperties: { bz: 'stelle', stand: 'x' } },
     { id: 'eig1', name: 'Eigene Notizen', mimeType: 'application/vnd.google-apps.folder', parents: ['w1'] },
+    // erledigt, aber mit einer Datei darin, die nicht von der App ist: Drive lässt den Ordner nicht in den Papierkorb
+    { id: 'alt2', name: '98 Andere Firma - Erledigt', mimeType: 'application/vnd.google-apps.folder', parents: ['w1'], appProperties: { bz: 'stelle', stand: 'x' } },
+    { id: 'alt2a', name: 'Anschreiben_alt.pdf', mimeType: 'application/pdf', parents: ['alt2'] },
+    { id: 'fremd1', name: 'Von Hand abgelegt.pdf', mimeType: 'application/pdf', parents: ['alt2'], fremd: true },
+    // Allgemein mit altem Stand und fremder Datei: wird im selben Ordner neu befüllt
+    { id: 'ag1', name: 'Allgemein', mimeType: 'application/vnd.google-apps.folder', parents: ['w1'], appProperties: { bz: 'allgemein', stand: 'alt' } },
+    { id: 'ag1a', name: 'Lebenslauf_alt.pdf', mimeType: 'application/pdf', parents: ['ag1'] },
+    { id: 'fremd2', name: 'Foto von Hand.jpg', mimeType: 'image/jpeg', parents: ['ag1'], fremd: true },
   ] });
   const a = json(gh, 'apps/test-mail.json');
   gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...a, kontakt: { ...a.kontakt, email: '' } }, null, 1) + '\n'));
@@ -680,13 +688,19 @@ test('drive', async () => {
   const o = fertig();
   assert.match(o.name, /^\d{2} Klima Beispiel GmbH - Energiecontroller$/);
   const drin = drive.kinder(o.id), namen = drin.map((f) => f.name).sort();
-  assert.equal(drin.length, 6, namen.join(', '));
-  assert.ok(['Anschreiben_', 'Anschreiben_Zeugnisse_', 'Lebenslauf_', 'Zeugnisse_', 'Bewerbung_'].every((v) => namen.some((n) => n.startsWith(v) && n.endsWith('.pdf'))));
+  assert.equal(drin.length, 7, namen.join(', '));
+  assert.ok(['Anschreiben_', 'Motivationsschreiben_', 'Anschreiben_Zeugnisse_', 'Lebenslauf_', 'Zeugnisse_', 'Bewerbung_'].every((v) => namen.some((n) => n.startsWith(v) && n.endsWith('.pdf'))));
   for (const f of drin.filter((f) => f.name.endsWith('.pdf'))) { assert.equal(f.inhalt.subarray(0, 4).toString(), '%PDF', f.name); assert.equal(f.mimeType, 'application/pdf'); }
   assert.match(drin.find((f) => f.name === 'Portal-Infos.txt').inhalt.toString('utf8'), /Gehaltsvorstellung: /);
   assert.equal(drive.log.filter((x) => x === 'abgebrochen').length, 2, 'zwei Netzaussetzer, trotzdem durchgelaufen');
   assert.equal(drive.dateien.get('alt1').trashed, true, 'erledigter Ordner in den Papierkorb');
   assert.equal(drive.dateien.get('eig1').trashed, false, 'fremder Ordner bleibt');
+  assert.equal(drive.dateien.get('alt2a').trashed, true, 'eigene Datei im erledigten Ordner weg');
+  assert.equal(drive.dateien.get('fremd1').trashed, false, 'fremde Datei bleibt');
+  assert.equal(drive.dateien.get('alt2').appProperties.bz, 'fremd', 'Ordner mit fremder Datei lässt die App danach in Ruhe');
+  assert.equal(drive.dateien.get('ag1').trashed, false, 'Allgemein im selben Ordner neu befüllt');
+  assert.equal(drive.dateien.get('ag1a').trashed, true);
+  assert.equal(drive.dateien.get('fremd2').trashed, false);
   const ag = drive.kinder('w1').filter((f) => f.appProperties?.bz === 'allgemein');
   assert.equal(ag.length, 1, 'ein Ordner Allgemein');
   assert.equal(ag[0].name, 'Allgemein');
