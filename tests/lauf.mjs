@@ -176,7 +176,8 @@ test('weg-portal-mit-mail', async () => {
   assert.doesNotMatch(t, /Per Mail an/);
   assert.match(t, /Erika Beispiel.*karriere@beispiel\.test/s, 'Mailadresse steht beim Kontakt');
   const abs = await seite.textContent('#drBody .abschicken');
-  assert.match(abs, /Zum Bewerbungsportal/);
+  assert.match(await seite.textContent('#drBody > #anzeigeOben, #drBody #anzeigeOben'), /Zur Anzeige und zum Bewerbungsportal/);
+  assert.equal(await seite.evaluate(() => { const o = document.querySelector('#anzeigeOben'); return o && o.parentElement.firstElementChild === o; }), true, 'Link ganz oben in Infos');
   assert.doesNotMatch(abs, /Per Gmail|Geht an/, 'kein Mail-Versand bei Portal-Bewerbung');
   assert.equal(await seite.locator('#drBody [data-act="gmail-api"], #drBody [data-act="gmail-senden"]').count(), 0);
   assert.deepEqual(fehler, []);
@@ -302,7 +303,7 @@ test('firefox', async () => {
   const { seite, fehler } = await appStarten();
   await zuAkte(seite, 'test-portal');
   await seite.waitForSelector('.fakten', { timeout: 10000 });
-  assert.ok(await seite.locator('.fakten a[data-ff]').count() >= 1, 'Anzeige-Link ist markiert');
+  assert.equal(await seite.locator('#anzeigeOben a[data-ff]').count(), 1, 'Anzeige-Link ganz oben und markiert');
   assert.deepEqual(fehler, []);
 });
 

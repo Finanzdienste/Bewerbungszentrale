@@ -1993,7 +1993,6 @@ function mailtextFuer(a) {
 function bereitHTML(a) {
   if (a.status !== 'gemerkt' || !(a.vorschlag || a.anschreiben || a.entwurfUrl)) return '';
   const sc = Number(a.analyse?.score) || null;
-  const link = /^https?:\/\//.test(a.link || '') ? a.link : '';
   const mail = istPortal(a) ? '' : (a.kontakt?.email || '').trim(); // eine Kontaktadresse allein macht keine Mail-Bewerbung
   const betreff = betreffFuer(a), text = mailtextFuer(a);
   const mailto = mail ? `mailto:${encodeURIComponent(mail)}?subject=${encodeURIComponent(betreff)}&body=${encodeURIComponent(text.replace(/\n/g, '\r\n'))}` : '';
@@ -2016,7 +2015,7 @@ function bereitHTML(a) {
            <p class="desc">Geht an <b>${esc(mail)}</b>, Anschreiben, Lebenslauf und Zeugnisse als eine PDF. Vor dem Senden siehst du alles noch einmal.</p>
            <span class="ki-status" id="mappeStatus"></span>
            ${manuell}`
-        : `<div class="ki-row">${mappeBtn}${link ? `<a class="btn primary" href="${esc(link)}" target="_blank" rel="noopener" data-ff>${ic('ext')}Zum Bewerbungsportal</a>` : ''}<button class="btn" type="button" data-act="ki-tab">${ic('doc')}Anschreiben ansehen</button><button class="btn" type="button" data-act="wa-teilen">${ic('share')}Per WhatsApp teilen</button></div>
+        : `<div class="ki-row">${mappeBtn}<button class="btn" type="button" data-act="ki-tab">${ic('doc')}Anschreiben ansehen</button><button class="btn" type="button" data-act="wa-teilen">${ic('share')}Per WhatsApp teilen</button></div>
            <p class="desc">Mappe herunterladen und im Portal hochladen. Die Eingangsbestätigung trägt der Morgenlauf ein.</p>
            <span class="ki-status" id="mappeStatus"></span>
            ${portalHTML(a)}`}
@@ -3207,14 +3206,16 @@ function infosHTML(a) {
   const z = (l, inhalt) => inhalt ? `<div class="fz"><dt>${l}</dt><dd>${inhalt}</dd></div>` : '';
   const score = w.wert == null ? '' : `<b style="color:${ringColor(w.wert)}">${w.geschaetzt ? '≈ ' : ''}${w.wert}</b> <span class="muted">${w.geschaetzt ? 'grob geschätzt' : w.art === 'Gesamt' ? `Reiz ${w.reiz ?? '–'} · Eignung ${w.eignung ?? '–'} · Firma ${w.firma ?? '–'}${w.fahrt ? ` · minus ${w.fahrt} für die Fahrt` : ''}` : esc(w.art)}</span>${a.analyse?.fazit ? `<div class="fz-txt">${esc(a.analyse.fazit)}</div>` : ''}`;
   const portal = istPortal(a); // eine Kontakt-Mailadresse allein heißt nicht, dass per Mail beworben wird
-  const weg = `${portal ? 'Über das Portal der Firma' : `Per Mail an <span style="user-select:all">${esc(mail)}</span>`}${link ? ` · <a href="${esc(link)}" target="_blank" rel="noopener" data-ff>${portal ? 'Zur Anzeige und zum Portal' : 'Anzeige öffnen'}</a>` : ''}`;
+  const weg = portal ? 'Über das Portal der Firma' : `Per Mail an <span style="user-select:all">${esc(mail)}</span>`;
+  // der Link zur Anzeige und zum Portal steht immer ganz oben in „Infos“
+  const oben = link ? `<div class="ki-row" id="anzeigeOben" style="margin:0 0 12px"><a class="btn primary" href="${esc(link)}" target="_blank" rel="noopener" data-ff>${ic('ext')}${portal && a.status === 'gemerkt' ? 'Zur Anzeige und zum Bewerbungsportal' : 'Zur Anzeige'}</a></div>` : '';
   const anzeigeGehalt = (a.gehaltMin || a.gehaltMax) ? `${[a.gehaltMin, a.gehaltMax].filter(Boolean).map(eur).join(' bis ')} laut Anzeige` : 'Die Anzeige nennt kein Gehalt.';
   const kontakt = [k.name ? `${esc(k.name)}${k.rolle ? ` <span class="muted">(${esc(k.rolle)})</span>` : ''}` : '', k.telefon ? `<a href="tel:${esc(String(k.telefon).replace(/[^\d+]/g, ''))}">${esc(k.telefon)}</a>` : '', portal && mail ? `<span style="user-select:all">${esc(mail)}</span>` : ''].filter(Boolean).join(' · ');
   const beworben = a.status !== 'gemerkt' && a.beworbenAm ? `${fmtD(a.beworbenAm)}${a.eingangAm ? ` · Eingang bestätigt ${fmtDs(a.eingangAm)}` : ''}` : '';
   const anfahrt = a.art === 'initiativ' && !a.anfahrt ? '' : `<p id="fahrtText">${fahrtHTML(a)}</p>
       <p class="desc" id="fahrtStunden" style="margin-top:4px">${fahrtStundenHTML(a)}</p>`;
   const gehalt = `${anzeigeGehalt}${a.gehaltWunsch ? `<div id="gwunsch" style="margin-top:4px">Forderung: <b>${eur(a.gehaltWunsch)}</b></div>` : ''}<p class="desc" id="gwunschGrund" style="margin-top:4px">${gehaltHinweis(a)}</p>`;
-  return `<dl class="fakten">
+  return `${oben}<dl class="fakten">
       ${z('Score', score)}
       ${z('Ort', esc([a.ort, a.arbeitsmodell].filter(Boolean).join(' · ')))}
       ${z('Anfahrt', anfahrt)}
