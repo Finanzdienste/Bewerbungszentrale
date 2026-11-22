@@ -397,6 +397,17 @@ test('nach-firefox', async () => {
   assert.deepEqual([...fehler, ...ff.fehler, ...ff2.fehler], []);
 });
 
+test('firmengruppe', async () => {
+  // Konzerntöchter zählen zur Mutter (eine Bewerbung je Firma), wie firma_gruppe() im Morgenlauf. Erfundene Zusätze, echte Firmennamen sind öffentlich.
+  const html = fs.readFileSync(path.join(WURZEL, 'index.html'), 'utf8');
+  const g = (n, e = '\n') => { const i = html.indexOf(n); return html.slice(i, html.indexOf(e, i) + e.length); };
+  const firmaGruppe = new Function(`${g('const FIRMA_WEG')}${g('const FIRMA_GENERISCH')}${g('const FIRMA_ALIAS')}${g('function firmaGruppe', '\n}\n')}; return firmaGruppe;`)();
+  assert.equal(firmaGruppe('HPC Hamburg Port Consulting GmbH'), firmaGruppe('Hamburger Hafen und Logistik AG'));
+  assert.equal(firmaGruppe('HHLA Container Technik GmbH'), firmaGruppe('Hamburger Hafen und Logistik AG'));
+  assert.equal(firmaGruppe('HANSAINVEST Hanseatische Investment-GmbH'), firmaGruppe('SIGNAL IDUNA Krankenversicherung a. G.'));
+  assert.notEqual(firmaGruppe('Hamburger Energienetze GmbH'), firmaGruppe('Hamburger Energiewerke GmbH'));
+});
+
 test('empfaenger', async () => {
   // reine Funktion aus index.html, ohne Browser
   const html = fs.readFileSync(path.join(WURZEL, 'index.html'), 'utf8');

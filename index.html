@@ -2114,7 +2114,7 @@ function pruefStand(a) { // frei | maengel | geaendert | wird (Morgenlauf übera
 /* Eine Bewerbung je Firma zur selben Zeit. Firmengruppe wie firma_gruppe() im Morgenlauf (Daten-Repo) */
 const FIRMA_WEG = new Set(['gmbh', 'ag', 'kg', 'se', 'co', 'mbh', 'ev', 'aör', 'aor', 'ggmbh', 'eg', 'deutschland', 'germany', 'hamburg']);
 const FIRMA_GENERISCH = new Set(['hamburger', 'hamburg', 'deutsche', 'deutsches', 'deutscher', 'stadt', 'stadtwerke', 'universität', 'universitätsklinikum', 'technische', 'the', 'die', 'der', 'das', 'bundesamt', 'max', 'helmholtz', 'zentrum', 'institut', 'otto', 'green', 'nord', 'neue', 'ingenieurbüro', 'berufsgenossenschaft', 'verwaltungs', 'johann', 'heinrich', 'von', 'dr', 'und', 'hanse', 'hanseatische', 'gesellschaft', 'international', 'group', 'gruppe', 'holding', 'klinik', 'kliniken', 'landesbetrieb', 'freie', 'hansestadt', 'evangelisch', 'ev', 'st', 'sankt']);
-const FIRMA_ALIAS = [[/^henw(?= |$)/, 'hamburger energiewerke'], [/^hamburger stadtentwässerung(?= |$)/, 'wasser'], [/^hhla(?= |$)/, 'hamburger hafen'], [/^hpa(?= |$)/, 'port'], [/^ernst young(?= |$)/, 'ey']];
+const FIRMA_ALIAS = [[/^henw(?= |$)/, 'hamburger energiewerke'], [/^hamburger stadtentwässerung(?= |$)/, 'wasser'], [/^hhla(?= |$)/, 'hamburger hafen'], [/^hpa(?= |$)/, 'port'], [/^ernst young(?= |$)/, 'ey'], [/^hpc port consulting(?= |$)/, 'hamburger hafen'], [/^hansainvest(?= |$)/, 'signal iduna']]; // Konzerntöchter wie im Morgenlauf
 function firmaGruppe(f) {
   const n = String(f || '').toLowerCase().replace(/\((?:[mwdfx*/ ]|all genders?|gn|a\*)+\)/g, ' ').replace(/[^a-z0-9äöüß]+/g, ' ').trim();
   let k = (' ' + n + ' ').replace(/ e v /g, ' ').split(' ').filter(w => w && !FIRMA_WEG.has(w)).join(' ');
