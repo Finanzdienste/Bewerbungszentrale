@@ -2236,7 +2236,7 @@ function mappenPlan() { // was in die Ordner gehört: freigegebene Portal-Bewerb
     .map(x => {
       let name = ordnerName(x.a, x.sc); for (let i = 2; namen.has(name); i++) name = `${ordnerName(x.a, x.sc).slice(0, 85)} (${i})`; namen.add(name);
       const info = portalInfos(x.a);
-      return {...x, name, info, stand: `m5|${fassungVon(x.a)}|${profilStand}#${sha1Hex(info).slice(0, 10)}`}; // m2: Zeugnisse in jedem Ordner, m3: kurze Dateinamen, m4: dazu Anschreiben und Zeugnisse, m5: Motivationsschreiben
+      return {...x, name, info, stand: `m6|${fassungVon(x.a)}|${profilStand}#${sha1Hex(info).slice(0, 10)}`}; // m2: Zeugnisse in jedem Ordner, m3: kurze Dateinamen, m4: dazu Anschreiben und Zeugnisse, m5: Motivationsschreiben, m6: englische Dateinamen
     });
   const allgemein = 'a4|' + profilStand; // „Allgemein“: allgemeiner Lebenslauf und Zeugnisse (a4: dazu Arbeits- und Abschlusszeugnisse getrennt), z. B. fürs Profil bei Jobbörsen
   return {liste, profilStand, allgemein, sig: allgemein + '\n' + liste.map(x => x.name + '\t' + x.stand).join('\n')};
@@ -2935,7 +2935,10 @@ function firmaKurz(f) {
   return asciiName(w.slice(0, 2).map(x => x === x.toUpperCase() ? x.replace(/Ä/g, 'AE').replace(/Ö/g, 'OE').replace(/Ü/g, 'UE') : x).join(' '));
 }
 /** Dateiname höchstens 50 Zeichen: manche Portale nehmen längere Namen nicht an (Otto Dörner). Die Firma wird dafür an einer Wortgrenze gekürzt. */
+// englische Bewerbung: englische Dateinamen (Zeugnisse bleiben deutsche Originale)
+const DATEI_EN = {Anschreiben: 'Cover_Letter', Motivationsschreiben: 'Motivation_Letter', Lebenslauf: 'CV', Bewerbung: 'Application', Anschreiben_Zeugnisse: 'Cover_Letter_References'};
 function dateiName(art, a) {
+  if (a?.sprache === 'en' && DATEI_EN[art]) art = DATEI_EN[art];
   const basis = `${art}_${asciiName(P().name) || 'Bewerbung'}`, platz = 50 - basis.length - 5;
   let f = a?.firma && platz >= 3 ? firmaKurz(a.firma) : '';
   if (f.length > platz) { const c = f.slice(0, platz); f = f[platz] === '_' ? c : c.includes('_') ? c.slice(0, c.lastIndexOf('_')) : ''; } // kein halbes Wort

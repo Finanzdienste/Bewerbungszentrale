@@ -337,12 +337,19 @@ test('dateinamen', async () => {
   // höchstens 50 Zeichen, Firma ohne Rechtsform und ohne halbe Wörter (ein Portal hat einen 51 Zeichen langen Lebenslauf abgelehnt)
   const html = fs.readFileSync(path.join(WURZEL, 'index.html'), 'utf8');
   const g = (n, e = '\n') => { const i = html.indexOf(n); return html.slice(i, html.indexOf(e, i) + e.length); };
-  const { dateiName } = new Function('P', `${g('const RECHTSFORM')}${g('function firmaKurz', '\n}\n')}${g('function dateiName', '\n}\n')}${g('const asciiName')}; return { dateiName };`)(() => ({ name: 'Max Muster' }));
+  const { dateiName } = new Function('P', `${g('const RECHTSFORM')}${g('function firmaKurz', '\n}\n')}${g('const DATEI_EN')}${g('function dateiName', '\n}\n')}${g('const asciiName')}; return { dateiName };`)(() => ({ name: 'Max Muster' }));
   assert.equal(dateiName('Lebenslauf', { firma: 'MUSTER DÖRNER GmbH & Co. KG' }), 'Lebenslauf_Max_Muster_MUSTER_DOERNER.pdf');
   assert.equal(dateiName('Motivationsschreiben', { firma: 'Hafen Muster AG' }), 'Motivationsschreiben_Max_Muster_Hafen_Muster.pdf');
   assert.equal(dateiName('Motivationsschreiben', { firma: 'Testklinikum Beispielstadt-Musterhausen (TBM)' }), 'Motivationsschreiben_Max_Muster_Testklinikum.pdf', 'an der Wortgrenze gekürzt');
   assert.equal(dateiName('Motivationsschreiben', { firma: 'Beispieluniversitätsklinikum Musterstadt' }), 'Motivationsschreiben_Max_Muster.pdf', 'lieber ohne Firma als ein halbes Wort');
   assert.equal(dateiName('Zeugnisse', {}), 'Zeugnisse_Max_Muster.pdf');
+  // englische Anzeige: englische Dateinamen, Zeugnisse bleiben deutsch
+  const en = { firma: 'Wind Beispiel GmbH', sprache: 'en' };
+  assert.equal(dateiName('Anschreiben', en), 'Cover_Letter_Max_Muster_Wind_Beispiel.pdf');
+  assert.equal(dateiName('Lebenslauf', en), 'CV_Max_Muster_Wind_Beispiel.pdf');
+  assert.equal(dateiName('Motivationsschreiben', en), 'Motivation_Letter_Max_Muster_Wind_Beispiel.pdf');
+  assert.equal(dateiName('Anschreiben_Zeugnisse', en), 'Cover_Letter_References_Max_Muster_Wind.pdf');
+  assert.equal(dateiName('Bewerbung', en), 'Application_Max_Muster_Wind_Beispiel.pdf');
   for (const f of ['Erfundene Beispiel Versorgungsgesellschaft mbH & Co. KG', 'Ä', 'A B C D E F G H', '']) for (const art of ['Anschreiben', 'Motivationsschreiben', 'Lebenslauf', 'Bewerbung']) {
     const n = dateiName(art, { firma: f }); assert.ok(n.length <= 50 && /^[A-Za-z0-9_-]+\.pdf$/.test(n), n);
   }
