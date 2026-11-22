@@ -15,7 +15,8 @@ App fürs Handy, für Tobi.
 - **Akte:** drei Reiter. „Infos“ (Score, Ort, Anfahrt, Gehalt, Weg, Kontakt, Termine, Offenes,
   Briefing, Abschicken, Notizen, zugeklappt Firma/Passung und Anzeige), „Unterlagen“ (nach dem
   Versand die verschickte PDF, dazu Anschreiben, Motivationsschreiben, Lebenslauf, Zeugnisse,
-  Anschreiben mit Zeugnissen (ohne Lebenslauf) und ganze Mappe als PDF, alles davon auch in
+  Anschreiben mit Zeugnissen (ohne Lebenslauf) und ganze Mappe als PDF, dazu Arbeits- und
+  Abschlusszeugnisse getrennt, wenn es beide gibt (auch im Ordner „Allgemein“), alles davon auch in
   jedem Drive-Ordner, Dateinamen höchstens 50 Zeichen, Anschreiben und Begleitmail zum Kopieren) und „Verlauf“ (oben „Du bist dran“
   mit Antwortvorschlag oder Rückruf, darunter nur der Gesprächsverlauf mit den Mails im Wortlaut).
   Links zu Anzeigen und Portalen öffnen auf Android direkt in Firefox. In Chrome auf Android

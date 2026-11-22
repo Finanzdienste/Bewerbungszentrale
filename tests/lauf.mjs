@@ -366,13 +366,16 @@ test('nach-firefox', async () => {
   const link = await seite.evaluate(() => window.bzPlattform.uebergabeLink());
   assert.match(link, new RegExp(`^http://app\\.test/Bewerbungszentrale/#zugang=${gh.token}&ki=sk-ant-test-0+&google=${GOOGLE_ID.replace(/\./g, '\\.')}$`));
   // der Knopf geht über einen Intent an Firefox; den Sprung selbst fängt der Test ab
-  const [anfrage] = await Promise.all([seite.waitForEvent('request', { predicate: (r) => r.url().startsWith('intent:'), timeout: 10000 }).catch(() => null), seite.click('[data-act="nach-firefox"]')]);
-  if (!FIREFOX) assert.ok(anfrage && anfrage.url().startsWith('intent://app.test/Bewerbungszentrale/'), 'Sprung an Firefox'); // Firefox meldet unbekannte Schemata nicht als Anfrage
+  // Den Knopf nur in Chromium drücken: Firefox kennt intent:// nicht und zeigt dafür manchmal eine Fehlerseite (auf dem Handy gibt es den Knopf dort ohnehin nicht)
+  if (!FIREFOX) {
+    const [anfrage] = await Promise.all([seite.waitForEvent('request', { predicate: (r) => r.url().startsWith('intent:'), timeout: 10000 }).catch(() => null), seite.click('[data-act="nach-firefox"]')]);
+    assert.ok(anfrage && anfrage.url().startsWith('intent://app.test/Bewerbungszentrale/'), 'Sprung an Firefox');
+  }
   // der Anker mit dem Zugang steht vor dem Intent-Teil (Android nimmt beim Lesen das letzte #)
   const html = fs.readFileSync(path.join(WURZEL, 'index.html'), 'utf8'); const i = html.indexOf('function firefoxIntent');
   const firefoxIntent = new Function(`${html.slice(i, html.indexOf('\n', i))}; return firefoxIntent;`)();
   assert.equal(firefoxIntent(link), `intent://${link.slice('http://'.length)}#Intent;scheme=http;package=org.mozilla.firefox;end`);
-  assert.equal(await seite.evaluate(() => navigator.clipboard.readText()), link, 'Link liegt auch in der Zwischenablage');
+  if (!FIREFOX) assert.equal(await seite.evaluate(() => navigator.clipboard.readText()), link, 'Link liegt auch in der Zwischenablage');
   // Firefox: leerer Speicher, der Link richtet alles ein und verschwindet aus der Adresse
   const ff = await appStarten({ speicher: {} });
   await ff.seite.goto(link);
@@ -1059,6 +1062,46 @@ test('linkedin', async () => {
   assert.deepEqual(fehler, []);
 });
 
+
+test('zeugnisse-getrennt', async () => {
+  // HHLA (22.11.): das Portal fragt je Datei, ob Arbeits- oder Abschlusszeugnis. Beides einzeln als PDF, auch ohne Netz, wenn es einmal geladen war.
+  const { seite, ctx, gh, fehler } = await appStarten();
+  const p = json(gh, 'profil/main.json'), az = p.dateien.find((d) => d.typ === 'arbeitszeugnis');
+  gh.dateien.set('profil/main.json', Buffer.from(JSON.stringify({ ...p, dateien: [...p.dateien, { ...az, name: 'Bachelorzeugnis_Max_Muster.pdf', typ: 'hochschule' }] }, null, 1) + '\n'));
+  // http://app.test ist kein sicherer Kontext, also ohne Cache Storage: hier im Speicher nachgebildet (auf https gibt es ihn)
+  await ctx.addInitScript(() => {
+    if (window.caches) return;
+    const alle = new Map();
+    window.caches = { open: async (n) => { if (!alle.has(n)) alle.set(n, new Map()); const m = alle.get(n);
+      return { match: async (r) => m.get(r.url || r)?.clone(), put: async (r, res) => { m.set(r.url || r, res.clone()); } }; } };
+  });
+  await seite.reload();
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await zuAkte(seite, 'test-mail');
+  await seite.click('[data-tab="unterlagen"]');
+  await seite.waitForSelector('#pdfKarte [data-teil="arbeit"]', { timeout: 10000 });
+  assert.match(await seite.textContent('#pdfKarte'), /Zeugnisse.*Arbeitszeugnisse.*Abschlusszeugnisse/s);
+  const { PDFDocument } = await import('pdf-lib');
+  const seiten = async (d) => (await PDFDocument.load(fs.readFileSync(await d.path()))).getPageCount();
+  const laden = (teil) => Promise.all([seite.waitForEvent('download', { timeout: 60000 }), seite.click(`#pdfKarte [data-teil="${teil}"]`)]).then(([d]) => d);
+  const arbeit = await laden('arbeit'), abschluss = await laden('abschluss'), alle = await laden('anlagen');
+  assert.equal(arbeit.suggestedFilename(), 'Arbeitszeugnisse_Max_Muster.pdf');
+  assert.equal(abschluss.suggestedFilename(), 'Abschlusszeugnisse_Max_Muster.pdf');
+  const [na, nb, nz] = [await seiten(arbeit), await seiten(abschluss), await seiten(alle)];
+  assert.ok(na > 0 && nb > 0 && na + nb === nz, `Seiten: Arbeit ${na}, Abschluss ${nb}, alle ${nz}`);
+  // ohne Netz: die Zeugnisse liegen schon im Vorrat
+  await ctx.route('https://api.github.com/**', (r) => r.abort('internetdisconnected'));
+  const offline = await laden('arbeit');
+  assert.equal(await seiten(offline), na, 'ohne Netz dieselbe PDF');
+  // Ohne Abschlusszeugnis im Profil keine getrennten Knöpfe (sonst wäre es dieselbe PDF wie „Zeugnisse“)
+  const nur = await appStarten();
+  await zuAkte(nur.seite, 'test-mail');
+  await nur.seite.click('[data-tab="unterlagen"]');
+  await nur.seite.waitForSelector('#pdfKarte', { timeout: 10000 });
+  assert.equal(await nur.seite.locator('#pdfKarte [data-teil="arbeit"], #pdfKarte [data-teil="abschluss"]').count(), 0);
+  assert.deepEqual([...fehler, ...nur.fehler].filter((f) => !/internetdisconnected|Failed to fetch|NetworkError/.test(f)), []);
+});
 
 test('gesendet', async () => {
   // Nach dem Versand: die verschickte PDF genau so abrufbar, dazu Anschreiben, Lebenslauf und Zeugnisse einzeln

@@ -2252,7 +2252,7 @@ function mappenPlan() { // was in die Ordner gehört: freigegebene Portal-Bewerb
       const info = portalInfos(x.a);
       return {...x, name, info, stand: `m5|${fassungVon(x.a)}|${profilStand}#${sha1Hex(info).slice(0, 10)}`}; // m2: Zeugnisse in jedem Ordner, m3: kurze Dateinamen, m4: dazu Anschreiben und Zeugnisse, m5: Motivationsschreiben
     });
-  const allgemein = 'a3|' + profilStand; // „Allgemein“: allgemeiner Lebenslauf und Zeugnisse, z. B. fürs Profil bei Jobbörsen
+  const allgemein = 'a4|' + profilStand; // „Allgemein“: allgemeiner Lebenslauf und Zeugnisse (a4: dazu Arbeits- und Abschlusszeugnisse getrennt), z. B. fürs Profil bei Jobbörsen
   return {liste, profilStand, allgemein, sig: allgemein + '\n' + liste.map(x => x.name + '\t' + x.stand).join('\n')};
 }
 async function ordnerSync() {
@@ -2262,7 +2262,7 @@ async function ordnerSync() {
   try {
     const plan = mappenPlan(), pause = () => new Promise(r => setTimeout(r, 30)); // die App bleibt bedienbar
     let zeugnisse = null; const zg = async () => zeugnisse || (zeugnisse = await mappeBauen(plan.liste[0]?.a || {}, {teil: 'anlagen'})); // einmal bauen, überall ablegen
-    let allg = null; const allgemein = () => allg || (allg = (async () => { const cv = await mappeBauen({}, {nurCv: true, layout: 'modern'}), z = await zg(), foto = await fotoDatei(); return [{name: cv.filename, bytes: cv.bytes, typ: 'application/pdf'}, ...(z.seiten ? [{name: z.filename, bytes: z.bytes, typ: 'application/pdf'}] : []), ...(foto ? [foto] : [])]; })());
+    let allg = null; const allgemein = () => allg || (allg = (async () => { const cv = await mappeBauen({}, {nurCv: true, layout: 'modern'}), z = await zg(), foto = await fotoDatei(); const getrennt = zeugnisseGetrennt() ? [await mappeBauen({}, {teil: 'arbeit'}), await mappeBauen({}, {teil: 'abschluss'})] : []; return [{name: cv.filename, bytes: cv.bytes, typ: 'application/pdf'}, ...(z.seiten ? [{name: z.filename, bytes: z.bytes, typ: 'application/pdf'}] : []), ...getrennt.filter(g => g.seiten).map(g => ({name: g.filename, bytes: g.bytes, typ: 'application/pdf'})), ...(foto ? [foto] : [])]; })());
     const gebaut = new Map(); // PDFs je Stelle nur einmal bauen, auch wenn PC-Ordner und Drive sie brauchen
     const dateien = x => { if (!gebaut.has(x.name)) gebaut.set(x.name, (async () => {
       const aus = [];
@@ -2984,15 +2984,20 @@ function empfaengerName(a) { // DIN 5008: "Herrn Max Muster" bzw. "Frau Maria Mu
   if (new RegExp(`(geehrte|Liebe|Hallo)\\s+Frau\\s+${titel}${nach}${ende}`).test(an)) return 'Frau ' + k;
   return (/(geehrter|Lieber|Hallo)\s+Herr\b/.test(an) ? 'Herrn ' : /(geehrte|Liebe|Hallo)\s+Frau\b/.test(an) ? 'Frau ' : '') + k;
 }
+/** Welche Zeugnisse zu den getrennten PDFs gehören (Typ der Datei im Profil). */
+const ZEUGNIS_ART = {arbeit: ['arbeitszeugnis', 'praktikum'], abschluss: ['hochschule', 'schule', 'ausbildung']};
+/** Getrennt lohnt nur, wenn es beide Arten gibt – sonst wäre es dieselbe PDF wie „Zeugnisse“. */
+const zeugnisseGetrennt = () => { const ds = (P().dateien || []).filter(d => d.mappe !== false); return Object.values(ZEUGNIS_ART).every(arten => ds.some(d => arten.includes(d.typ))); };
 async function mappeBauen(a, opt = {}) {
   const p = P();
   const teil = opt.teil || (opt.nurCv ? 'cv' : 'alles');
   if (teil === 'cv') opt = {...opt, nurCv: true};
   const cv = cvFuer(a);
-  const ds = (p.dateien || []).filter(d => d.mappe !== false && !(cv && d.typ === 'lebenslauf'));
+  const nurArt = ZEUGNIS_ART[teil]; // arbeit, abschluss: nur diese Zeugnisse (Portale wie HHLA fragen die Art je Datei ab)
+  const ds = (p.dateien || []).filter(d => d.mappe !== false && !(cv && d.typ === 'lebenslauf') && (!nurArt || nurArt.includes(d.typ)));
   const [PDFLib, fk, schriften] = await Promise.all([loadPdfLib(), loadFontkit(), ladeSchriften()]);
   const dateien = [];
-  const mitBrief = ['alles', 'brief', 'ohnecv'].includes(teil), mitAnlagen = ['alles', 'anlagen', 'ohnecv'].includes(teil); // ohnecv: Anschreiben und Zeugnisse, für Portale mit eigenem Feld für den Lebenslauf
+  const mitBrief = ['alles', 'brief', 'ohnecv'].includes(teil), mitAnlagen = ['alles', 'anlagen', 'ohnecv', 'arbeit', 'abschluss'].includes(teil); // ohnecv: Anschreiben und Zeugnisse, für Portale mit eigenem Feld für den Lebenslauf
   if (mitAnlagen) for (const d of ds) { const r = await fetch(opt.kompakt && d.mailUrl ? d.mailUrl : d.url); if (!r.ok) throw new Error('Datei ' + d.name); dateien.push({name: d.name, bytes: new Uint8Array(await r.arrayBuffer())}); }
   let foto = null;
   if (cv && p.fotoAn !== false && p.foto?.url) { try { const r = await fetch(p.foto.url); if (r.ok) foto = new Uint8Array(await r.arrayBuffer()); } catch { /* ohne Foto */ } }
@@ -3007,7 +3012,7 @@ async function mappeBauen(a, opt = {}) {
     empfaenger: [String(a.firma || '').replace(/\s*\([^)]*\)\s*$/, ''), kontakt, ...(anschrift.length ? anschrift : [a.ort])], datumOrt: ort ? `${ort}, ${datum}` : datum, anlagen,
     titel: opt.nurCv ? `${en ? 'CV' : 'Lebenslauf'} ${p.name || ''}` : `${en ? 'Application' : 'Bewerbung'} ${p.name || ''}, ${a.position || ''}`, design: {layout: opt.layout || (a.layout === 'klassisch' ? 'klassisch' : 'modern'), akzent: a.akzent}, sprache: en ? 'en' : 'de',
     cv: teil === 'alles' || teil === 'cv' ? cv : null, foto, schriften, dateien});
-  const fn = teil === 'anlagen' ? dateiName('Zeugnisse', {}) : teil === 'ohnecv' ? dateiName('Anschreiben_Zeugnisse', a) : dateiName(teil === 'brief' ? (opt.motiv ? 'Motivationsschreiben' : 'Anschreiben') : opt.nurCv ? 'Lebenslauf' : 'Bewerbung', a);
+  const fn = teil === 'anlagen' ? dateiName('Zeugnisse', {}) : nurArt ? dateiName(teil === 'arbeit' ? 'Arbeitszeugnisse' : 'Abschlusszeugnisse', {}) : teil === 'ohnecv' ? dateiName('Anschreiben_Zeugnisse', a) : dateiName(teil === 'brief' ? (opt.motiv ? 'Motivationsschreiben' : 'Anschreiben') : opt.nurCv ? 'Lebenslauf' : 'Bewerbung', a);
   return {...r, ds, cv: !!cv, filename: fn};
 }
 async function cvHerunterladen(a, layout, stEl) {
@@ -3359,7 +3364,7 @@ async function teilHerunterladen(a, teil, stEl) {
   const st = t => { if (stEl) stEl.innerHTML = t; };
   if (!DL) { st('Download ist in dieser Ansicht nicht verfügbar.'); return; }
   if (teil === 'foto') { const f = await fotoDatei(); if (!f) { st('Kein Bewerbungsfoto im Profil.'); return; } try { await DL.save({filename: f.name, data: f.bytes, mimeType: f.typ}); st('Foto gespeichert.'); } catch (e) { st(e?.code === 'declined' ? '' : 'Foto konnte nicht gespeichert werden.'); } return; }
-  if (teil !== 'anlagen' && !a?.anschreiben?.trim()) { st('Kein Anschreiben gespeichert.'); return; }
+  if (!['anlagen', 'arbeit', 'abschluss'].includes(teil) && !a?.anschreiben?.trim()) { st('Kein Anschreiben gespeichert.'); return; }
   st('<span class="pulse"></span>PDF wird erstellt …');
   try {
     const r = await mappeBauen(a, {teil: teil === 'motiv' ? 'brief' : teil, motiv: teil === 'motiv'}); // Motivationsschreiben: dasselbe Schreiben, für Portale mit diesem Feld
@@ -3395,7 +3400,7 @@ function unterlagenTabHTML(a) {
   const p = P(), raus = !!a.status && a.status !== 'gemerkt', gd = a.gesendet?.dateien || [];
   const cvKnopf = p.cv ? `<button class="btn sm" type="button" data-act="cv-akte" ${DL ? '' : 'hidden'}>${ic('down')}Lebenslauf</button>` : '';
   const pdf = (a.anschreiben || p.cv) ? `<section class="ki-card" id="pdfKarte"><h3>${ic('doc')}Als PDF</h3>
-    <div class="ki-row">${a.anschreiben ? teilKnopf('brief', 'Anschreiben') + teilKnopf('motiv', 'Motivationsschreiben') : ''}${cvKnopf}${teilKnopf('anlagen', 'Zeugnisse')}${a.anschreiben ? teilKnopf('ohnecv', 'Anschreiben und Zeugnisse') + teilKnopf('alles', 'Ganze Mappe') : ''}${p.foto?.url ? teilKnopf('foto', 'Bewerbungsfoto') : ''}</div>
+    <div class="ki-row">${a.anschreiben ? teilKnopf('brief', 'Anschreiben') + teilKnopf('motiv', 'Motivationsschreiben') : ''}${cvKnopf}${teilKnopf('anlagen', 'Zeugnisse')}${zeugnisseGetrennt() ? teilKnopf('arbeit', 'Arbeitszeugnisse') + teilKnopf('abschluss', 'Abschlusszeugnisse') : ''}${a.anschreiben ? teilKnopf('ohnecv', 'Anschreiben und Zeugnisse') + teilKnopf('alles', 'Ganze Mappe') : ''}${p.foto?.url ? teilKnopf('foto', 'Bewerbungsfoto') : ''}</div>
     <p class="desc">${raus && !gd.length ? 'Aus den gespeicherten Texten neu erzeugt. ' : ''}Landet in den Downloads deines Geräts, von dort lädst du es ins Portal hoch.</p><span class="ki-status" id="mappeStatus3"></span></section>` : '';
   const brief = a.anschreiben ? `<section><div class="ki-row" style="justify-content:space-between"><h3 class="v-kopf">Anschreiben</h3><button class="btn sm" type="button" data-copy="ki-anschreiben">${ic('copy')}Kopieren</button></div><div class="lesetext" id="ki-anschreiben">${esc(a.anschreiben)}</div></section>` : '';
   const mail = a.mailtext && !istPortal(a) ? `<section><div class="ki-row" style="justify-content:space-between"><h3 class="v-kopf">Begleitmail</h3><button class="btn sm" type="button" data-copy="u-mailtext">${ic('copy')}Kopieren</button></div><div class="lesetext" id="u-mailtext">${esc(a.mailtext)}</div></section>` : '';
