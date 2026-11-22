@@ -968,6 +968,7 @@ function renderBanners() {
   if (state.mode === 'local') out.push(`<div class="banner warn"><span class="grow"><b>Speichern ist in dieser Ansicht nicht verfügbar.</b> Öffne die App angemeldet auf claude.ai, damit deine Bewerbungen dauerhaft gesichert werden. Bis dahin gehen Änderungen beim Schließen verloren.</span></div>`);
   if (state.mode === 'db' && !state.loaded && state.slow) out.push(`<div class="banner warn"><span class="grow"><b>Deine Daten sind gerade nicht erreichbar.</b> Die App versucht es im Hintergrund weiter.</span></div>`);
   if (state.mode === 'db' && window.bzPlattform?.nurLesen?.()) out.push(`<div class="banner info" id="lesemodus"><span class="grow"><b>Nur ansehen.</b> Du kannst alle Bewerbungen öffnen und als PDF laden. Änderungen werden nicht gespeichert.</span></div>`);
+  const pa = postausgangBanner(); if (pa) out.push(pa);
   if (state.mode === 'db' && state.dead) out.push(`<div class="banner warn"><span class="grow"><b>Die Verbindung zur Datenbank ist abgebrochen.</b> Lade die Seite neu, um weiterzuarbeiten.</span></div>`);
   const bsp = list().filter(a => a.beispiel).length;
   if (bsp && state.view !== 'profil') out.push(`<div class="banner info"><span class="grow"><b>Das sind ${bsp} Beispiel-Bewerbungen</b> mit erfundenen Firmen, damit du siehst, wie alles funktioniert. Leg deine eigenen an und lösch die Beispiele, wenn du so weit bist.</span><button class="btn sm" data-act="del-bsp" type="button">${ic('trash')}Beispiele löschen</button></div>`);
@@ -2010,6 +2011,9 @@ function bereitHTML(a) {
     ${pruefungHTML(a)}
     ${ohneAnschreiben
       ? `<p class="desc">Das Anschreiben fehlt noch. Das schreibt der Morgenlauf.</p>`
+      : mail && state.openId && vorgemerkt(state.openId)
+        ? `<p class="desc"><b>Vorgemerkt.</b> Geht an <b>${esc(mail)}</b>, sobald Netz da ist – mit gültiger Google-Anmeldung von selbst, sonst nach einem Tipp auf „Jetzt senden“.</p>
+           <div class="ki-row"><button class="btn primary" type="button" data-act="postausgang-senden">${ic('mail')}Jetzt senden</button><button class="btn" type="button" data-act="postausgang-weg">${ic('x')}Nicht senden</button></div>`
       : mail
         ? `<div class="ki-row">${MCP ? `<button class="btn primary" type="button" data-act="gmail-senden">${ic('mail')}Jetzt per Gmail bewerben</button>` : `<button class="btn primary" type="button" data-act="gmail-api">${ic('mail')}Per Gmail senden</button>`}<button class="btn" type="button" data-act="ki-tab">${ic('doc')}Anschreiben ansehen</button></div>
            <p class="desc">Geht an <b>${esc(mail)}</b>, Anschreiben, Lebenslauf und Zeugnisse als eine PDF. Vor dem Senden siehst du alles noch einmal.</p>
@@ -2370,7 +2374,120 @@ async function driveAbgleich(plan, dateien, allgemein) { // Google Drive: Ordner
 const GMAIL = window.bzPlattform?.gmail || null;
 const GMAIL_FEHLER = {needs_reauth: 'Die Google-Anmeldung ist abgelaufen. Tipp noch einmal auf „Senden“.', forbidden: 'Google lässt den Versand nicht zu. Ist im Google-Cloud-Projekt die Gmail-API eingeschaltet?',
   rate_limited: 'Gmail bremst gerade. Versuch es in ein paar Minuten noch einmal.', unavailable: 'Keine Verbindung zu Google.', 'pdf-lib': 'Das PDF-Werkzeug konnte nicht geladen werden.'};
-const mailBereit = () => { const belegt = firmenMitVersand(); return list().filter(a => istBereit(a) && a.bewerbungsweg === 'email' && (a.kontakt?.email || '').trim() && !belegt.has(firmaGruppe(a.firma))); };
+const mailBereit = () => { const belegt = firmenMitVersand(); return list().filter(a => istBereit(a) && a.bewerbungsweg === 'email' && (a.kontakt?.email || '').trim() && !belegt.has(firmaGruppe(a.firma)) && !vorgemerkt(a.id)); };
+
+/* ---------- Postausgang: ohne Netz vorgemerkte Mail-Bewerbungen ----------
+   Tippt man ohne Netz auf „Senden“, merkt sich die App die Bewerbungen vor und schickt sie, sobald wieder Netz da
+   ist: beim Start, beim Ereignis „online“ und wenn die App wieder vorn ist. Mit gültiger Google-Anmeldung (eine
+   Stunde) geht das von selbst, sonst mit einem Tipp im Hinweis oben – Google öffnet sein Anmeldefenster nur nach
+   einem Tipp. Vorgemerkt wird nur auf diesem Gerät, damit kein zweites dieselbe Bewerbung auch schickt. Inhalt
+   und Mappe entstehen erst beim Senden, aus dem dann aktuellen Stand der Akte. Was inzwischen nicht mehr auf
+   „gemerkt“ steht, fliegt raus; mit unklarem Ausgang wird nie ein zweites Mal geschickt. */
+const POSTAUSGANG = 'bewerbungszentrale.postausgang.v1';
+function postausgang() {
+  try { const p = JSON.parse(localStorage.getItem(POSTAUSGANG) || '[]'); return Array.isArray(p) ? p.filter(x => x && typeof x.id === 'string') : []; } catch { return []; }
+}
+function postausgangSetzen(p) {
+  try { if (p.length) localStorage.setItem(POSTAUSGANG, JSON.stringify(p)); else localStorage.removeItem(POSTAUSGANG); } catch { /* privat: dann eben nicht */ }
+  renderBanners();
+}
+const vorgemerkt = (id) => postausgang().some(x => x.id === id);
+const ohneNetz = () => navigator.onLine === false;
+const PA = {laeuft: false, hinweis: '', timer: null};
+function vormerken(ids) {
+  const p = postausgang();
+  for (const id of ids) if (!p.some(x => x.id === id)) p.push({id, am: jetztISO()});
+  postausgangSetzen(p);
+  toast(ids.length === 1 ? 'Vorgemerkt – geht raus, sobald du wieder Netz hast.' : `${ids.length} vorgemerkt – gehen raus, sobald du wieder Netz hast.`);
+  renderSoon(); if (state.openId) renderDrawerBody();
+}
+
+/* Eine Bewerbung bauen, senden und eintragen. melde(text, art) zeigt den Stand (art: 'html' oder 'err').
+   Gibt 'ok', 'uebersprungen', 'unklar' oder den Fehlercode zurück. */
+async function bewerbungSenden(id, melde = () => {}) {
+  const a = state.apps[id];
+  if (!a || a.status !== 'gemerkt') { melde('Übersprungen, ist schon beworben.'); return 'uebersprungen'; }
+  let mappe, r; const an = (a.kontakt?.email || '').trim();
+  try {
+    melde('<span class="pulse"></span>Mappe wird erstellt …', 'html');
+    mappe = await mappeBauen(a, {kompakt: true});
+    melde('<span class="pulse"></span>Wird gesendet …', 'html');
+    r = await GMAIL.senden({an, betreff: betreffFuer(a), text: mailtextFuer(a), anhang: {name: mappe.filename, bytes: mappe.bytes, typ: 'application/pdf'}});
+  } catch (e) {
+    if (e?.code === 'unklar') {
+      melde('Unklar, ob sie raus ist. Bitte in Gmail unter „Gesendet“ nachsehen.', 'err');
+      const cur = state.apps[id]; if (cur) { cur.verlauf.push({id: uid(), datum: today(), typ: 'notiz', text: 'Versand per Gmail mit unklarem Ergebnis, bitte in Gmail unter Gesendet prüfen'}); saveApp(id, false); }
+      return 'unklar';
+    }
+    if (e?.code === 'bad_request') { melde(`Nicht gesendet: ${e.message}`, 'err'); return 'bad_request'; }
+    melde(`Nicht gesendet. ${GMAIL_FEHLER[e?.code] || GMAIL_FEHLER[e?.message] || ''} ${e?.message && e.message !== GMAIL_FEHLER[e?.code] ? `(Google: ${e.message})` : ''}`.trim(), 'err');
+    return e?.code || 'fehler';
+  }
+  // ab hier ist die Mail raus: eintragen, aber nie wieder als „nicht gesendet“ melden
+  melde('Gesendet');
+  try {
+    const cur = state.apps[id];
+    if (cur) {
+      if (r?.threadId || r?.id) cur.gmailThreadId = r.threadId || r.id;
+      unterlagenAbhaken(cur, mappe.ds);
+      cur.aufgaben = (cur.aufgaben || []).map(k => /bewerbungsmappe|portal/i.test(k.text) ? {...k, erledigt: true} : k);
+      cur.verlauf.push({id: uid(), datum: jetztISO(), typ: 'mail', text: `Bewerbung per Gmail an ${an} verschickt (${mappe.seiten} Seiten)`, mail: mailEintragNeu({an, betreff: betreffFuer(a), text: mailtextFuer(a), anhaenge: [mappe.filename]})});
+      await gesendetSpeichern(cur, mappe, an);
+      saveApp(id, false); setStatus(id, 'beworben', {quiet: true});
+      melde('<span class="pulse"></span>Gesendet, wird eingetragen …', 'html');
+      const ok2 = await speichernJetzt(id);
+      melde(ok2 ? 'Gesendet und eingetragen' : 'Gesendet. Das Eintragen holt die App beim nächsten Öffnen nach.');
+    }
+  } catch (e) { console.warn('Eintragen nach dem Versand', e); melde('Gesendet (bitte in der Akte auf „beworben“ setzen)'); }
+  return 'ok';
+}
+
+/* Den Postausgang abarbeiten. tipp: aus einem Klick heraus aufgerufen, dann darf die Google-Anmeldung aufgehen. */
+async function postausgangAbarbeiten({tipp = false} = {}) {
+  if (PA.laeuft || !GMAIL || ohneNetz() || state.mode !== 'db' || !state.loaded || window.bzPlattform?.nurLesen?.()) return;
+  if (!postausgang().length) return;
+  if (!GMAIL.eingerichtet()) { PA.hinweis = 'Senden über Gmail ist auf diesem Gerät nicht eingerichtet.'; renderBanners(); return; }
+  PA.laeuft = true; PA.hinweis = ''; renderBanners();
+  let ok = 0;
+  try {
+    // Die Anmeldung zuerst, solange der Tipp noch frisch ist – sonst blockiert der Browser das Anmeldefenster
+    const anmeldung = tipp ? GMAIL.anmelden(P().gmailKonto || '') : GMAIL.vorbereiten();
+    // Den neuesten Stand holen: vielleicht ist die Bewerbung inzwischen von einem anderen Gerät raus. Klappt das nicht, lieber nichts senden.
+    try { await window.bzPlattform?.abgleichen?.(); } catch { PA.hinweis = 'Gerade keine Verbindung, neuer Versuch, sobald das Netz wieder da ist.'; await anmeldung.catch(() => {}); return; }
+    await anmeldung;
+    const p = postausgang().filter(x => state.apps[x.id]?.status === 'gemerkt' && (state.apps[x.id].kontakt?.email || '').trim());
+    if (p.length !== postausgang().length) postausgangSetzen(p);
+    if (!p.length || !GMAIL.angemeldet()) return; // ohne Anmeldung wartet der Hinweis oben auf einen Tipp
+    for (const [i, x] of p.entries()) {
+      if (i) await new Promise(res => setTimeout(res, 1200));
+      let letzte = '';
+      const erg = await bewerbungSenden(x.id, (t) => { letzte = t; });
+      if (erg === 'ok') ok++;
+      if (['ok', 'uebersprungen', 'unklar', 'bad_request'].includes(erg)) postausgangSetzen(postausgang().filter(y => y.id !== x.id));
+      if (erg === 'bad_request') { PA.hinweis = `${state.apps[x.id]?.firma || 'Eine Bewerbung'}: ${letzte.replace(/<[^>]+>/g, '')}`; continue; }
+      if (erg === 'unklar') { PA.hinweis = `Bei ${state.apps[x.id]?.firma || 'einer Bewerbung'} ist unklar, ob sie raus ist – bitte in Gmail unter „Gesendet“ nachsehen. Danach angehalten, damit nichts doppelt rausgeht.`; break; }
+      if (!['ok', 'uebersprungen'].includes(erg)) { PA.hinweis = GMAIL_FEHLER[erg] && erg !== 'needs_reauth' ? GMAIL_FEHLER[erg] : ''; break; } // bleibt vorgemerkt
+    }
+  } catch (e) {
+    PA.hinweis = e?.code === 'abgebrochen' ? 'Anmeldung abgebrochen.' : e?.code === 'consent_required' ? 'Ohne die Google-Anmeldung kann die App nicht senden.' : (GMAIL_FEHLER[e?.code] || 'Die Google-Anmeldung lädt gerade nicht.');
+  } finally {
+    PA.laeuft = false; renderBanners(); renderSoon(); if (state.openId) { renderDrawerHead(); renderDrawerBody(); }
+  }
+  if (ok) toast(ok === 1 ? 'Vorgemerkte Bewerbung verschickt' : `${ok} vorgemerkte Bewerbungen verschickt`);
+}
+function postausgangPlanen(ms = 1500) { clearTimeout(PA.timer); PA.timer = setTimeout(() => postausgangAbarbeiten(), ms); }
+function postausgangBanner() {
+  const n = postausgang().length; if (!n || state.mode !== 'db') return '';
+  const eine = n === 1, netz = !ohneNetz();
+  const text = PA.laeuft ? `<span class="pulse"></span>${eine ? 'Wird gesendet …' : 'Werden gesendet …'}`
+    : !netz ? `${eine ? 'Sie geht' : 'Sie gehen'} raus, sobald du wieder Netz hast.`
+      : PA.hinweis ? esc(PA.hinweis) : `Google braucht einmal deinen Tipp, dann ${eine ? 'geht sie' : 'gehen sie'} raus.`;
+  return `<div class="banner info" id="postausgang"><span class="grow"><b>${eine ? '1 Bewerbung wartet' : `${n} Bewerbungen warten`} auf den Versand.</b> ${text}</span>${netz && !PA.laeuft ? '<button class="btn sm primary" type="button" data-act="postausgang-senden">Jetzt senden</button>' : ''}${PA.laeuft ? '' : '<button class="btn sm" type="button" data-act="postausgang-leeren">Nicht senden</button>'}</div>`;
+}
+window.addEventListener('online', () => { renderBanners(); postausgangPlanen(500); });
+window.addEventListener('offline', () => renderBanners());
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') postausgangPlanen(800); });
+
 function gmailEinrichtenModal(ids, weiter = null) {
   const m = modal(`<div class="modal-head"><h2>${weiter ? 'Google-Anmeldung einrichten' : 'Senden über Gmail einrichten'}</h2><button class="btn icon ghost" type="button" data-mclose aria-label="Schließen">${ic('x')}</button></div>
     <div class="modal-body">
@@ -2410,9 +2527,19 @@ function sammelMailModal(ids) {
   zu.forEach(b => b.onclick = closeModal);
   const zeilen = liste.map((a, i) => ({a, li: $(`[data-sm="${i}"]`, m), cb: $(`#sm-${i}`, m), rs: $(`[data-sm="${i}"] [data-sm-st]`, m), fertig: false}));
   const anzahl = () => zeilen.filter(z => z.cb.checked && !z.fertig).length;
-  const knopf = () => { const n = anzahl(); los.innerHTML = `${ic('mail')}${n === 1 ? 'Jetzt senden' : `${n} jetzt senden`}`; return n; };
+  let merken = false; // ohne Netz: „Vormerken“ statt „Senden“ (Postausgang)
+  const knopf = () => { const n = anzahl(); los.innerHTML = merken ? `${ic('mail')}${n === 1 ? 'Vormerken' : `${n} vormerken`}` : `${ic('mail')}${n === 1 ? 'Jetzt senden' : `${n} jetzt senden`}`; if (merken) los.disabled = !n; return n; };
   zeilen.forEach(z => z.cb.onchange = knopf); knopf();
-  GMAIL.vorbereiten().then(() => { st.textContent = ''; los.disabled = !knopf(); if (probe) probe.disabled = false; }).catch(e => { st.textContent = GMAIL_FEHLER[e?.code] || 'Die Google-Anmeldung konnte nicht geladen werden.'; st.classList.add('err'); });
+  const merkModus = (grund) => {
+    merken = true; st.classList.remove('err'); if (probe) probe.disabled = true;
+    st.textContent = `${grund} Tipp auf „Vormerken“, dann ${liste.length === 1 ? 'geht sie' : 'gehen sie'} raus, sobald du wieder Netz hast.`;
+    knopf();
+  };
+  if (ohneNetz()) merkModus('Gerade kein Netz.');
+  else GMAIL.vorbereiten().then(() => { st.textContent = ''; los.disabled = !knopf(); if (probe) probe.disabled = false; }).catch(e => {
+    if (ohneNetz() || e?.code === 'unavailable') return merkModus('Google ist gerade nicht erreichbar.');
+    st.textContent = GMAIL_FEHLER[e?.code] || 'Die Google-Anmeldung konnte nicht geladen werden.'; st.classList.add('err');
+  });
   if (probe) probe.onclick = async () => { // dieselbe Mail an die eigene Adresse, ändert nichts an der Akte
     const z = zeilen.find(x => x.cb.checked && !x.fertig) || zeilen[0]; const a = state.apps[z.a.id]; if (!a) return;
     const an = P().email.trim();
@@ -2430,6 +2557,7 @@ function sammelMailModal(ids) {
   };
   los.onclick = async () => {
     const auswahl = zeilen.filter(z => z.cb.checked && !z.fertig); if (!auswahl.length) return;
+    if (merken || ohneNetz()) { closeModal(); return vormerken(auswahl.map(z => z.a.id)); }
     los.disabled = true; if (probe) probe.disabled = true; zu.forEach(b => b.disabled = true); st.classList.remove('err');
     try { await GMAIL.anmelden(P().gmailKonto || ''); } // im Klick, sonst blockiert der Browser das Anmeldefenster
     catch (e) { st.textContent = e?.code === 'abgebrochen' ? 'Anmeldung abgebrochen.' : 'Ohne die Google-Anmeldung kann die App nicht senden.'; st.classList.add('err'); los.disabled = false; if (probe) probe.disabled = false; zu.forEach(b => b.disabled = false); return; }
@@ -2438,38 +2566,13 @@ function sammelMailModal(ids) {
       const id = z.a.id, a = state.apps[id];
       if (!a || a.status !== 'gemerkt') { z.rs.textContent = 'Übersprungen, ist schon beworben.'; z.fertig = true; continue; }
       if (halt) { z.rs.textContent = 'Nicht gesendet.'; continue; }
-      let mappe, r, an = (a.kontakt?.email || '').trim();
-      try {
-        z.rs.innerHTML = '<span class="pulse"></span>Mappe wird erstellt …';
-        mappe = await mappeBauen(a, {kompakt: true});
-        z.rs.innerHTML = '<span class="pulse"></span>Wird gesendet …';
-        r = await GMAIL.senden({an, betreff: betreffFuer(a), text: mailtextFuer(a), anhang: {name: mappe.filename, bytes: mappe.bytes, typ: 'application/pdf'}});
-      } catch (e) {
-        z.rs.classList.add('err');
-        if (e?.code === 'unklar') {
-          z.rs.textContent = 'Unklar, ob sie raus ist. Bitte in Gmail unter „Gesendet“ nachsehen.'; z.fertig = true; z.cb.checked = false; z.cb.disabled = true;
-          const cur = state.apps[id]; if (cur) { cur.verlauf.push({id: uid(), datum: today(), typ: 'notiz', text: 'Versand per Gmail mit unklarem Ergebnis, bitte in Gmail unter Gesendet prüfen'}); saveApp(id, false); }
-          halt = 'unklar';
-        } else if (e?.code === 'bad_request') z.rs.textContent = `Nicht gesendet: ${e.message}`;
-        else { z.rs.textContent = `Nicht gesendet. ${GMAIL_FEHLER[e?.code] || GMAIL_FEHLER[e?.message] || ''} ${e?.message && e.message !== GMAIL_FEHLER[e?.code] ? `(Google: ${e.message})` : ''}`.trim(); halt = e?.code || 'fehler'; }
-        continue;
-      }
-      // ab hier ist die Mail raus: eintragen, aber nie wieder als „nicht gesendet“ melden
-      z.fertig = true; z.cb.checked = false; z.cb.disabled = true; z.li.classList.add('done'); z.rs.textContent = 'Gesendet'; ok++;
-      try {
-        const cur = state.apps[id];
-        if (cur) {
-          if (r?.threadId || r?.id) cur.gmailThreadId = r.threadId || r.id;
-          unterlagenAbhaken(cur, mappe.ds);
-          cur.aufgaben = (cur.aufgaben || []).map(k => /bewerbungsmappe|portal/i.test(k.text) ? {...k, erledigt: true} : k);
-          cur.verlauf.push({id: uid(), datum: jetztISO(), typ: 'mail', text: `Bewerbung per Gmail an ${an} verschickt (${mappe.seiten} Seiten)`, mail: mailEintragNeu({an, betreff: betreffFuer(a), text: mailtextFuer(a), anhaenge: [mappe.filename]})});
-          await gesendetSpeichern(cur, mappe, an);
-          saveApp(id, false); setStatus(id, 'beworben', {quiet: true});
-          z.rs.innerHTML = '<span class="pulse"></span>Gesendet, wird eingetragen …';
-          const ok2 = await speichernJetzt(id);
-          z.rs.textContent = ok2 ? 'Gesendet und eingetragen' : 'Gesendet. Das Eintragen holt die App beim nächsten Öffnen nach.';
-        }
-      } catch (e) { console.warn('Eintragen nach dem Versand', e); z.rs.textContent = 'Gesendet (bitte in der Akte auf „beworben“ setzen)'; }
+      const melde = (t, art) => { if (art === 'html') z.rs.innerHTML = t; else z.rs.textContent = t; if (art === 'err') z.rs.classList.add('err'); };
+      const erg = await bewerbungSenden(id, melde);
+      if (erg === 'uebersprungen') { z.fertig = true; continue; }
+      if (erg === 'unklar') { z.fertig = true; z.cb.checked = false; z.cb.disabled = true; halt = 'unklar'; continue; }
+      if (erg === 'bad_request') continue;
+      if (erg !== 'ok') { halt = erg; continue; }
+      z.fertig = true; z.cb.checked = false; z.cb.disabled = true; z.li.classList.add('done'); ok++;
       if (auswahl.length > 1) await new Promise(res => setTimeout(res, 1200));
     }
     st.textContent = `${ok} von ${auswahl.length} gesendet.${halt === 'unklar' ? ' Danach angehalten, damit nichts doppelt rausgeht.' : ''}`;
@@ -4203,6 +4306,13 @@ document.addEventListener('click', async e => {
     if (act === 'drive-verbinden') return driveVerbinden();
     if (act === 'zurueckholen') { const rid = t.closest('[data-rid]')?.dataset.rid; if (rid) zurueckholen(rid); return; }
     if (act === 'sammel-mail') return sammelMailModal();
+    if (act === 'postausgang-senden') {
+      if (ohneNetz()) return toast('Gerade kein Netz. Sie geht von selbst raus, sobald es wieder da ist.');
+      if (PA.laeuft) return toast('Wird schon gesendet …');
+      return postausgangAbarbeiten({tipp: true});
+    }
+    if (act === 'postausgang-leeren') { postausgangSetzen([]); PA.hinweis = ''; toast('Nicht gesendet. Die Bewerbungen warten wieder unter „Bereit“.'); renderSoon(); if (state.openId) renderDrawerBody(); return; }
+    if (act === 'postausgang-weg' && state.openId) { postausgangSetzen(postausgang().filter(x => x.id !== state.openId)); toast('Nicht gesendet.'); renderSoon(); renderDrawerBody(); return; }
     if (act === 'gmail-api' && state.openId) return sammelMailModal([state.openId]);
     if (act === 'li-ki' && state.openId) return liNachrichtErstellen();
     if (act === 'li-angeschrieben' && state.openId) { const a = state.apps[state.openId]; a.verlauf.push({id: uid(), datum: today(), typ: 'notiz', text: 'Über LinkedIn jemanden aus dem Team angeschrieben'}); saveApp(state.openId); renderDrawerBody(); toast('Vermerkt'); return; }
@@ -4351,6 +4461,7 @@ function onApps(snap) {
   renderAll();
   if (state.openId && !state.apps[state.openId]) closeDrawer();
   else if (state.openId) renderDrawerHead();
+  if (state.loaded && postausgang().length) postausgangPlanen();
 }
 let loadTimer = null;
 async function init() {

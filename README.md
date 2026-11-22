@@ -77,9 +77,23 @@ Senden per Gmail: eine eigene Google-Cloud-App (Gmail API an, OAuth-Client
 „Webanwendung“ mit der Pages-Adresse als JavaScript-Quelle, die Person als
 Testnutzer). Die Client-ID kommt per Link `…/#google=<Client-ID>` oder über
 das Fenster beim ersten Senden. Die App fragt nur `gmail.send` an, das
-Zugriffstoken bleibt im Speicher der Seite. Gesendet wird nur, wenn die Person
-im Senden-Fenster tippt; in der Sammelliste stehen nur Bewerbungen, die das
-Gegenlesen freigegeben hat.
+Zugriffstoken hält eine Stunde (localStorage `bewerbungszentrale.gmail.v1`).
+Gesendet wird nur, wenn die Person im Senden-Fenster tippt; in der Sammelliste
+stehen nur Bewerbungen, die das Gegenlesen freigegeben hat.
+
+**Postausgang (v66)** – Tobi, 22.11.2026: „sowas wie mails senden könnte er sich
+doch vormerken und dann machen sobald er internet hat“. Ohne Netz (oder wenn
+Google nicht erreichbar ist) heißt der Knopf im Senden-Fenster „Vormerken“. Die
+Auswahl landet in `bewerbungszentrale.postausgang.v1` (nur ids, nur auf diesem
+Gerät – so schickt kein zweites Gerät dieselbe Bewerbung), oben steht „1 Bewerbung
+wartet auf den Versand“, in der Akte „Vorgemerkt“. Sobald Netz da ist (Ereignis
+`online`, App wieder vorn, nächster Start), holt die App erst den neuesten Stand –
+was inzwischen nicht mehr auf „gemerkt“ steht, fliegt raus – und sendet dann mit
+gültiger Google-Anmeldung von selbst; sonst reicht ein Tipp auf „Jetzt senden“
+(Google öffnet sein Anmeldefenster nur nach einem Tipp). Mappe und Mailtext
+entstehen erst beim Senden. Ist unklar, ob eine Mail raus ist, wird sie nie ein
+zweites Mal geschickt und die App hält an. Tests: `postausgang-tipp`,
+`postausgang-selbst`, `postausgang-erledigt`.
 
 ## Bildschirmzeit für Tobis Widget
 

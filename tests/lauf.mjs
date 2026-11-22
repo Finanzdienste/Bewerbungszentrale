@@ -960,6 +960,75 @@ test('gmail-merken', async () => {
   assert.deepEqual(fehler, []);
 });
 
+// Ohne Netz: vormerken, mit Netz geht sie raus – ohne Anmeldung nach einem Tipp, mit Anmeldung von selbst
+async function vormerkenOhneNetz(seite, ctx) {
+  await zuAkte(seite, 'test-mail');
+  await ctx.setOffline(true);
+  await seite.click('[data-act="gmail-api"]');
+  await seite.waitForSelector('#sm-los:not([disabled])', { timeout: 5000 });
+  assert.match(await seite.textContent('#sm-los'), /Vormerken/);
+  assert.match(await seite.textContent('#sm-st'), /Gerade kein Netz/);
+  await seite.click('#sm-los');
+  await seite.waitForSelector('#postausgang', { timeout: 5000 });
+  assert.match(await seite.textContent('#postausgang'), /1 Bewerbung wartet auf den Versand\. Sie geht raus, sobald du wieder Netz hast/);
+  assert.match(await seite.textContent('#drBody'), /Vorgemerkt\./);
+}
+
+test('postausgang-tipp', async () => {
+  const { seite, ctx, gh, gmail, fehler } = await appStarten({ google: true });
+  await seite.goto(`http://app.test/Bewerbungszentrale/#google=${GOOGLE_ID}`);
+  await seite.reload();
+  await vormerkenOhneNetz(seite, ctx);
+  assert.equal(gmail.length, 0, 'ohne Netz nichts gesendet');
+  await ctx.setOffline(false);
+  await seite.waitForSelector('#postausgang [data-act="postausgang-senden"]', { timeout: 10000 });
+  await warte(2500);
+  assert.equal(gmail.length, 0, 'ohne Anmeldung wartet sie auf einen Tipp');
+  assert.match(await seite.textContent('#postausgang'), /Google braucht einmal deinen Tipp/);
+  assert.equal(await seite.locator('#drBody [data-act="postausgang-senden"]').count(), 1, 'auch in der Akte');
+  await seite.click('#drClose');
+  await seite.click('#postausgang [data-act="postausgang-senden"]');
+  assert.ok(await bis(() => json(gh, 'apps/test-mail.json').status === 'beworben', 60000), 'nach dem Tipp raus und eingetragen');
+  assert.equal(gmail.length, 1);
+  assert.equal(await seite.evaluate(() => window.__anmeldungen), 1);
+  assert.ok(json(gh, 'apps/test-mail.json').verlauf.some((v) => v.typ === 'mail' && /per Gmail an bewerbung@example\.org/.test(v.text)));
+  await seite.waitForFunction(() => !document.querySelector('#postausgang'), null, { timeout: 5000 });
+  assert.equal(await seite.evaluate(() => localStorage.getItem('bewerbungszentrale.postausgang.v1')), null);
+  assert.deepEqual(fehler, []);
+});
+
+test('postausgang-selbst', async () => {
+  const { seite, ctx, gh, gmail, fehler } = await appStarten({ google: true });
+  await seite.goto(`http://app.test/Bewerbungszentrale/#google=${GOOGLE_ID}`);
+  await seite.evaluate(() => localStorage.setItem('bewerbungszentrale.gmail.v1', JSON.stringify({ token: 'ya29.test-token', bis: Date.now() + 3600e3 })));
+  await seite.reload();
+  await vormerkenOhneNetz(seite, ctx);
+  await ctx.setOffline(false);
+  assert.ok(await bis(() => json(gh, 'apps/test-mail.json').status === 'beworben', 60000), 'mit Netz von selbst raus');
+  assert.equal(gmail.length, 1);
+  assert.equal(await seite.evaluate(() => window.__anmeldungen || 0), 0, 'ohne neue Anmeldung');
+  await seite.waitForFunction(() => /Vorgemerkte Bewerbung verschickt/.test(document.querySelector('#toasts')?.textContent || ''), null, { timeout: 10000 });
+  assert.equal(await seite.locator('#postausgang').count(), 0, 'Hinweis weg');
+  assert.equal(await seite.evaluate(() => localStorage.getItem('bewerbungszentrale.postausgang.v1')), null);
+  assert.deepEqual(fehler, []);
+});
+
+test('postausgang-erledigt', async () => {
+  // Ist sie inzwischen von einem anderen Gerät raus, geht sie hier nicht noch einmal raus
+  const { seite, ctx, gh, gmail, fehler } = await appStarten({ google: true });
+  await seite.goto(`http://app.test/Bewerbungszentrale/#google=${GOOGLE_ID}`);
+  await seite.evaluate(() => localStorage.setItem('bewerbungszentrale.gmail.v1', JSON.stringify({ token: 'ya29.test-token', bis: Date.now() + 3600e3 })));
+  await seite.reload();
+  await vormerkenOhneNetz(seite, ctx);
+  gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...json(gh, 'apps/test-mail.json'), status: 'beworben' }, null, 1) + '\n'));
+  await ctx.setOffline(false);
+  await seite.waitForFunction(() => !document.querySelector('#postausgang'), null, { timeout: 15000 });
+  await warte(1500);
+  assert.equal(gmail.length, 0, 'nicht doppelt beworben');
+  assert.equal(await seite.evaluate(() => localStorage.getItem('bewerbungszentrale.postausgang.v1')), null);
+  assert.deepEqual(fehler, []);
+});
+
 test('gmail-fehler', async () => {
   const { seite, gh, fehler } = await appStarten({ google: true, gmailFehler: 403 });
   await seite.goto(`http://app.test/Bewerbungszentrale/#google=${GOOGLE_ID}`);
