@@ -95,8 +95,8 @@ svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .dash-kopf{display:flex;align-items:center;gap:8px;margin:0 0 14px}
 .dash-kopf .search{flex:1 1 auto;width:auto}
 .dash-kopf .search input{height:40px}
-.weg-wahl{flex:none;width:auto;height:40px;padding:0 28px 0 10px;border:1px solid var(--line);border-radius:var(--r);background-color:var(--sheet-2);color:var(--ink);font-size:var(--t-sm)}
-.weg-wahl.an{border-color:var(--accent);color:var(--accent);font-weight:600}
+.dash-alle{flex:none;height:40px;padding:0 12px;gap:6px}
+.dash-weitere{display:flex;justify-content:center;margin:4px 0 0}
 .bereiche{display:flex;flex-direction:column;gap:10px}
 .bereich{border:1px solid var(--line);border-left:4px solid var(--stage);border-radius:12px;background:var(--sheet)}
 .bereich>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;cursor:pointer;list-style:none}
@@ -687,6 +687,7 @@ const ICONS = {
   euro:'<path d="M17 6.5A6.5 6.5 0 1 0 17 17.5M4 10.5h9M4 13.5h9"/>',
   reply:'<path d="M10 8 5 12l5 4M5 12h9a5 5 0 0 1 5 5v1"/>',
   chart:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  filter:'<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
   share:'<circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><path d="m8.2 10.8 7.6-4.1M8.2 13.2l7.6 4.1"/>',
 };
 const ic = (n, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ''}</svg>`;
@@ -767,7 +768,7 @@ const state = {
   openId: null, drawerTab: 'details', drOffen: new Set(),
   coach: {text:'', running:false, err:''},
   lauf: null,
-  listArt: '', listSortier: 'score', zeigAuswertung: (() => { try { return !!localStorage.getItem('bz-auswertung'); } catch { return false; } })(), radarSuche: '', radar: {}, radarPakete: {}, radarWahl: {}, firmenWahl: {}, radarLoaded: false, radarFilter: 'gut', radarBereich: '', radarRemote: false, radarSort: 'gesamt', radarZeig: 60, radarAnsicht: 'liste', radarFirma: '', firmenZeig: 60, firmenVermittler: false, firmenNein: false, karteAuswahl: [],
+  listArt: '', listWeg: '', listSortier: (() => { try { return localStorage.getItem('bz-liste-sortier') || 'score'; } catch { return 'score'; } })(), zeigAuswertung: (() => { try { return !!localStorage.getItem('bz-auswertung'); } catch { return false; } })(), radarSuche: '', radar: {}, radarPakete: {}, radarWahl: {}, firmenWahl: {}, radarLoaded: false, radarFilter: 'gut', radarBereich: '', radarRemote: false, radarSort: 'gesamt', radarZeig: 60, radarAnsicht: 'liste', radarFirma: '', firmenZeig: 60, firmenVermittler: false, firmenNein: false, karteAuswahl: [],
 };
 const radarDirty = new Set();
 let DB = null, KI = null, DL = null, AS = null, MCP = null, kiState = 'pending';
@@ -1086,20 +1087,16 @@ function renderUebersicht() {
 /** Kacheln im Dashboard: je Stufe die Zahl, ein Tipp öffnet die Liste genau dieser Bewerbungen. */
 /** Pipeline direkt im Dashboard: erste Spalte nur, was sich abschicken lässt, dann die Stufen nach dem Abschicken.
     Was der Morgenlauf noch vorbereitet, steht nur als Zahl darüber. Ein Tipp auf den Spaltenkopf öffnet die Liste. */
-const DASH_BEREICHE = [['antwort', 'Warten auf deine Antwort'], ['bereit', 'Vorbereitet'], ['beworben', 'Beworben'], ['rueckmeldung', 'Warten auf deren Rückmeldung'], ['interview', 'Gespräch'], ['angebot', 'Angebot'], ['zusage', 'Zusage'], ['absage', 'Absage'], ['alle', 'Alle']];
+const DASH_BEREICHE = [['antwort', 'Warten auf deine Antwort'], ['bereit', 'Vorbereitet'], ['beworben', 'Beworben'], ['rueckmeldung', 'Warten auf deren Rückmeldung'], ['interview', 'Gespräch'], ['angebot', 'Angebot'], ['zusage', 'Zusage'], ['absage', 'Absage']]; // „Alle“ ist der Knopf neben der Suche (Liste mit Filtern und Sortierung)
 const dashOffen = (() => { try { const o = JSON.parse(localStorage.getItem('bz-dash-offen') || 'null'); if (Array.isArray(o)) return new Set(o); } catch {} return new Set(['antwort', 'bereit']); })();
-let dashWeg = (() => { try { return localStorage.getItem('bz-dash-weg') || ''; } catch { return ''; } })();
-const dashMerken = () => { try { localStorage.setItem('bz-dash-offen', JSON.stringify([...dashOffen])); localStorage.setItem('bz-dash-weg', dashWeg); } catch {} };
+const dashMerken = () => { try { localStorage.setItem('bz-dash-offen', JSON.stringify([...dashOffen])); } catch {} };
 /** Dashboard: oben „x per Mail schicken“ (wenn etwas bereitliegt), Suche und Filter, darunter die Bereiche groß untereinander,
     jeder mit seiner Zahl und zum Aufklappen. Vorbereitete stehen nach Score sortiert. */
 function dashboardBoard() {
   const mail = mailBereit(), lesen = window.bzPlattform?.nurLesen?.();
-  const alle = list().filter(a => !a.beispiel), belegt = firmenMitVersand();
-  const bereit = alle.filter(a => istBereit(a) && !belegt.has(firmaGruppe(a.firma)));
-  const wahl = (wert, label, n) => `<option value="${wert}" ${dashWeg === wert ? 'selected' : ''}>${label}${n == null ? '' : ` (${n})`}</option>`;
   return `${mail.length && !lesen ? `<div class="mailfeld" id="mailFeld"><span><b>${mail.length} per Mail schicken</b><small>${esc(mail.slice(0, 3).map(a => a.firma).join(', '))}${mail.length > 3 ? ' …' : ''}</small></span><button class="btn primary" type="button" data-act="sammel-mail">${ic('mail')}Jetzt senden</button></div>` : ''}
     <div class="dash-kopf"><label class="search" for="dashQ"><span class="sr">Bewerbungen durchsuchen</span>${ic('search')}<input id="dashQ" type="search" placeholder="Firma, Stelle, Ort suchen" autocomplete="off" value="${esc(state.dashSuche || '')}"></label>
-      <label class="sr" for="dashWeg">Bewerbungsweg</label><select id="dashWeg" class="weg-wahl ${dashWeg ? 'an' : ''}">${wahl('', 'Alle', null)}${wahl('portal', 'Über Portal', bereit.filter(istPortal).length)}${wahl('mail', 'Per Mail', bereit.filter(a => !istPortal(a)).length)}</select></div>
+      <a class="btn dash-alle" href="#liste/alle" data-act="dash-alle" aria-label="Alle Bewerbungen mit Filtern und Sortierung">${ic('filter')}Alle</a></div>
     <div class="bereiche" id="dash">${dashBereicheHTML()}</div>`;
 }
 /** Eine Firma wartet auf dich: offene Aufgabe zum Antworten oder Zurückrufen, oder eine vorbereitete Antwort, die noch nicht raus ist. */
@@ -1112,7 +1109,7 @@ function dashBereicheHTML() {
   const bereitSet = new Set(alle.filter(a => istBereit(a) && !belegt.has(firmaGruppe(a.firma))).map(a => a.id));
   const sc = a => wertungVon(a).wert ?? 0;
   const gehoert = {antwort: wartetAufDich, bereit: a => bereitSet.has(a.id), vorbereitung: a => a.status === 'gemerkt' && !bereitSet.has(a.id), absage: a => a.status === 'absage' || a.status === 'zurueckgezogen', alle: () => true};
-  const passt = a => (dashWeg === 'portal' ? istPortal(a) : dashWeg === 'mail' ? !istPortal(a) : true) && (!q || matches(a, q));
+  const passt = a => !q || matches(a, q);
   const zeile = (a, k) => { const w = wertungVon(a), an = a.anfahrt || {}, nt = naechsterTermin(a);
     const d = [a.ort, an.min ? `${an.min} min` : '', a.status === 'gemerkt' ? (istPortal(a) ? 'über Portal' : 'per Mail') : '', a.fristBis && a.status === 'gemerkt' ? `Frist ${fmtDs(a.fristBis)}` : '', nt ? `${WT[nt.d.getDay()]} ${fmtDs(isoDate(nt.d))}, ${fmtT(nt.d)}` : '', a.eingangAm && a.status === 'beworben' ? 'Eingang bestätigt' : '', a.status !== 'gemerkt' && a.beworbenAm ? `beworben ${relTage(a.beworbenAm)}` : ''].filter(Boolean).join(' · ');
     const auf = k === 'antwort' ? (a.aufgaben || []).find(x => !x.erledigt && /(?:^|\s)(?:antworten|zurückrufen|rückruf)\b/i.test(x.text || '')) : null;
@@ -1128,9 +1125,10 @@ function dashBereicheHTML() {
     const offen = q ? items.length > 0 && (k !== 'alle' || dashOffen.has(k) || items.some(a => !gezeigt.has(a.id))) : dashOffen.has(k);
     const farbe = k === 'antwort' ? 'var(--warn)' : k === 'bereit' ? 'var(--accent)' : k === 'vorbereitung' ? stageVar('gemerkt') : stageVar(k);
     return `<details class="bereich" data-bereich="${k}" style="--stage:${farbe}" ${offen ? 'open' : ''}><summary><span class="b-titel">${label}</span><span class="b-n">${items.length}</span></summary>
-      ${items.length ? `<ul class="todo">${items.map(a => zeile(a, k)).join('')}</ul>` : `<div class="empty-mini">${q || dashWeg ? 'Nichts passt zu Suche und Filter.' : k === 'bereit' ? 'Gerade ist nichts fertig zum Abschicken.' : 'Gerade nichts.'}</div>`}</details>`;
+      ${items.length ? `<ul class="todo">${items.map(a => zeile(a, k)).join('')}</ul>` : `<div class="empty-mini">${q ? 'Nichts passt zur Suche.' : k === 'bereit' ? 'Gerade ist nichts fertig zum Abschicken.' : 'Gerade nichts.'}</div>`}</details>`;
   }).join('');
-  return html;
+  const weitere = q ? alle.filter(a => matches(a, q) && !gezeigt.has(a.id)).length : 0; // z. B. Akten, die noch nicht fertig sind
+  return html + (weitere ? `<a class="btn ghost dash-weitere" href="#liste/alle" data-act="dash-alle">${weitere === 1 ? '1 weiterer Treffer' : `${weitere} weitere Treffer`} unter „Alle“</a>` : '');
 }
 function stufenKacheln() {
   const alle = list().filter(a => !a.beispiel), belegt = firmenMitVersand(), n = k => alle.filter(a => a.status === k).length;
@@ -1407,13 +1405,16 @@ function renderListe() {
   let rows = allL.filter(a => matches(a, state.search));
   const nIni = rows.filter(istIni).length, nSt = rows.length - nIni;
   if (state.listArt === 'stelle') rows = rows.filter(a => !istIni(a)); else if (state.listArt === 'initiativ') rows = rows.filter(istIni);
+  const nPortal = rows.filter(istPortal).length, nMail = rows.length - nPortal;
+  if (state.listWeg === 'portal') rows = rows.filter(istPortal); else if (state.listWeg === 'mail') rows = rows.filter(a => !istPortal(a));
   if (state.listBereit) { const belegt = firmenMitVersand(); rows = rows.filter(a => istBereit(a) && !belegt.has(firmaGruppe(a.firma))); }
   if (state.listFilter.size) rows = rows.filter(a => state.listFilter.has(a.status));
   if (state.hideClosed && !state.listFilter.size) rows = rows.filter(a => !ZU.has(a.status) || a.status === 'zusage');
   const sortier = state.listSortier || 'score';
   const wvMap = new Map(rows.map(a => [a.id, wertungVon(a).wert ?? -1])); // einmal je Zeile statt in jedem Vergleich
   const wv = a => wvMap.get(a.id) ?? -1;
-  const cmp = {score: (x, y) => wv(y) - wv(x), neu: (x, y) => (y.gefundenAm || y.erstellt || '').localeCompare(x.gefundenAm || x.erstellt || ''), firma: (x, y) => (x.firma || '').localeCompare(y.firma || '', 'de'), status: (x, y) => (RANG[y.status] ?? -1) - (RANG[x.status] ?? -1) || wv(y) - wv(x)}[sortier] || ((x, y) => wv(y) - wv(x));
+  const zuletzt = (f, auf) => (x, y) => { const a = f(x), b = f(y); return a == null ? (b == null ? 0 : 1) : b == null ? -1 : auf ? (a < b ? -1 : a > b ? 1 : 0) : (b < a ? -1 : b > a ? 1 : 0); }; // ohne Wert ans Ende
+  const cmp = {score: (x, y) => wv(y) - wv(x), gehalt: zuletzt(gehaltWert, false), fahrt: zuletzt(a => a.anfahrt?.min ?? null, true), frist: zuletzt(a => a.fristBis || null, true), neu: (x, y) => (y.gefundenAm || y.erstellt || '').localeCompare(x.gefundenAm || x.erstellt || ''), firma: (x, y) => (x.firma || '').localeCompare(y.firma || '', 'de'), status: (x, y) => (RANG[y.status] ?? -1) - (RANG[x.status] ?? -1) || wv(y) - wv(x)}[sortier] || ((x, y) => wv(y) - wv(x));
   rows.sort((x, y) => cmp(x, y) || (x.firma || '').localeCompare(y.firma || '', 'de'));
   const getrennt = false;
   const counts = Object.fromEntries(STUFEN.map(s => [s.key, allL.filter(a => a.status === s.key).length]));
@@ -1428,16 +1429,17 @@ function renderListe() {
     return `<article class="radar-item rang-item" data-open="${a.id}" tabindex="0">
       <div class="rang-nr">${i + 1}</div>
       <div class="radar-score" style="--c:${w.wert == null ? 'var(--muted)' : ringColor(w.wert)}" title="${w.ini ? 'Gesamtwertung: 70 % Reiz (mit den Firmendaten) und 30 % Eignung' : w.art === 'Gesamt' ? 'Gesamtwertung aus Reiz, Eignung und Firma' : w.art === 'Firma' ? 'Wertung des Unternehmens' + (w.geschaetzt ? ', grob geschätzt' : '') : w.art === 'Schätzung' ? 'Grob geschätzt, weil kaum Infos zur Stelle da sind: ' + (w.gruende || []).join(', ') : 'Eignung laut Analyse'}${w.geschaetzt && w.art !== 'Schätzung' ? ' (geschätzt' + (w.gruende?.length ? ': ' + w.gruende.join(', ') : '') + ')' : ''}">${w.wert == null ? '–' : (w.geschaetzt ? '≈' : '') + w.wert}<small>${w.art}</small></div>
-      <div class="radar-main"><div class="t1">${esc(titel)}</div><div class="t2">${esc([a.firma || 'Ohne Firma', a.ort].filter(Boolean).join(' · '))} · ${esc(gehaltText(ini ? a.initiativ?.fokus : a.position, a.wertung?.fk || iniFirma(a)?.key, w.gross, a.gehaltMin, a.gehaltMax))}</div>
+      <div class="radar-main"><div class="t1">${esc(titel)}</div><div class="t2">${esc([a.firma || 'Ohne Firma', a.ort].filter(Boolean).join(' · '))} · ${esc(Number(a.gehaltMin) < 10000 && Number(a.gehaltMax) < 10000 && Number(a.gehaltWunsch) >= 10000 ? `ca. ${kEur(a.gehaltWunsch)} €` : gehaltText(ini ? a.initiativ?.fokus : a.position, a.wertung?.fk || iniFirma(a)?.key, w.gross, a.gehaltMin, a.gehaltMax))}</div>
         ${werte ? `<div class="radar-werte">${werte}</div>` : ''}
         <div class="radar-chips">${a.status !== 'gemerkt' ? `<span class="stamp" style="--stage:${stageVar(a.status)}">${S[a.status].label}</span>` : ''}${ini ? '<span class="chip acc">Initiativ</span>' : ''}${w.gross ? '<span class="chip good">großes Unternehmen</span>' : ''}${w.beratung ? '<span class="chip warn">Beratung, viel Präsentieren</span>' : ''}${ini ? '' : fahrtChip(a)}<span class="chip ${fertig ? 'good' : ''}">${fertig ? 'Unterlagen fertig' : 'Unterlagen folgen'}</span>${a.sprache === 'en' ? '<span class="chip">auf Englisch</span>' : ''}${w.geschaetzt ? '<span class="chip warn">Wertung geschätzt</span>' : ''}${nachfassFaellig(a) ? '<span class="chip warn">Nachfragen fällig</span>' : ''}</div></div>
     </article>`;
   };
-  el.innerHTML = `<div class="filters scroll">${chip('', 'Alle', nSt + nIni)}${chip('stelle', 'Stellen', nSt)}${chip('initiativ', 'Initiativ', nIni)}</div>
-    <div class="radar-opts"><select class="in sm" id="listSortier" aria-label="Sortierung"><option value="score" ${sortier === 'score' ? 'selected' : ''}>Nach Score</option><option value="neu" ${sortier === 'neu' ? 'selected' : ''}>Neueste zuerst</option><option value="status" ${sortier === 'status' ? 'selected' : ''}>Nach Status</option><option value="firma" ${sortier === 'firma' ? 'selected' : ''}>Firma A–Z</option></select>
+  const wegChip = (k, l, n) => `<button type="button" class="fchip" data-lweg="${k}" aria-pressed="${state.listWeg === k}">${l}<span class="c">${n}</span></button>`;
+  el.innerHTML = `<div class="filters">${chip('', 'Alle', nSt + nIni)}${chip('stelle', 'Stellen', nSt)}${chip('initiativ', 'Initiativ', nIni)}${wegChip('portal', 'Portal', nPortal)}${wegChip('mail', 'Mail', nMail)}</div>
+    <div class="radar-opts"><select class="in sm" id="listSortier" aria-label="Sortierung"><option value="score" ${sortier === 'score' ? 'selected' : ''}>Nach Score</option><option value="gehalt" ${sortier === 'gehalt' ? 'selected' : ''}>Nach Gehalt</option><option value="fahrt" ${sortier === 'fahrt' ? 'selected' : ''}>Nach Fahrzeit</option><option value="frist" ${sortier === 'frist' ? 'selected' : ''}>Nach Frist</option><option value="neu" ${sortier === 'neu' ? 'selected' : ''}>Neueste zuerst</option><option value="status" ${sortier === 'status' ? 'selected' : ''}>Nach Status</option><option value="firma" ${sortier === 'firma' ? 'selected' : ''}>Firma A–Z</option></select>
       ${counts.absage || counts.zurueckgezogen ? `<label class="toggle" for="hideClosed"><input type="checkbox" class="cb" id="hideClosed" ${state.hideClosed ? 'checked' : ''}>Absagen ausblenden</label>` : ''}
       <button class="btn sm ghost" data-act="export-csv" type="button" style="margin-left:auto" ${DL ? '' : 'disabled title="Export ist in dieser Ansicht nicht verfügbar"'}>${ic('down')}CSV</button></div>
-    ${mehrStatus ? `<div class="filters scroll">${STUFEN.filter(s => counts[s.key]).map(s => `<button type="button" class="fchip" style="--stage:${stageVar(s.key)}" data-filter="${s.key}" aria-pressed="${state.listFilter.has(s.key)}"><i></i>${s.label}<span class="c">${counts[s.key]}</span></button>`).join('')}${state.listFilter.size || state.listBereit ? `<button class="btn sm ghost" data-act="clear-filter" type="button">Filter zurücksetzen</button>` : ''}</div>` : ''}${state.listBereit ? `<p class="desc" style="margin:4px 0 10px">Nur Bewerbungen, die bereit zum Abschicken sind.</p>` : ''}
+    ${mehrStatus ? `<div class="filters scroll">${STUFEN.filter(s => counts[s.key]).map(s => `<button type="button" class="fchip" style="--stage:${stageVar(s.key)}" data-filter="${s.key}" aria-pressed="${state.listFilter.has(s.key)}"><i></i>${s.label}<span class="c">${counts[s.key]}</span></button>`).join('')}${state.listFilter.size || state.listBereit || state.listWeg ? `<button class="btn sm ghost" data-act="clear-filter" type="button">Filter zurücksetzen</button>` : ''}</div>` : ''}${state.listBereit ? `<p class="desc" style="margin:4px 0 10px">Nur Bewerbungen, die bereit zum Abschicken sind.</p>` : ''}
     ${rows.length ? `${getrennt ? `<h2 class="rang-h">Stellen<span>${rows.filter(a => !istIni(a)).length} · nach Gesamtwertung</span></h2><div class="radar-list">${rows.filter(a => !istIni(a)).map(item).join('')}</div>
       <h2 class="rang-h">Initiativbewerbungen<span>${rows.filter(istIni).length} · nach Firmenwertung</span></h2><div class="radar-list">${rows.filter(istIni).map(item).join('')}</div>` : `<div class="radar-list">${rows.map(item).join('')}</div>`}
     <details class="erklaer"><summary>Was die Zahlen bedeuten</summary><p>Der Kreis zeigt die Gesamtwertung: Reiz 50 % (wie gut der Job für dich wäre: Themen, Gehalt, Konditionen), Eignung 30 % (wie gut dein Profil passt) und Firma 20 %. Stellen und Initiativbewerbungen stehen in einer Rangliste. Bei Initiativbewerbungen gibt es keine Anzeige: Die Konditionen im Reiz (Tarif, Befristung, Homeoffice, Gehälter) stammen aus denselben Firmendaten wie die Firmenwertung. Damit die Firma nicht doppelt zählt, gilt dort 70 % Reiz und 30 % Eignung. Die Eignung ist mit 50 angesetzt („offen“), weil es keine Anforderungen gibt. Hat die Firma gerade keine Stellen ausgeschrieben, kennt die App nur die Branche, der Reiz ist dann grob geschätzt. Große Unternehmen (Konzerne, große öffentliche Arbeitgeber oder Firmen mit vielen offenen Stellen) bekommen 5 Punkte dazu, weil du dort gern arbeiten würdest. Die Fahrzeit zählt mit: der Weg ab deiner Wohnung mit ÖPNV und Rad hin und zurück, mal die Bürotage laut Anzeige. Die Autozeit steht in der Akte nur zur Info. Bis 2,5 Stunden pro Woche gibt es keinen Abzug, darüber 2 Punkte je Stunde, höchstens 15. Nennt die Anzeige keine Bürotage, sind sie geschätzt (≈), dann kannst du sie in der Akte eintragen.</p></details>`
@@ -1507,6 +1509,13 @@ const GROSS_RE = /airbus|\botto\b|beiersdorf|tchibo|hapag|hhla|hamburger hafen|h
 const GROSS_BONUS = 5;
 /* Gehalt: aus der Anzeige, sonst Schnitt der Firma aus ihren Anzeigen, sonst grobe Schätzung nach Rolle (Hamburg, rund 2 Jahre Erfahrung, Vollzeit) */
 const GEH_KAT = [[/data engineer|analytics engineer|scientist/i, 55, 66], [/consultant|berater/i, 55, 65], [/controll|treasury|finance|finanz|accounting|buchhalt|corporate/i, 52, 62], [/data|daten|analyst|business intelligence|reporting|\bbi\b/i, 50, 60], [/supply|demand|logistik|einkauf|procurement|planner|disposition/i, 50, 60], [/energie|nachhaltig|esg|umwelt|klima/i, 50, 60], [/prozess|projekt|automatis|digitalis/i, 52, 62], [/referent|assistent|sachbearbeit/i, 48, 58]];
+/** Gehalt einer Stelle zum Sortieren: die Schätzung je Stelle (gehaltWunsch, nach Regel i), sonst die Mitte der Spanne aus der Anzeige. */
+function gehaltWert(a) {
+  const w = Number(a.gehaltWunsch), v = Number(a.gehaltMin), b = Number(a.gehaltMax);
+  if (w >= 10000) return w;
+  if (v >= 10000 || b >= 10000) return ((v >= 10000 ? v : b) + (b >= 10000 ? b : v)) / 2;
+  return null;
+}
 function gehaltText(titel, fk, gross, von, bis) {
   if (Number(von) >= 10000 || Number(bis) >= 10000) return `${kEur(von) || '?'}–${kEur(bis) || '?'} €`;
   const f = fk ? firmenMap().get(fk) : null; const m = f && /Gehälter um (\d+) Tsd/.exec((f.gruende || []).join(' '));
@@ -4233,6 +4242,7 @@ document.addEventListener('click', async e => {
   const rf = t.closest('[data-rfilter]'); if (rf) { state.radarFilter = rf.dataset.rfilter; state.radarZeig = RADAR_SEITE; renderRadar(); return; }
   const rbz = t.closest('[data-rbereich]'); if (rbz) { state.radarBereich = rbz.dataset.rbereich; state.radarZeig = RADAR_SEITE; renderRadar(); return; }
   const la = t.closest('[data-lart]'); if (la) { state.listArt = la.dataset.lart; renderListe(); return; }
+  const lw = t.closest('[data-lweg]'); if (lw) { state.listWeg = state.listWeg === lw.dataset.lweg ? '' : lw.dataset.lweg; renderListe(); return; }
   const bwb = t.closest('[data-bw]'); if (bwb) { location.hash = '#' + bwb.dataset.bw; return; }
 
   const ra = t.closest('[data-rans]'); if (ra) { state.radarAnsicht = ra.dataset.rans; state.karteAuswahl = []; try { history.replaceState(history.state, '', `${location.pathname}${location.search}#${ra.dataset.rans === 'karte' ? 'karte' : 'radar'}`); } catch {} reiterMarkieren(); renderRadar(); return; }
@@ -4254,7 +4264,8 @@ document.addEventListener('click', async e => {
     if (act === 'coach') return runCoach(true);
     if (act === 'auswertung') { state.zeigAuswertung = !state.zeigAuswertung; try { localStorage.setItem('bz-auswertung', state.zeigAuswertung ? '1' : ''); } catch {} return renderUebersicht(); }
     if (act === 'coach-stop') return kiJobs.get('coach')?.abort();
-    if (act === 'clear-filter') { state.listFilter.clear(); state.listBereit = false; return renderListe(); }
+    if (act === 'clear-filter') { state.listFilter.clear(); state.listBereit = false; state.listWeg = ''; return renderListe(); }
+    if (act === 'dash-alle') { state.search = (state.dashSuche || '').trim(); const q = $('#q'); if (q) q.value = state.search; return; } // der Link führt zur Liste, die Suche kommt mit
     if (act === 'export-csv') return save(`Bewerbungen_${today()}.csv`, csv());
     if (act === 'bildschirmzeit-trennen') { window.bzBildschirmzeit?.trennen(); return toast('Getrennt: Die Bewerbungszentrale meldet nichts mehr an dein Widget.'); }
     if (act === 'export-json') return save(`Bewerbungszentrale_Backup_${today()}.json`, JSON.stringify({app:'Bewerbungszentrale', version:1, exportiert:new Date().toISOString(), profil:state.profil, bewerbungen:list()}, null, 2));
@@ -4363,7 +4374,6 @@ document.addEventListener('change', e => {
     const s = $('#drBody .sec-head span'); if (s) s.textContent = `${n} von ${UNTERLAGEN.length} Unterlagen beigelegt`;
     renderDrawerHead(); return;
   }
-  if (t.id === 'dashWeg') { dashWeg = t.value; dashMerken(); t.classList.toggle('an', !!dashWeg); const d = $('#dash'); if (d) d.innerHTML = dashBereicheHTML(); return; }
   if (t.id === 'mailTyp' && state.openId) { state.apps[state.openId].mail.typ = t.value; saveApp(state.openId, false); }
 });
 // Feldbindung in der Akte
@@ -4430,7 +4440,7 @@ async function fillFromAd() {
     const s2 = $('#fillStatus'); if (s2) s2.textContent = filled.length ? `${filled.length} leere Felder ergänzt. Bestehende Angaben bleiben unverändert.` : 'Alle Felder waren schon ausgefüllt.';
   } catch (e) { const s2 = $('#fillStatus'); if (s2) { s2.textContent = kiFehler(e); s2.classList.add('err'); } }
 }
-document.addEventListener('change', e => { const id = e.target?.id; if (id === 'radarSort') { state.radarSort = e.target.value; state.radarZeig = RADAR_SEITE; renderRadar(); } else if (id === 'listSortier') { state.listSortier = e.target.value; renderListe(); } else if (id === 'radarBereich') { state.radarBereich = e.target.value; state.radarZeig = RADAR_SEITE; state.firmenZeig = RADAR_SEITE; renderRadar(); } });
+document.addEventListener('change', e => { const id = e.target?.id; if (id === 'radarSort') { state.radarSort = e.target.value; state.radarZeig = RADAR_SEITE; renderRadar(); } else if (id === 'listSortier') { state.listSortier = e.target.value; try { localStorage.setItem('bz-liste-sortier', state.listSortier); } catch {} renderListe(); } else if (id === 'radarBereich') { state.radarBereich = e.target.value; state.radarZeig = RADAR_SEITE; state.firmenZeig = RADAR_SEITE; renderRadar(); } });
 document.addEventListener('input', e => { if (e.target?.id === 'radarQ') { state.radarSuche = e.target.value.trim(); state.radarZeig = RADAR_SEITE; state.firmenZeig = RADAR_SEITE; renderRadar(); } });
 // Browser tragen gespeicherte Anmeldedaten (Mailadresse) gern ins erste Textfeld ein: das ist keine Suche
 const autoFuellung = el => document.activeElement !== el && /@/.test(el.value);

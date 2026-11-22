@@ -12,6 +12,10 @@ App fürs Handy, für Tobi.
   lässt Portal-Angaben kopieren, liefert die Mappen und sendet vorbereitete Mails per Knopf.
   Status, Notizen, Bürotage, Anschreiben und Antworten schreiben Morgenlauf, Postfach-Routine
   und Claude-Sitzungen ins Daten-Repo. Den Status setzt die App nur selbst, wenn sie eine Mail sendet.
+- **Dashboard:** Suche und rechts daneben „Alle“: die ganze Liste mit Filtern (Stellen,
+  Initiativ, Portal, Mail, Status) und Sortierung nach Score, Gehalt, Fahrzeit, Frist oder
+  Neuheit, die Sortierung bleibt gemerkt. Darunter die Bereiche nach Stand; Suchtreffer, die in
+  keinem Bereich stehen, verlinkt ein Hinweis auf „Alle“.
 - **Akte:** drei Reiter. „Infos“ (Score, Ort, Anfahrt, Gehalt, Weg, Kontakt, Termine, Offenes,
   Briefing, Abschicken, Notizen, zugeklappt Firma/Passung und Anzeige), „Unterlagen“ (nach dem
   Versand die verschickte PDF, dazu Anschreiben, Motivationsschreiben, Lebenslauf, Zeugnisse,

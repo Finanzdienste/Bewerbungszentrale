@@ -169,6 +169,44 @@ test('eine-je-firma', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('alle-filter', async () => {
+  // „Alle“ neben der Suche führt zur Liste mit Filtern und Sortierung (auch nach Gehalt), alles ohne Netz
+  const { seite, ctx, gh, fehler } = await appStarten();
+  const setze = (id, f) => gh.dateien.set(`apps/${id}.json`, Buffer.from(JSON.stringify({ ...json(gh, `apps/${id}.json`), ...f }, null, 1) + '\n'));
+  setze('test-mail', { gehaltWunsch: 72000, anfahrt: { min: 20 } });
+  setze('test-portal', { gehaltMin: 55000, gehaltMax: 65000, anfahrt: { min: 45 } });
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.waitForSelector('#dash', { timeout: 20000 });
+  await ctx.route('**/*', (r) => (new URL(r.request().url()).hostname === 'app.test' ? r.fallback() : r.abort('internetdisconnected'))); // ab hier kein Netz
+  await seite.fill('#dashQ', 'Muster');
+  await seite.click('.dash-kopf .dash-alle');
+  await seite.waitForSelector('#v-liste .radar-list', { timeout: 10000 });
+  assert.equal(await seite.evaluate(() => location.hash), '#liste/alle');
+  const reihe = () => seite.$$eval('#v-liste .radar-list [data-open]', (xs) => xs.map((x) => x.dataset.open));
+  assert.deepEqual(await reihe(), ['test-portal'], 'die Suche kommt mit');
+  assert.equal(await seite.$eval('#q', (x) => x.value), 'Muster');
+  await seite.fill('#q', '');
+  await seite.waitForFunction(() => document.querySelectorAll('#v-liste .radar-list [data-open]').length === 3, null, { timeout: 5000 });
+  assert.deepEqual(await reihe(), ['test-portal', 'test-mail', 'test-leer'], 'Standard: nach Score');
+  await seite.selectOption('#listSortier', 'gehalt');
+  await seite.waitForFunction(() => document.querySelector('#v-liste .radar-list [data-open]')?.dataset.open === 'test-mail', null, { timeout: 5000 });
+  assert.deepEqual(await reihe(), ['test-mail', 'test-portal', 'test-leer'], 'Gehalt: 72k, dann Spanne 55–65k, ohne Angabe am Ende');
+  assert.match(await seite.textContent('#v-liste [data-open="test-mail"]'), /ca\. 72k €/);
+  await seite.selectOption('#listSortier', 'fahrt');
+  await seite.waitForFunction(() => document.querySelector('#v-liste .radar-list [data-open]')?.dataset.open === 'test-mail', null, { timeout: 5000 });
+  assert.deepEqual(await reihe(), ['test-mail', 'test-portal', 'test-leer']);
+  await seite.click('#v-liste [data-lweg="portal"]');
+  await seite.waitForFunction(() => !document.querySelector('#v-liste [data-open="test-mail"]'), null, { timeout: 5000 });
+  assert.deepEqual(await reihe(), ['test-portal', 'test-leer'], 'nur Portal');
+  await seite.click('#v-liste [data-lweg="portal"]');
+  await seite.waitForFunction(() => document.querySelectorAll('#v-liste .radar-list [data-open]').length === 3, null, { timeout: 5000 });
+  await seite.reload(); // Sortierung bleibt gemerkt
+  await seite.waitForSelector('#listSortier', { timeout: 20000 });
+  assert.equal(await seite.$eval('#listSortier', (x) => x.value), 'fahrt');
+  assert.deepEqual(fehler.filter((f) => !/Failed to fetch|NetworkError|internetdisconnected|ERR_INTERNET/i.test(f)), []);
+});
+
 test('gehalt', async () => {
   const { seite, gh, fehler } = await appStarten();
   const a = json(gh, 'apps/test-portal.json');
@@ -870,17 +908,17 @@ test('dashboard', async () => {
   await seite.waitForSelector('#dash [data-bereich="beworben"] [data-open="test-mail"]', { state: 'visible', timeout: 5000 });
   const hoehe = await seite.evaluate(() => document.querySelector('.dash-kopf .search').getBoundingClientRect().height);
   assert.ok(hoehe < 70, `Suchfeld ist ${hoehe}px hoch`);
-  // Filter als Auswahlfeld rechts neben der Suche, keine einzelnen Knöpfe
-  assert.equal(await seite.locator('#v-uebersicht [data-dweg]').count(), 0);
-  const [r1, r2] = await seite.evaluate(() => [document.querySelector('.dash-kopf .search'), document.querySelector('#dashWeg')].map((e) => e.getBoundingClientRect().toJSON()));
-  assert.ok(r2.left >= r1.right - 1 && Math.abs(r2.top - r1.top) < 12, 'Filter steht rechts neben der Suche');
+  // „Alle“ als Knopf rechts neben der Suche (Filter und Sortierung stecken in der Liste dahinter)
+  assert.equal(await seite.locator('#v-uebersicht [data-dweg], #dashWeg').count(), 0);
+  const [r1, r2] = await seite.evaluate(() => [document.querySelector('.dash-kopf .search'), document.querySelector('.dash-kopf .dash-alle')].map((e) => e.getBoundingClientRect().toJSON()));
+  assert.ok(r2.left >= r1.right - 1 && Math.abs(r2.top - r1.top) < 12, '„Alle“ steht rechts neben der Suche');
   assert.ok(r2.right <= 412, 'passt in die Breite');
-  await seite.selectOption('#dashWeg', 'mail');
-  await seite.waitForFunction(() => !document.querySelector('#dash [data-bereich="bereit"] [data-open="test-portal"]'), null, { timeout: 5000 });
-  await seite.selectOption('#dashWeg', '');
-  await seite.fill('#dashQ', 'Hafen Muster');
-  await seite.waitForFunction(() => !document.querySelector('#dash [data-open="test-mail"]') && document.querySelector('#dash [data-open="test-portal"]'), null, { timeout: 5000 });
-  assert.equal(await seite.isVisible('#dash [data-open="test-portal"]'), true, 'Suche klappt die Bereiche mit Treffern auf');
+  await seite.click('#dash [data-bereich="beworben"] summary'); // wieder zu
+  await seite.fill('#dashQ', 'Klima Beispiel');
+  await seite.waitForSelector('#dash [data-bereich="beworben"] [data-open="test-mail"]', { state: 'visible', timeout: 5000 });
+  assert.equal(await seite.locator('#dash [data-open="test-portal"]').count(), 0, 'Suche klappt die Bereiche mit Treffern auf');
+  await seite.fill('#dashQ', 'Hafen Muster'); // steht in keinem Bereich (noch nicht fertig): Hinweis auf „Alle“
+  await seite.waitForFunction(() => !document.querySelector('#dash [data-open="test-mail"]') && /1 weiterer Treffer unter „Alle“/.test(document.querySelector('#dash')?.textContent || ''), null, { timeout: 5000 });
   assert.doesNotMatch(await seite.textContent('#v-uebersicht'), /Jetzt dran|Brauchen deinen Blick/);
   gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...json(gh, 'apps/test-mail.json'), aufgaben: [{ id: 'rr1', text: 'Testfirma zurückrufen (Fr bis 14 Uhr)', faellig: '2026-11-20', erledigt: false }],
     verlauf: [{ id: 'v1', datum: '2026-11-19', typ: 'mail', text: 'Erfundene Mail der Testfirma mit einem längeren Text, der auf dem Handy über mehrere Zeilen umbricht und nicht unter die Kopfzeile rutschen darf.' },
@@ -895,8 +933,7 @@ test('dashboard', async () => {
   const doppelt = await seite.evaluate(() => { const ids = [...document.querySelectorAll('#dash .bereich:not([data-bereich="alle"]) [data-open]')].map((li) => li.dataset.open); return ids.filter((x, i) => ids.indexOf(x) !== i); });
   assert.deepEqual(doppelt, [], 'jede Bewerbung nur in einem Bereich');
   assert.equal(await seite.locator('#mailFeld').count(), 0, 'keine Mail-Bewerbung bereit');
-  // „Alle“: jede Akte außer Aussortierten und Beispielen
-  assert.match(await seite.textContent('#dash [data-bereich="alle"] summary'), /Alle\s*\d+/);
+  assert.equal(await seite.locator('#dash [data-bereich="alle"]').count(), 0, '„Alle“ ist jetzt der Knopf oben');
   assert.equal(await seite.locator('#dash [data-bereich="vorbereitung"]').count(), 0, 'kein Bereich „In Vorbereitung“');
   // Akte: nur „Infos“ und „Verlauf“; im Verlauf steht oben, was zu tun ist
   await seite.click('#dash [data-bereich="antwort"] [data-open="test-mail"]');
