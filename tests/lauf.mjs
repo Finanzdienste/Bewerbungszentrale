@@ -115,6 +115,37 @@ test('nachholen', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('nachschicken', async () => {
+  const { seite, ctx, gh, fehler } = await appStarten();
+  await zuAkte(seite, 'test-portal');
+  // Kein Netz: die Änderung kommt nicht an und bleibt offen
+  const kappen = (r) => r.abort('internetdisconnected');
+  await ctx.route('https://api.github.com/**', kappen);
+  await seite.evaluate(() => window.bzStatusSetzen('test-portal', 'beworben'));
+  await warte(4000);
+  assert.equal(json(gh, 'apps/test-portal.json').status, 'gemerkt', 'ohne Netz nichts angekommen');
+  assert.ok(await seite.evaluate(() => window.bzPlattform.offen()) > 0, 'Änderung wartet');
+  // Inzwischen ändert der Morgenlauf dieselbe Akte
+  const d = json(gh, 'apps/test-portal.json');
+  d.notizen = 'vom Lauf'; d.verlauf = [...(d.verlauf || []), { id: 'lauf2', datum: '2026-11-22', typ: 'notiz', text: 'Vom Lauf' }];
+  gh.dateien.set('apps/test-portal.json', Buffer.from(JSON.stringify(d, null, 1) + '\n'));
+  // Netz wieder da, die App bleibt offen
+  await ctx.unroute('https://api.github.com/**', kappen);
+  await seite.evaluate(() => window.dispatchEvent(new Event('online')));
+  for (let i = 0; i < 60 && json(gh, 'apps/test-portal.json').status !== 'beworben'; i++) await warte(250);
+  const e = json(gh, 'apps/test-portal.json');
+  assert.equal(e.status, 'beworben', 'ohne Neustart nachgeschickt');
+  assert.equal(e.notizen, 'vom Lauf', 'Änderung des Laufs bleibt');
+  assert.ok(e.verlauf.some((v) => v.id === 'lauf2') && e.verlauf.some((v) => v.typ === 'status'), 'Verlauf beider Seiten');
+  for (let i = 0; i < 20 && await seite.evaluate(() => window.bzPlattform.offen()); i++) await warte(250);
+  assert.equal(await seite.evaluate(() => window.bzPlattform.offen()), 0, 'danach nichts mehr offen');
+  const commits = gh.log.filter((x) => x.includes('App: apps/test-portal gespeichert')).length;
+  await seite.evaluate(() => window.dispatchEvent(new Event('online')));
+  await warte(1500);
+  assert.equal(gh.log.filter((x) => x.includes('App: apps/test-portal gespeichert')).length, commits, 'kein doppelter Commit');
+  assert.deepEqual(fehler, []);
+});
+
 test('eine-je-firma', async () => {
   const { seite, gh, fehler } = await appStarten();
   const leer = json(gh, 'apps/test-raus.json');

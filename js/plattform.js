@@ -330,8 +330,11 @@
     if (stand.size) melden();
     await bereit;
     try { await abgleichen(); await nachholen(); } catch (e) { console.warn('Abgleich', e?.message); if (!stand.size) for (const h of hoerer) h.f?.(e); }
-    setInterval(() => { if (document.visibilityState === 'visible') abgleichen().catch(() => {}); }, ABGLEICH_MS);
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') abgleichen().catch(() => {}); });
+    // Nach jedem Abgleich, der durchkam, auch das nachschicken, was vorher ohne Netz hängen blieb
+    const abgleichUndNachschicken = () => abgleichen().then(nachschicken).catch(() => {});
+    setInterval(() => { if (document.visibilityState === 'visible') abgleichUndNachschicken(); }, ABGLEICH_MS);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') abgleichUndNachschicken(); });
+    window.addEventListener('online', abgleichUndNachschicken);
   }
 
   /* ------------------------------------------------ Schreiben */
@@ -386,15 +389,39 @@
       const daten = lokal.has(pfad) ? lokal.get(pfad) : undefined;
       if (daten === undefined) { w.wartende.forEach((x) => x.ok()); return; }
       const nachricht = `App: ${pfad.replace(/\.json$/, '')} ${daten === null ? 'gelöscht' : 'gespeichert'}`;
+      unterwegs.set(pfad, (unterwegs.get(pfad) || 0) + 1);
+      const fertig = () => { const n = (unterwegs.get(pfad) || 1) - 1; if (n > 0) unterwegs.set(pfad, n); else unterwegs.delete(pfad); };
       nacheinander(async () => {
         if (daten === null) { await dateiLoeschen(pfad, nachricht); stand.delete(pfad); idb.loeschen(pfad); }
         else { const sha = await dateiSchreiben(pfad, textZuB64(JSON.stringify(daten, null, 1) + '\n'), nachricht); stand.set(pfad, { sha, data: daten }); idb.setzen(pfad, { sha, data: daten }); }
         if (lokal.get(pfad) === daten) { lokal.delete(pfad); basisVon.delete(pfad); idb.offenLoeschen(pfad); } // inzwischen nicht wieder geändert
         else basisVon.set(pfad, { basis: kopie(daten), sha: stand.get(pfad)?.sha || '' });
-      }).then(() => w.wartende.forEach((x) => x.ok()), (e) => w.wartende.forEach((x) => x.nein(e)));
+      }).then(() => { fertig(); w.wartende.forEach((x) => x.ok()); }, (e) => { fertig(); w.wartende.forEach((x) => x.nein(e)); });
     };
     w.timer = setTimeout(w.los, pause);
     return p;
+  }
+  const unterwegs = new Map(); // pfad -> Zahl der Schreibvorgänge, die gerade laufen
+  /**
+   * Was im Betrieb nicht ankam (kein Netz), noch einmal schicken – sobald das
+   * Netz zurück ist und nach jedem Abgleich. Bisher ging das erst beim nächsten
+   * Start (nachholen). Hat sich die Datei inzwischen woanders geändert (etwa
+   * durch den Morgenlauf), erst zusammenführen wie beim Nachholen; eine
+   * Löschung auf einen inzwischen geänderten Stand fällt weg.
+   */
+  function nachschicken() {
+    if (nurLesen) return;
+    for (const [pfad, daten] of [...lokal]) {
+      if (!istDok(pfad) || warteschlange.has(pfad) || unterwegs.has(pfad)) continue;
+      const b = basisVon.get(pfad), jetzt = stand.get(pfad);
+      if (b && jetzt && b.sha !== jetzt.sha) {
+        if (daten === null) { lokal.delete(pfad); basisVon.delete(pfad); idb.offenLoeschen(pfad); melden(new Set([sammlungVon(pfad)])); continue; }
+        lokal.set(pfad, zusammenfuehren(b.basis, daten, jetzt.data));
+        basisVon.set(pfad, { basis: kopie(jetzt.data), sha: jetzt.sha });
+        melden(new Set([sammlungVon(pfad)]));
+      }
+      vormerken(pfad, 0).catch(() => {});
+    }
   }
   /** Alles, was noch wartet, sofort schreiben (z. B. direkt nach dem Versand einer Bewerbung). */
   function sofortSchreiben() {
