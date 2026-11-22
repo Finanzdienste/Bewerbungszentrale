@@ -1443,12 +1443,13 @@ function renderListe() {
     <details class="erklaer"><summary>Was die Zahlen bedeuten</summary><p>Der Kreis zeigt die Gesamtwertung: Reiz 50 % (wie gut der Job für dich wäre: Themen, Gehalt, Konditionen), Eignung 30 % (wie gut dein Profil passt) und Firma 20 %. Stellen und Initiativbewerbungen stehen in einer Rangliste. Bei Initiativbewerbungen gibt es keine Anzeige: Die Konditionen im Reiz (Tarif, Befristung, Homeoffice, Gehälter) stammen aus denselben Firmendaten wie die Firmenwertung. Damit die Firma nicht doppelt zählt, gilt dort 70 % Reiz und 30 % Eignung. Die Eignung ist mit 50 angesetzt („offen“), weil es keine Anforderungen gibt. Hat die Firma gerade keine Stellen ausgeschrieben, kennt die App nur die Branche, der Reiz ist dann grob geschätzt. Große Unternehmen (Konzerne, große öffentliche Arbeitgeber oder Firmen mit vielen offenen Stellen) bekommen 5 Punkte dazu, weil du dort gern arbeiten würdest. Die Fahrzeit zählt mit: der Weg ab deiner Wohnung mit ÖPNV und Rad hin und zurück, mal die Bürotage laut Anzeige. Die Autozeit steht in der Akte nur zur Info. Bis 2,5 Stunden pro Woche gibt es keinen Abzug, darüber 2 Punkte je Stunde, höchstens 15. Nennt die Anzeige keine Bürotage, sind sie geschätzt (≈), dann kannst du sie in der Akte eintragen.</p></details>`
     : `<div class="panel"><div class="empty-mini">${allL.length ? 'Keine Bewerbung passt zu Suche und Filter.' : 'Noch keine Bewerbungen. Leg oben rechts die erste an.'}</div></div>`}${aussortiertHTML()}`;
 }
-const RAUS_ART = {ort: 'Ort', anue: 'Zeitarbeit', gehalt: 'Gehalt', niveau: 'Niveau unter dem Abschluss', befristet: 'Befristung', fach: 'Fachlich zu weit weg', beratung: 'Arbeitsweise', klima: 'Arbeitsklima', weg: 'Nicht mehr offen', doppelt: 'Doppelt', firma: 'Eine Bewerbung je Firma', gegenlesen: 'Beim Gegenlesen', recherche: 'Bei der Recherche'};
+const RAUS_ART = {ort: 'Ort', anue: 'Zeitarbeit', gehalt: 'Gehalt', niveau: 'Niveau unter dem Abschluss', befristet: 'Befristung', fach: 'Fachlich zu weit weg', beratung: 'Arbeitsweise', klima: 'Arbeitsklima', weg: 'Nicht mehr offen', doppelt: 'Doppelt', gegenlesen: 'Beim Gegenlesen', recherche: 'Bei der Recherche'};
 document.addEventListener('toggle', e => { if (e.target?.id === 'aussortiert') state.rausOffen = e.target.open; }, true);
 document.addEventListener('toggle', e => { const d = e.target; if (d?.tagName !== 'DETAILS' || !d.id || !d.closest?.('#drBody')) return; d.open ? state.drOffen.add(d.id) : state.drOffen.delete(d.id); }, true);
 document.addEventListener('toggle', e => { const k = e.target?.dataset?.bereich; if (!k || (state.dashSuche || '').trim()) return; e.target.open ? dashOffen.add(k) : dashOffen.delete(k); dashMerken(); }, true);
 document.addEventListener('input', e => { if (e.target?.id !== 'dashQ') return; state.dashSuche = e.target.value; const d = $('#dash'); if (d) d.innerHTML = dashBereicheHTML(); });
-const aussortierte = () => Object.entries(state.apps).filter(([, a]) => a.verworfen && a.aussortiert && a.status === 'gemerkt' && !a.beispiel).map(([id, a]) => ({id, ...a}));
+// Zurückgestellt wegen „eine Bewerbung je Firma“ steht hier nicht: die Akte wartet still und rückt nach einer Absage von selbst nach (Morgenlauf)
+const aussortierte = () => Object.entries(state.apps).filter(([, a]) => a.verworfen && a.aussortiert && a.aussortiert.art !== 'firma' && a.status === 'gemerkt' && !a.beispiel).map(([id, a]) => ({id, ...a}));
 function aussortiertHTML() {
   const rs = aussortierte().filter(a => matches(a, state.search)); if (!rs.length) return '';
   const gruppen = new Map();
@@ -1462,23 +1463,10 @@ function aussortiertHTML() {
   </details>`;
 }
 function rausKnopf(a) {
-  const knopf = l => `<button class="btn sm" type="button" data-act="zurueckholen" data-rid="${esc(a.id)}">${l}</button>`;
-  if (a.aussortiert?.art !== 'firma') return knopf('Zurückholen');
-  const l = laufendBeiFirma(a, a.id);
-  if (!l) return knopf('Zurückholen');
-  if (AKTIV.has(l.status)) return `<span class="muted" style="font-size:var(--t-xs);max-width:14ch;text-align:right">rückt nach, wenn ${esc(l.firma)} geantwortet hat</span>`;
-  return knopf('Stattdessen nehmen');
+  return `<button class="btn sm" type="button" data-act="zurueckholen" data-rid="${esc(a.id)}">Zurückholen</button>`;
 }
 function zurueckholen(id) {
   const a = state.apps[id]; if (!a || !a.verworfen) return;
-  const l = a.aussortiert?.art === 'firma' ? laufendBeiFirma(a, id) : null;
-  if (l && AKTIV.has(l.status)) return toast(`Bei ${l.firma} läuft schon eine Bewerbung. Diese rückt nach, wenn die Antwort da ist.`);
-  if (l) { // tauschen: die bisher gewählte Stelle dieser Firma wartet jetzt
-    const b = state.apps[l.id];
-    b.verworfen = true; b.aussortiert = {art: 'firma', grund: `Eine Bewerbung je Firma: du hast „${a.position || 'die andere Stelle'}“ vorgezogen`, datum: today(), von: 'dir'};
-    b.verlauf.push({id: uid(), datum: today(), typ: 'notiz', text: `Zurückgestellt, weil du bei dieser Firma „${a.position || 'eine andere Stelle'}“ vorgezogen hast`});
-    saveApp(l.id, false);
-  }
   const alt = {aussortiert: a.aussortiert, ausgewaehlt: a.ausgewaehlt};
   const vid = uid();
   a.verworfen = false; a.ausgewaehlt = true; delete a.aussortiert; state.rausOffen = true;
@@ -2123,9 +2111,7 @@ function firmaGruppe(f) {
   for (let i = 0; i < w.length; i++) if (w[i].length >= 2 && !FIRMA_GENERISCH.has(w[i])) return w.slice(0, i + 1).join(' ');
   return k;
 }
-const laeuftBei = a => !a.beispiel && (AKTIV.has(a.status) || (a.status === 'gemerkt' && !a.verworfen && !a.keinBrief));
 /** Die andere laufende Bewerbung derselben Firma (abgeschickt oder offen), sonst null. */
-const laufendBeiFirma = (a, id) => { const g = firmaGruppe(a.firma); return Object.entries(state.apps).map(([i, x]) => ({...x, id: i})).find(x => x.id !== id && laeuftBei(x) && firmaGruppe(x.firma) === g) || null; };
 const firmenMitVersand = () => new Set(Object.values(state.apps).filter(x => AKTIV.has(x.status) && !x.beispiel).map(x => firmaGruppe(x.firma)));
 const istBereit = a => !a.verworfen && !a.beispiel && pruefStand(a) === 'frei';
 /** Gegenlese-Ergebnisse (Note, Inhalt, Fragen) gehören nicht in die App. Nur wenn eine Bewerbung noch nicht fertig ist, eine Zeile. */

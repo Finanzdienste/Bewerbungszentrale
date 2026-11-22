@@ -160,17 +160,12 @@ test('eine-je-firma', async () => {
   await seite.waitForFunction(() => !document.querySelector('#dash [data-bereich="bereit"] [data-open="test-mail"]'), null, { timeout: 10000 });
   assert.equal(await seite.locator('#mailFeld [data-act="sammel-mail"]').count(), 0, 'nichts senden, wo schon eine Bewerbung läuft');
   await seite.goto('http://app.test/Bewerbungszentrale/#liste');
+  // die zurückgestellte Stelle wartet still im Daten-Repo (rückt nach einer Absage nach), in der App steht sie nirgends
   await seite.waitForSelector('#aussortiert', { timeout: 20000 });
   await seite.click('#aussortiert summary');
-  const k = seite.locator('#aussortiert [data-rid="test-firma2"]');
-  assert.equal((await k.textContent()).trim(), 'Stattdessen nehmen');
-  await k.click();
-  for (let i = 0; i < 40 && !json(gh, 'apps/test-portal.json').verworfen; i++) await warte(250);
-  const p = json(gh, 'apps/test-portal.json'), z = json(gh, 'apps/test-firma2.json');
-  assert.equal(p.verworfen, true, 'die bisherige Stelle wartet jetzt');
-  assert.equal(p.aussortiert.art, 'firma');
-  assert.equal(z.verworfen, false);
-  assert.equal(z.ausgewaehlt, true);
+  assert.match(await seite.textContent('#aussortiert summary'), /1 Stelle passt nicht/);
+  assert.doesNotMatch(await seite.textContent('#v-liste'), /Zweite Stelle/);
+  assert.equal(await seite.locator('[data-rid="test-firma2"], [data-open="test-firma2"]').count(), 0);
   assert.deepEqual(fehler, []);
 });
 
