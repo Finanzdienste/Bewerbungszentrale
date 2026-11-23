@@ -28,7 +28,7 @@ App fürs Handy, für Tobi.
   Versand die verschickte PDF, dazu Anschreiben, Motivationsschreiben, Lebenslauf, Zeugnisse,
   Anschreiben mit Zeugnissen (ohne Lebenslauf) und ganze Mappe als PDF, dazu Arbeits- und
   Abschlusszeugnisse getrennt, wenn es beide gibt (auch im Ordner „Allgemein“), alles davon auch in
-  jedem Drive-Ordner, Dateinamen höchstens 50 Zeichen, bei englischen Anzeigen englisch wie `CV_…`, `Cover_Letter_…`, Anschreiben und Begleitmail zum Kopieren) und „Verlauf“ (oben „Du bist dran“
+  jedem Drive-Ordner, Dateinamen höchstens 50 Zeichen, bei englischen Anzeigen englisch wie `CV_…`, `Cover_Letter_…`, in „Portal-Infos.txt“ dazu Berufserfahrung, Ausbildung, Sprachen und Kenntnisse in den Feldern von Workday & Co. zum Kopieren (weil Workday den Lebenslauf falsch ausliest), Anschreiben und Begleitmail zum Kopieren) und „Verlauf“ (oben „Du bist dran“
   mit Antwortvorschlag oder Rückruf, darunter nur der Gesprächsverlauf mit den Mails im Wortlaut).
   Links zu Anzeigen und Portalen öffnen auf Android direkt in Firefox. In Chrome auf Android
   übergibt „In Firefox nutzen“ im Profil den Zugang per Link (nur im Anker) an Firefox.

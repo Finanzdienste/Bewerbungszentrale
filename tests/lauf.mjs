@@ -812,6 +812,10 @@ test('ordner', async () => {
   assert.match(info, /Link zur Anzeige: https:\/\/example\.org\/stelle\/1\r\n/);
   assert.match(info, /Kennziffer: K-17/);
   assert.match(info, /Gehaltsvorstellung: /);
+  // Block für Formulare wie Workday, die den Lebenslauf falsch auslesen
+  assert.match(info, /BERUFSERFAHRUNG\r\n\r\nTätigkeitsbezeichnung: Sachbearbeiter Controlling\r\n.*\r\nStandort: Hamburg\r\nVon: 03\.2025\r\nBis: aktuelle Arbeitsstelle/);
+  assert.match(info, /Tätigkeitsbezeichnung: Praktikant Einkauf\r\n.*\r\nStandort: Musterstadt\r\nVon: 09\.2021\r\nBis: 01\.2022/);
+  assert.match(info, /AUSBILDUNG\r\n\r\nEinrichtung: .+\r\nAbschluss: Bachelor\r\nFachbereich: BWL/);
   assert.match(info, /Sehr geehrte Damen und Herren,/, 'Anschreiben zum Einfügen, ohne Betreffzeile');
   assert.doesNotMatch(info, /Bewerbung als Energiecontroller \(m\/w\/d\)\r\n\r\nSehr geehrte/);
   assert.ok(!namen.some((n) => /^Zeugnisse_.*\.pdf$/.test(n)), 'keine Zeugnisse mehr im Hauptordner, auch die alte Kopie ist weg');

@@ -2155,6 +2155,30 @@ function ordnerName(a, sc) {
   const t = [a.firma, a.art === 'initiativ' ? 'Initiativbewerbung' : a.position].filter(Boolean).map(x => String(x).replace(/\s*\((?:[mwdfxa*/ ]|all genders?|gn|d\/m\/w|f\/m\/d)+\)\s*/gi, ' ').trim()).join(' - ');
   return `${String(sc ?? 0).padStart(2, '0')} ${t}`.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').slice(0, 90).replace(/[ .]+$/, '');
 }
+/** Für Formulare wie Workday: Berufserfahrung, Ausbildung, Sprachen und Kenntnisse zum Kopieren, aus dem Lebenslauf dieser
+    Bewerbung (Tobi, 23.11.: Workday liest den Lebenslauf falsch aus, Jahre wie 2003 statt 2025). */
+function formularBlock(a) {
+  const cv = cvFuer(a); if (!cv) return [];
+  const mmjjjj = s => /^\d{2}\/\d{4}$/.test(s || '') ? s.replace('/', '.') : (s || '');
+  const ort = s => { const m = /Einsatzort\s+([^,;)]+)/i.exec(s || ''); return (m ? m[1] : String(s || '').replace(/^Niederlassung\s+/i, '')).trim(); };
+  const z = ['', 'Für Formulare wie Workday („manuell bewerben“ statt Lebenslauf auslesen lassen):', '', 'BERUFSERFAHRUNG'];
+  for (const st of cv.stationen || []) {
+    const jetzt = /heute|present|aktuell/i.test(st.bis || '');
+    z.push('', `Tätigkeitsbezeichnung: ${st.titel || ''}`, `Unternehmen: ${st.firma || ''}`, `Standort: ${ort(st.ort)}`, `Von: ${mmjjjj(st.von)}`, jetzt ? 'Bis: aktuelle Arbeitsstelle (Häkchen setzen)' : `Bis: ${mmjjjj(st.bis)}`,
+      `Rollenbeschreibung: ${(st.punkte || []).slice(0, 3).map(x => String(x).trim().replace(/\.$/, '')).join('. ')}.`);
+  }
+  z.push('', 'AUSBILDUNG');
+  for (const au of cv.ausbildung || []) {
+    const t = String(au.titel || ''), m = /^((?:Master|Bachelor)(?: of (?:Science|Arts|Engineering))?)\s+(.+)$/i.exec(t);
+    const note = ((au.punkte || []).join(' ').match(/Gesamtnote\s+([\d,]+)/) || [])[1];
+    z.push('', `Einrichtung: ${au.firma || ''}`, `Abschluss: ${m ? m[1] : t}`, m ? `Fachbereich: ${m[2]}` : '', note ? `Gesamtergebnis: ${note}` : '', `Von: ${String(au.von || '').slice(-4)}`, `Bis: ${String(au.bis || '').slice(-4)}`);
+  }
+  const schule = String(P().schulabschluss || '').replace(/\s*\(.*$/, '').trim(); if (schule) z.push('', `Höchster Schulabschluss: ${schule}`);
+  const spr = (String(P().lebenslauf || '').match(/SPRACHEN:\s*([^\n]+)/) || [])[1]; if (spr) z.push('', `Sprachen: ${spr.trim()}`);
+  const kn = (cv.kenntnisse || []).filter(g => !/^sap$/i.test(String(g?.gruppe || '').trim())).flatMap(g => g?.eintraege || []).slice(0, 14);
+  if (kn.length) z.push('', `Kenntnisse: ${kn.join(', ')}`);
+  return z;
+}
 function portalInfos(a) {
   const p = P(), an = a.anfahrt || {}, offen = (a.aufgaben || []).filter(k => !k.erledigt).map(k => '- ' + k.text);
   const eintritt = /^\d{2}\.\d{2}\.\d{4}$/.test(p.eintritt || '') ? p.eintritt : (p.eintritt || '');
@@ -2163,7 +2187,7 @@ function portalInfos(a) {
     `Gehaltsvorstellung: ${a.gehaltWunsch ? eur(a.gehaltWunsch) + ' brutto im Jahr' : '–'}`, `Frühester Eintritt: ${eintritt || '–'}${p.kuendigung ? ` (Kündigungsfrist ${p.kuendigung})` : ''}`,
     `Arbeitszeit: ${p.arbeitszeit || 'Vollzeit'}`, an.min ? `Anfahrt: ${an.min} min pro Weg${Number.isFinite(pendelTage(a)) ? `, ${zahlDe(pendelTage(a))} Bürotage${pendelGeschaetzt(a) ? ' (geschätzt)' : ''}` : ''}` : '',
     ...(offen.length ? ['', 'Offene Punkte:', ...offen] : []), '', 'Deine Angaben zum Ausfüllen:', `Name: ${p.name || ''}`, `Anschrift: ${p.adresse || ''}`, `Telefon: ${p.telefon || ''}`, `E-Mail: ${p.email || ''}`,
-    '', 'Anschreiben zum Einfügen in ein Textfeld:', '', String(a.anschreiben || '').split('\n').slice(2).join('\n').trim()];
+    ...formularBlock(a), '', 'Anschreiben zum Einfügen in ein Textfeld:', '', String(a.anschreiben || '').split('\n').slice(2).join('\n').trim()];
   return z.filter((x, i) => x !== '' || z[i - 1] !== '').join('\r\n') + '\r\n';
 }
 const ordnerIdb = (art, wert) => new Promise(res => { // Ordner-Handle merken, damit nach dem ersten Mal kein Klick mehr nötig ist
