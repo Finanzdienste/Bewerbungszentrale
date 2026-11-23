@@ -2479,7 +2479,7 @@ function postausgangBanner() {
       : PA.hinweis ? esc(PA.hinweis) : `Google braucht einmal deinen Tipp, dann ${eine ? 'geht sie' : 'gehen sie'} raus.`;
   return `<div class="banner info" id="postausgang"><span class="grow"><b>${eine ? '1 Bewerbung wartet' : `${n} Bewerbungen warten`} auf den Versand.</b> ${text}</span>${netz && !PA.laeuft ? '<button class="btn sm primary" type="button" data-act="postausgang-senden">Jetzt senden</button>' : ''}${PA.laeuft ? '' : '<button class="btn sm" type="button" data-act="postausgang-leeren">Nicht senden</button>'}</div>`;
 }
-window.addEventListener('online', () => { renderBanners(); postausgangPlanen(500); });
+window.addEventListener('online', () => { renderBanners(); postausgangPlanen(500); setTimeout(anrufeAbgleichen, 1500); });
 window.addEventListener('offline', () => renderBanners());
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') postausgangPlanen(800); });
 
@@ -4235,6 +4235,74 @@ function md(src) {
   close(); return out;
 }
 
+/* ---------- Anrufe aus Tobis Bildschirmzeit-App (Supabase): über die Telefonnummer den Bewerbungen zuordnen ----------
+   Die Widget-App meldet nach Tobis Freigabe seine Anrufliste (Repo Bildschirmzeit, README „Anrufe“). Die App liest sie mit
+   derselben Kennung wie die Bildschirmzeit (seit „Verbinden“ im localStorage) und trägt sie selbst ein: Verlauf-Eintrag
+   „Anruf“, bei einem verpassten Anruf „<Firma> zurückrufen“, ein späteres Gespräch hakt das ab. Nummern ohne Akte bleiben
+   unberührt. Ohne Netz: beim nächsten Start oder bei „online“ (gemerkt wird nur ein Abgleich, der geklappt hat). */
+const ANRUFE = {laeuft: false, zuletzt: 0};
+const ANRUF_SERVER = {url: 'https://vjyohppohmvhhxgwouti.supabase.co', key: 'sb_publishable_wTUNShIKMFjCOmZzQuuN-A_vFHPkKUI'}; // öffentlich, wie js/bildschirmzeit.js
+const ANRUF_TEXT = {verpasst: 'Verpasster Anruf von', abgelehnt: 'Abgelehnter Anruf von', mailbox: 'Anruf auf der Mailbox von', blockiert: 'Blockierter Anruf von', eingehend: 'Anruf von', ausgehend: 'Anruf bei'};
+const anrufVerpasst = art => art === 'verpasst' || art === 'abgelehnt' || art === 'mailbox';
+function telNorm(t) {
+  let d = String(t || '').replace(/[^\d+]/g, '');
+  if (d.startsWith('+49')) d = '0' + d.slice(3); else if (d.startsWith('0049')) d = '0' + d.slice(4); else if (d.startsWith('+')) d = '00' + d.slice(1);
+  return d;
+}
+/** Akte zur Nummer: dieselbe Nummer, oder die Zentrale mit Durchwahl („040 32 54 55-0“ passt zu 040 325455-17). */
+function anrufAkte(nummer, akten) {
+  const n = telNorm(nummer); if (n.length < 6) return null;
+  for (const a of akten) {
+    const t = String(a.kontakt?.telefon || ''); if (!t.trim()) continue;
+    if (telNorm(t) === n) return a;
+    const m = t.match(/^(.*\d)\s*[-–]\s*\d{1,4}\s*$/), basis = m ? telNorm(m[1]) : '';
+    if (basis.length >= 6 && n.startsWith(basis) && n.length - basis.length <= 4) return a;
+  }
+  return null;
+}
+/** Neue Anrufe in die Akten (ändert `apps`), gibt die geänderten ids zurück. Doppeltes erkennt sie an Zeit und Nummer. */
+function anrufeEinordnen(liste, apps) {
+  const akten = Object.entries(apps).filter(([, a]) => a && !a.beispiel && String(a.kontakt?.telefon || '').trim()).map(([id, a]) => ({kontakt: a.kontakt, _id: id}));
+  const geaendert = new Set();
+  for (const c of [...liste].filter(c => c && c.zeit && c.nummer).sort((x, y) => String(x.zeit).localeCompare(String(y.zeit)))) {
+    const d = new Date(c.zeit); if (isNaN(d)) continue;
+    const t = anrufAkte(c.nummer, akten); if (!t) continue;
+    const a = apps[t._id]; a.verlauf ||= []; a.aufgaben ||= [];
+    const kid = `${d.toISOString()}|${c.nummer}`;
+    if (a.verlauf.some(v => v.anruf?.id === kid)) continue;
+    const firma = String(a.firma || 'Firma').replace(/\s*\([^)]*\)\s*$/, '');
+    const sek = Math.max(0, Number(c.sekunden) || 0), dauer = sek > 0 ? `, ${Math.max(1, Math.round(sek / 60))} Min.` : '';
+    a.verlauf.push({id: uid(), datum: d.toISOString().replace(/\.\d+Z$/, 'Z'), typ: 'anruf', text: `${ANRUF_TEXT[c.art] || 'Anruf von'} ${firma} (${c.nummer})${dauer}`, anruf: {id: kid, nummer: c.nummer, art: c.art, sekunden: sek}});
+    if (anrufVerpasst(c.art)) {
+      if (!a.aufgaben.some(k => !k.erledigt && k.anruf)) a.aufgaben.push({id: uid(), text: `${firma} zurückrufen (verpasster Anruf ${WT[d.getDay()]} ${fmtDs(isoDate(d))}, ${fmtT(d)} Uhr, ${c.nummer})`, faellig: isoDate(d), erledigt: false, anruf: kid});
+    } else if ((c.art === 'eingehend' || c.art === 'ausgehend') && sek >= 20) {
+      for (const k of a.aufgaben) if (!k.erledigt && k.anruf) k.erledigt = true; // erreicht: der Rückruf ist erledigt
+    }
+    geaendert.add(t._id);
+  }
+  return [...geaendert];
+}
+function anrufKennung() {
+  try { const k = JSON.parse(localStorage.getItem('bildschirmzeit.bewerbungszentrale') || 'null')?.kennung || ''; return /^[A-Za-z0-9_-]{32,128}$/.test(k) ? k : ''; } catch { return ''; }
+}
+async function anrufeAbgleichen(jetzt = Date.now()) {
+  const k = anrufKennung();
+  if (!k || ANRUFE.laeuft || !state.loaded || state.mode !== 'db' || window.bzPlattform?.nurLesen?.() || navigator.onLine === false) return;
+  if (ANRUFE.zuletzt && jetzt - ANRUFE.zuletzt < 5 * 60000) return;
+  ANRUFE.laeuft = true;
+  try {
+    const r = await fetch(`${ANRUF_SERVER.url}/rest/v1/rpc/bildschirmzeit_anrufe_lesen`, {method: 'POST', headers: {apikey: ANRUF_SERVER.key, 'Content-Type': 'application/json', Accept: 'application/json'},
+      body: JSON.stringify({p_kennung: k, p_seit: new Date(jetzt - 14 * 864e5).toISOString()})});
+    if (!r.ok) return; // noch nicht freigegeben oder gerade nicht erreichbar: beim nächsten Mal
+    const liste = await r.json(); if (!Array.isArray(liste)) return;
+    ANRUFE.zuletzt = jetzt;
+    const ids = anrufeEinordnen(liste, state.apps);
+    for (const id of ids) saveApp(id, false);
+    if (ids.length) renderSoon();
+  } catch { /* ohne Netz: beim nächsten Start oder bei „online“ */ } finally { ANRUFE.laeuft = false; }
+}
+window.bzAnrufe = {abgleichen: jetzt => anrufeAbgleichen(jetzt)}; // für die Tests
+
 /* ================= Ereignisse ================= */
 document.addEventListener('click', async e => {
   const t = e.target;
@@ -4460,7 +4528,7 @@ function onApps(snap) {
     state.apps[d.id] = norm(clone(d.data()));
   }
   for (const id of Object.keys(state.apps)) if (!seen.has(id) && !dirty.has(id) && !writing.has(id)) delete state.apps[id];
-  if (!snap.metadata.fromCache) { state.loaded = true; state.slow = false; clearTimeout(loadTimer); }
+  if (!snap.metadata.fromCache) { state.loaded = true; state.slow = false; clearTimeout(loadTimer); setTimeout(anrufeAbgleichen, 1500); }
   else if (snap.size) state.loaded = true;
   renderAll();
   if (state.openId && !state.apps[state.openId]) closeDrawer();

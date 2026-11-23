@@ -16,6 +16,13 @@ App fürs Handy, für Tobi.
   Initiativ, Portal, Mail, Status) und Sortierung nach Score, Gehalt, Fahrzeit, Frist oder
   Neuheit, die Sortierung bleibt gemerkt. Darunter die Bereiche nach Stand; Suchtreffer, die in
   keinem Bereich stehen, verlinkt ein Hinweis auf „Alle“.
+- **Anrufe:** Ist die App mit Tobis Bildschirmzeit-App verbunden und hat er dort die Anrufliste
+  freigegeben, holt sie beim Start und bei „online“ (höchstens alle 5 Minuten) die Anrufe der
+  letzten 14 Tage aus Supabase (`bildschirmzeit_anrufe_lesen`, Repo Bildschirmzeit) und ordnet sie
+  über `kontakt.telefon` zu, auch Durchwahlen einer Zentrale („040 … -0“). Sie trägt selbst ein:
+  Verlauf „Anruf“, bei verpasst „<Firma> zurückrufen“ (steht dann unter „Warten auf deine
+  Antwort“), ein späteres Gespräch ab 20 Sekunden hakt das ab. Ohne Netz beim nächsten Mal, nichts
+  doppelt. Nummern ohne Akte bleiben unberührt.
 - **Akte:** drei Reiter. „Infos“ (Score, Ort, Anfahrt, Gehalt, Weg, Kontakt, Termine, Offenes,
   Briefing, Abschicken, Notizen, zugeklappt Firma/Passung und Anzeige), „Unterlagen“ (nach dem
   Versand die verschickte PDF, dazu Anschreiben, Motivationsschreiben, Lebenslauf, Zeugnisse,

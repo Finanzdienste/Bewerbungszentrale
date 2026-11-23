@@ -207,6 +207,53 @@ test('alle-filter', async () => {
   assert.deepEqual(fehler.filter((f) => !/Failed to fetch|NetworkError|internetdisconnected|ERR_INTERNET/i.test(f)), []);
 });
 
+test('anrufe', async () => {
+  // Verpasster Anruf aus der Bildschirmzeit-App (Supabase) → Verlauf „Anruf“ und „zurückrufen“; ein späteres Gespräch hakt ab.
+  // Ohne Netz geht nichts verloren, nichts kommt doppelt. Erfundene Nummern.
+  const jetzt = Date.now(), vor = (min) => new Date(jetzt - min * 60000).toISOString();
+  const anrufe = { liste: [
+    { zeit: vor(30), nummer: '+494012345617', name: null, art: 'verpasst', sekunden: 0 },
+    { zeit: vor(20), nummer: '017600000000', name: 'Erika Beispiel', art: 'eingehend', sekunden: 50 },
+  ], abbruch: 1 };
+  const { seite, gh, fehler } = await appStarten({ anrufe, bildschirmzeit: 'q'.repeat(43) });
+  gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...json(gh, 'apps/test-mail.json'), kontakt: { name: 'Erika Beispiel', rolle: 'Personal', email: 'bewerbung@klima-beispiel.test', telefon: '040 1234 56-0' } }, null, 1) + '\n'));
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.waitForSelector('#dash', { timeout: 20000 });
+  // erster Versuch ohne Netz: nichts eingetragen
+  await seite.evaluate(() => window.bzAnrufe.abgleichen());
+  for (let i = 0; i < 20 && !(anrufe.abrufe || []).length; i++) await warte(250);
+  assert.equal(anrufe.abrufe.length >= 1, true, 'die App fragt Supabase');
+  assert.equal(anrufe.abrufe[0].p_kennung, 'q'.repeat(43));
+  await warte(500);
+  assert.equal((json(gh, 'apps/test-mail.json').verlauf || []).filter((v) => v.typ === 'anruf').length, 0, 'ohne Netz nichts eingetragen');
+  // wieder Netz: „online“ holt es nach
+  await seite.evaluate(() => window.dispatchEvent(new Event('online')));
+  for (let i = 0; i < 60 && !(json(gh, 'apps/test-mail.json').verlauf || []).some((v) => v.typ === 'anruf'); i++) await warte(250);
+  let a = json(gh, 'apps/test-mail.json');
+  const eintraege = a.verlauf.filter((v) => v.typ === 'anruf');
+  assert.equal(eintraege.length, 1, 'nur der Anruf mit passender Nummer (Zentrale mit Durchwahl), die fremde Nummer nicht');
+  assert.match(eintraege[0].text, /^Verpasster Anruf von Klima Beispiel GmbH \(\+494012345617\)$/);
+  const ruf = a.aufgaben.find((k) => !k.erledigt && /zurückrufen/.test(k.text));
+  assert.ok(ruf, 'Aufgabe „zurückrufen“');
+  assert.match(ruf.text, /^Klima Beispiel GmbH zurückrufen \(verpasster Anruf /);
+  await seite.waitForSelector('#dash [data-bereich="antwort"] [data-open="test-mail"]', { timeout: 10000 });
+  // noch einmal: nichts doppelt
+  await seite.evaluate((t) => window.bzAnrufe.abgleichen(t), jetzt + 10 * 60000);
+  await warte(1000);
+  a = json(gh, 'apps/test-mail.json');
+  assert.equal(a.verlauf.filter((v) => v.typ === 'anruf').length, 1, 'nichts doppelt');
+  assert.equal(a.aufgaben.filter((k) => /zurückrufen/.test(k.text)).length, 1);
+  // Rückruf mit Gespräch: die Aufgabe ist erledigt
+  anrufe.liste.push({ zeit: vor(5), nummer: '04012345617', name: null, art: 'ausgehend', sekunden: 240 });
+  await seite.evaluate((t) => window.bzAnrufe.abgleichen(t), jetzt + 20 * 60000);
+  for (let i = 0; i < 60 && json(gh, 'apps/test-mail.json').verlauf.filter((v) => v.typ === 'anruf').length < 2; i++) await warte(250);
+  a = json(gh, 'apps/test-mail.json');
+  assert.match(a.verlauf.filter((v) => v.typ === 'anruf').pop().text, /^Anruf bei Klima Beispiel GmbH \(04012345617\), 4 Min\.$/);
+  assert.equal(a.aufgaben.filter((k) => !k.erledigt && /zurückrufen/.test(k.text)).length, 0, 'zurückgerufen: erledigt');
+  assert.deepEqual(fehler, []);
+});
+
 test('gehalt', async () => {
   const { seite, gh, fehler } = await appStarten();
   const a = json(gh, 'apps/test-portal.json');

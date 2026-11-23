@@ -31,7 +31,7 @@ export async function schliessen() { if (browser) await browser.close(); browser
  * speicher: localStorage vor dem Start (z. B. Zugang). ki: (prompt) => Antworttext.
  * google: Google-Anmeldung und Gmail-API nachbilden; gesendete Mails landen in gmail.
  */
-export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false, graphql = true, google = false, gmailFehler = 0, nurLesen = false, driveStart = [], driveAbbruch = 0, driveEcht = false } = {}) {
+export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false, graphql = true, google = false, gmailFehler = 0, nurLesen = false, driveStart = [], driveAbbruch = 0, driveEcht = false, anrufe = null, bildschirmzeit = '' } = {}) {
   const b = await browserStarten();
   const ctx = await b.newContext({ viewport: { width: breite, height: hoehe }, serviceWorkers: 'block', acceptDownloads: true, ...(FIREFOX ? {} : { permissions: ['clipboard-read', 'clipboard-write'] }) });
   const gh = githubAttrappe(ladeOrdner(daten), { graphql, nurLesen });
@@ -39,6 +39,18 @@ export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), spe
   const fehler = [], gmail = [];
   const drive = driveAttrappe(driveStart, driveAbbruch);
   const vorher = speicher === undefined ? { 'bewerbungszentrale.zugang.v1': JSON.stringify({ token: gh.token }), 'bewerbungszentrale.ki.v1': JSON.stringify({ schluessel: 'sk-ant-test-00000000000000000000000000' }) } : speicher;
+  // Mit der Widget-App verbunden (Kennung wie nach „Verbinden“), z. B. für die Anrufe
+  if (bildschirmzeit) vorher['bildschirmzeit.bewerbungszentrale'] = JSON.stringify({ v: 1, kennung: bildschirmzeit, seit: '2026-11-20T00:00:00.000Z', tage: {}, gemeldet: {}, zuletzt: '', fehler: '' });
+  // Supabase der Bildschirmzeit: anrufe = { liste: [...], abbruch: 0, abrufe: [] } bildet bildschirmzeit_anrufe_lesen nach
+  const supabaseHandler = (route) => {
+    const u = new URL(route.request().url());
+    if (u.pathname.endsWith('/rpc/bildschirmzeit_anrufe_lesen') && anrufe) {
+      anrufe.abrufe = (anrufe.abrufe || []).concat([JSON.parse(route.request().postData() || '{}')]);
+      if (anrufe.abbruch > 0) { anrufe.abbruch--; return route.abort('internetdisconnected'); }
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(anrufe.liste || []) });
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: 'true' });
+  };
   await ctx.addInitScript(({ vorher, teilen, google }) => {
     if (!sessionStorage.getItem('bz-test-start')) { for (const [k, v] of Object.entries(vorher)) localStorage.setItem(k, v); sessionStorage.setItem('bz-test-start', '1'); }
     if (!navigator.clipboard) { let z = ''; Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (t) => { z = String(t); }, readText: async () => z } }); } // http://app.test ist kein sicherer Kontext
@@ -58,6 +70,7 @@ export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), spe
       return route.fulfill({ status: 200, contentType: TYP[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) });
     }
     if (u.hostname === 'api.github.com') return gh.handler(route);
+    if (u.hostname === 'vjyohppohmvhhxgwouti.supabase.co') return supabaseHandler(route);
     if (u.hostname === 'api.anthropic.com') return kia.handler(route);
     if (u.hostname === 'www.googleapis.com' && /^\/(upload\/)?drive\/v3\//.test(u.pathname)) return driveEcht ? route.continue() : drive.handler(route); // echt: Abgleich ohne offene App (werkzeug/drive-abgleich.mjs)
     if (u.hostname === 'gmail.googleapis.com') {
