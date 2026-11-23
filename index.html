@@ -4447,13 +4447,29 @@ window.bzKontakte = {melden: () => kontakteMelden(), liste: apps => kontaktListe
    Der Schlüssel geht nur von App zu App auf dem Handy, an keinen Server. Nur Claude-Schlüssel (sk-ant-…), der Nur-Lesen-Link gibt nichts. */
 function kiAnWidgetFragen() {
   const art = window.bzPlattform?.kiFuerWidget?.() || '';
+  // Noch kein Schlüssel: gleich hier einfügen lassen (ohne den GitHub-Schlüssel noch einmal einzugeben), dann weitergeben. Geht auch ohne Netz.
+  const eintragen = !art && !window.bzPlattform?.nurLesen?.();
   const text = art === 'claude'
     ? 'Die Bildschirmzeit-App möchte deinen Claude-Schlüssel, um Nummern, die nicht in deinen Kontakten stehen, beim Anruf im Netz nachzuschlagen. Der Schlüssel geht nur auf deinem Handy von App zu App. Jede Suche kostet ein paar Cent (höchstens zehn am Tag).'
     : art === 'anderer' ? 'Nachschlagen geht nur mit einem Claude-Schlüssel (sk-ant-…); in dieser App ist ein anderer eingerichtet.'
+    : eintragen ? 'Hier ist noch kein Claude-Schlüssel. Die Widget-App braucht einen, um unbekannte Nummern beim Anruf nachzuschlagen (ein paar Cent je Suche, höchstens zehn am Tag).'
     : 'In dieser App ist kein KI-Schlüssel eingerichtet.';
-  const m = modal(`<div class="modal-head"><h2>Schlüssel für die Widget-App</h2></div><div class="modal-body"><p>${text}</p></div><div class="modal-foot"><button class="btn" type="button" id="kwNein">${art === 'claude' ? 'Abbrechen' : 'OK'}</button>${art === 'claude' ? '<button class="btn solid" type="button" id="kwJa">Schlüssel geben</button>' : ''}</div>`, 'sm');
+  const feld = eintragen ? `<ol class="muted" style="font-size:var(--t-sm);padding-left:20px;margin:10px 0">
+      <li><a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Claude Console → API Keys</a> öffnen und anmelden.</li>
+      <li>„Create Key“, Name etwa „Widget“, dann kopieren.</li>
+      <li>Hier einfügen und „Speichern und geben“ tippen.</li></ol>
+    <input id="kwSchluessel" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" style="width:100%">
+    <p class="muted" id="kwFehler" style="font-size:var(--t-xs);margin-top:6px">Der Schlüssel bleibt auf diesem Handy: hier und in der Widget-App.</p>` : '';
+  const knopf = art === 'claude' ? '<button class="btn solid" type="button" id="kwJa">Schlüssel geben</button>'
+    : eintragen ? '<button class="btn solid" type="button" id="kwSpeichern">Speichern und geben</button>' : '';
+  const m = modal(`<div class="modal-head"><h2>Schlüssel für die Widget-App</h2></div><div class="modal-body"><p>${text}</p>${feld}</div><div class="modal-foot"><button class="btn" type="button" id="kwNein">${art === 'claude' || eintragen ? 'Abbrechen' : 'OK'}</button>${knopf}</div>`, 'sm');
   $('#kwNein', m).onclick = closeModal;
   const ja = $('#kwJa', m); if (ja) ja.onclick = () => { closeModal(); window.bzPlattform.kiAnWidget(); };
+  const sp = $('#kwSpeichern', m); if (sp) sp.onclick = () => {
+    const k = $('#kwSchluessel', m).value.trim();
+    if (!window.bzPlattform.kiSetzen(k)) { const f = $('#kwFehler', m); f.textContent = 'Das sieht nicht nach einem Claude-Schlüssel aus (beginnt mit sk-ant-).'; f.style.color = 'var(--bad)'; return; }
+    closeModal(); window.bzPlattform.kiAnWidget();
+  };
 }
 
 /* ================= Ereignisse ================= */

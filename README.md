@@ -35,8 +35,9 @@ App fürs Handy, für Tobi.
   unbekannten Nummer nachschlägt (`bildschirmzeit_nachschlag_lesen`), trägt die App vor den Anrufen
   ein: Nummer in `kontakt.telefon` (oder `kontakt.weitere`), Notiz im Verlauf; dann passen auch die
   Anrufe. `#bildschirmzeit-ki` (aus der Bildschirmzeit-App) fragt, ob sie den Claude-Schlüssel
-  bekommt; „Schlüssel geben“ öffnet `bildschirmzeit://ki#…`, von App zu App auf dem Handy. Der
-  Nur-Lesen-Link schickt und gibt nichts.
+  bekommt; „Schlüssel geben“ öffnet `bildschirmzeit://ki#…`, von App zu App auf dem Handy. Ist
+  noch keiner da, lässt sich ein Claude-Schlüssel gleich dort einfügen (auch ohne Netz), ohne den
+  GitHub-Schlüssel neu einzugeben. Der Nur-Lesen-Link schickt und gibt nichts.
 - **Akten-Link:** `#akte/<id>` öffnet die Akte, sobald sie geladen ist (so öffnet ein Tipp auf die
   Anruf-Mitteilung der Bildschirmzeit-App die passende Bewerbung).
 - **Akte:** drei Reiter. „Infos“ (Score, Ort, Anfahrt, Gehalt, Weg, Kontakt, Termine, Offenes,

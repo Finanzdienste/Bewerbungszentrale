@@ -31,14 +31,14 @@ export async function schliessen() { if (browser) await browser.close(); browser
  * speicher: localStorage vor dem Start (z. B. Zugang). ki: (prompt) => Antworttext.
  * google: Google-Anmeldung und Gmail-API nachbilden; gesendete Mails landen in gmail.
  */
-export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false, graphql = true, google = false, gmailFehler = 0, nurLesen = false, driveStart = [], driveAbbruch = 0, driveEcht = false, anrufe = null, kontakte = null, nachschlag = null, bildschirmzeit = '' } = {}) {
+export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false, graphql = true, google = false, gmailFehler = 0, nurLesen = false, driveStart = [], driveAbbruch = 0, driveEcht = false, anrufe = null, kontakte = null, nachschlag = null, bildschirmzeit = '', ohneKi = false } = {}) {
   const b = await browserStarten();
   const ctx = await b.newContext({ viewport: { width: breite, height: hoehe }, serviceWorkers: 'block', acceptDownloads: true, ...(FIREFOX ? {} : { permissions: ['clipboard-read', 'clipboard-write'] }) });
   const gh = githubAttrappe(ladeOrdner(daten), { graphql, nurLesen });
   const kia = kiAttrappe(ki);
   const fehler = [], gmail = [];
   const drive = driveAttrappe(driveStart, driveAbbruch);
-  const vorher = speicher === undefined ? { 'bewerbungszentrale.zugang.v1': JSON.stringify({ token: gh.token }), 'bewerbungszentrale.ki.v1': JSON.stringify({ schluessel: 'sk-ant-test-00000000000000000000000000' }) } : speicher;
+  const vorher = speicher === undefined ? { 'bewerbungszentrale.zugang.v1': JSON.stringify({ token: gh.token }), ...(ohneKi ? {} : { 'bewerbungszentrale.ki.v1': JSON.stringify({ schluessel: 'sk-ant-test-00000000000000000000000000' }) }) } : speicher;
   // Mit der Widget-App verbunden (Kennung wie nach „Verbinden“), z. B. für die Anrufe
   if (bildschirmzeit) vorher['bildschirmzeit.bewerbungszentrale'] = JSON.stringify({ v: 1, kennung: bildschirmzeit, seit: '2026-11-20T00:00:00.000Z', tage: {}, gemeldet: {}, zuletzt: '', fehler: '' });
   // Supabase der Bildschirmzeit: anrufe = { liste: [...], abbruch: 0, abrufe: [] } bildet bildschirmzeit_anrufe_lesen nach

@@ -370,6 +370,26 @@ test('ki-fuer-widget', async () => {
   assert.equal(await nur.seite.evaluate(() => window.bzPlattform.kiAnWidget()), false);
 });
 
+test('ki-fuer-widget-eintragen', async () => {
+  // noch kein Schlüssel: im Dialog einfügen, merken, weitergeben – ohne GitHub-Schlüssel noch einmal und ohne Netz
+  const { seite, ctx, fehler } = await appStarten({ ohneKi: true });
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  assert.equal(await seite.evaluate(() => window.bzPlattform.kiFuerWidget()), '');
+  await ctx.route('**/*', (r) => (new URL(r.request().url()).hostname === 'app.test' ? r.fallback() : r.abort('internetdisconnected'))); // ab hier kein Netz
+  await seite.evaluate(() => { window.bzOeffnen = (u) => { window.__ziel = u; }; location.hash = '#bildschirmzeit-ki'; });
+  await seite.waitForSelector('#kwSchluessel', { timeout: 5000 });
+  await seite.fill('#kwSchluessel', 'AIza' + 'x'.repeat(35));
+  await seite.click('#kwSpeichern');
+  assert.match(await seite.textContent('#kwFehler'), /beginnt mit sk-ant-/, 'nur Claude-Schlüssel');
+  assert.equal(await seite.evaluate(() => window.__ziel || ''), '');
+  await seite.fill('#kwSchluessel', '  sk-ant-test-11111111111111111111111111 ');
+  await seite.click('#kwSpeichern');
+  assert.equal(await seite.evaluate(() => window.__ziel), 'bildschirmzeit://ki#sk-ant-test-11111111111111111111111111');
+  assert.equal(await seite.$('#mdl'), null, 'Dialog zu');
+  assert.equal(await seite.evaluate(() => window.bzPlattform.kiFuerWidget()), 'claude', 'gemerkt, beim nächsten Mal reicht „Schlüssel geben“');
+  assert.deepEqual(fehler.filter((f) => !/internetdisconnected|Failed to fetch|NetworkError/i.test(f)), []);
+});
+
 test('kontakte-nur-lesen', async () => {
   // der Nur-Lesen-Link (für Freunde) schickt nichts
   const kontakte = { gesetzt: [] };

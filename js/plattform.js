@@ -764,7 +764,9 @@
     if (typeof window.bzOeffnen === 'function') window.bzOeffnen(ziel); else location.href = ziel;
     return true;
   }
-  window.bzPlattform = { kiFuerWidget, kiAnWidget, uebergabeLink, abgleichen: () => abgleichen(), einrichten: () => einrichtenZeigen(''), offen: () => warteschlange.size + (nurLesen ? 0 : lokal.size), speichern: () => sofortSchreiben(), kiDa: () => !!kiSchluessel(), nurLesen: () => nurLesen, gmail, drive };
+  /** Einen Claude-Schlüssel hier merken (Dialog für die Widget-App, wenn noch keiner da ist); nur sk-ant-…, nie im Nur-Lesen-Link. */
+  const kiSetzen = (k) => { k = String(k || '').trim(); return !nurLesen && k.startsWith('sk-ant-') && KI_MUSTER.test(k) && schreib(KI, { schluessel: k, stand: new Date().toISOString() }); };
+  window.bzPlattform = { kiFuerWidget, kiAnWidget, kiSetzen, uebergabeLink, abgleichen: () => abgleichen(), einrichten: () => einrichtenZeigen(''), offen: () => warteschlange.size + (nurLesen ? 0 : lokal.size), speichern: () => sofortSchreiben(), kiDa: () => !!kiSchluessel(), nurLesen: () => nurLesen, gmail, drive };
 
   zugangHerstellen();
   start();
