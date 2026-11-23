@@ -4421,19 +4421,23 @@ function nachschlagEinordnen(liste, apps) {
   return [...geaendert];
 }
 const KONTAKTE = {laeuft: false};
-const KONTAKTE_GEMELDET = 'bz-kontakte-gemeldet-2';
+const KONTAKTE_GEMELDET = 'bz-kontakte-gemeldet-3'; // „Stand|Zeit“; -3: neu geschickt, nachdem die Tabelle am 23.11. die Fassung je Akte bekam
+const KONTAKTE_NEU_MS = 12 * 3600e3; // auch unverändert alle 12 Stunden noch einmal: Geht drüben etwas verloren, ist es bald wieder da
 const kurzHash = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) >>> 0; return `${s.length}-${h.toString(36)}`; };
 async function kontakteMelden() {
   const k = anrufKennung();
   if (!k || KONTAKTE.laeuft || !state.loaded || state.mode !== 'db' || window.bzPlattform?.nurLesen?.() || navigator.onLine === false) return;
   const liste = kontaktListe(state.apps); if (!liste.length) return;
   const stand = kurzHash(JSON.stringify(liste));
-  try { if (localStorage.getItem(KONTAKTE_GEMELDET) === stand) return; } catch { /* ohne Speicher: einfach schicken */ }
+  try {
+    const [alt, zeit] = String(localStorage.getItem(KONTAKTE_GEMELDET) || '').split('|');
+    if (alt === stand && Date.now() - Number(zeit || 0) < KONTAKTE_NEU_MS) return;
+  } catch { /* ohne Speicher: einfach schicken */ }
   KONTAKTE.laeuft = true;
   try {
     const r = await fetch(`${ANRUF_SERVER.url}/rest/v1/rpc/bildschirmzeit_kontakte_setzen`, {method: 'POST', headers: {apikey: ANRUF_SERVER.key, 'Content-Type': 'application/json', Accept: 'application/json'},
       body: JSON.stringify({p_kennung: k, p_kontakte: liste})});
-    if (r.ok && await r.json() === true) try { localStorage.setItem(KONTAKTE_GEMELDET, stand); } catch { /* dann beim nächsten Mal noch einmal */ }
+    if (r.ok && await r.json() === true) try { localStorage.setItem(KONTAKTE_GEMELDET, `${stand}|${Date.now()}`); } catch { /* dann beim nächsten Mal noch einmal */ }
   } catch { /* ohne Netz: beim nächsten Start oder bei „online“ */ } finally { KONTAKTE.laeuft = false; }
 }
 window.bzKontakte = {melden: () => kontakteMelden(), liste: apps => kontaktListe(apps), firma: kontaktFirma, nummernIn}; // für die Tests

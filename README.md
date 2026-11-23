@@ -29,7 +29,8 @@ App fürs Handy, für Tobi.
   weitere Nummern aus Briefing, Notizen und Verlauf (die eigene nicht) und ein kurzes Briefing
   (Stelle, Stand, Termin, Ansprechperson, Forderung, Eintritt, Weg, offene Fragen, dann Claudes
   Gesprächs-Briefing; höchstens 1500 Zeichen). Die ganze Liste ersetzt die alte; geschickt wird nur,
-  was sich geändert hat (Stand im localStorage `bz-kontakte-gemeldet-2`, erst nach `true`). Die
+  was sich geändert hat, und unverändert alle 12 Stunden noch einmal (Stand und Zeit im localStorage
+  `bz-kontakte-gemeldet-3`, erst nach `true`). Die
   Bildschirmzeit-App benennt damit Kontakte und zeigt das Briefing beim Anruf. Was sie zu einer
   unbekannten Nummer nachschlägt (`bildschirmzeit_nachschlag_lesen`), trägt die App vor den Anrufen
   ein: Nummer in `kontakt.telefon` (oder `kontakt.weitere`), Notiz im Verlauf; dann passen auch die

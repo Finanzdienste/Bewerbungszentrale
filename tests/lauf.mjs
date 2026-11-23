@@ -287,10 +287,15 @@ test('kontakte', async () => {
   assert.match(m.briefing, /Offen fürs Gespräch:\n- Wie groß ist das Team\?/);
   assert.match(m.briefing, /\n\nSie ruft vom Handy an: 0171 2223334/, 'am Ende Claudes Gesprächs-Briefing');
   assert.deepEqual({ name: r.name, nummer: r.nummer, basis: r.basis }, { name: 'Zeitwerk Personal', nummer: '+491710000000', basis: null });
-  // unverändert: nicht noch einmal
+  // unverändert: nicht noch einmal – erst nach 12 Stunden wieder (falls drüben etwas verloren ging)
   await seite.evaluate(() => window.bzKontakte.melden());
   await warte(500);
   assert.equal(kontakte.gesetzt.length, 1, 'nichts doppelt');
+  await seite.evaluate(() => { const [s] = localStorage.getItem('bz-kontakte-gemeldet-3').split('|'); localStorage.setItem('bz-kontakte-gemeldet-3', `${s}|${Date.now() - 13 * 3600e3}`); });
+  await seite.evaluate(() => window.bzKontakte.melden());
+  for (let i = 0; i < 40 && kontakte.gesetzt.length < 2; i++) await warte(250);
+  assert.equal(kontakte.gesetzt.length, 2, 'nach 12 Stunden noch einmal');
+  kontakte.gesetzt.pop();
   // eine neue Bewerbung: die ganze Liste neu
   setzen('test-portal', { status: 'beworben' });
   await seite.evaluate(() => window.bzPlattform.abgleichen());
