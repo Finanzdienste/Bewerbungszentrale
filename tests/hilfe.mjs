@@ -31,7 +31,7 @@ export async function schliessen() { if (browser) await browser.close(); browser
  * speicher: localStorage vor dem Start (z. B. Zugang). ki: (prompt) => Antworttext.
  * google: Google-Anmeldung und Gmail-API nachbilden; gesendete Mails landen in gmail.
  */
-export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false, graphql = true, google = false, gmailFehler = 0, nurLesen = false, driveStart = [], driveAbbruch = 0, driveEcht = false, anrufe = null, kontakte = null, bildschirmzeit = '' } = {}) {
+export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), speicher, ki = async () => 'KI-Antwort', breite = 412, hoehe = 860, teilen = false, graphql = true, google = false, gmailFehler = 0, nurLesen = false, driveStart = [], driveAbbruch = 0, driveEcht = false, anrufe = null, kontakte = null, nachschlag = null, bildschirmzeit = '' } = {}) {
   const b = await browserStarten();
   const ctx = await b.newContext({ viewport: { width: breite, height: hoehe }, serviceWorkers: 'block', acceptDownloads: true, ...(FIREFOX ? {} : { permissions: ['clipboard-read', 'clipboard-write'] }) });
   const gh = githubAttrappe(ladeOrdner(daten), { graphql, nurLesen });
@@ -49,6 +49,12 @@ export async function appStarten({ daten = path.join(WURZEL, 'tests/daten'), spe
       if (anrufe.abbruch > 0) { anrufe.abbruch--; return route.abort('internetdisconnected'); }
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(anrufe.liste || []) });
     }
+    // nachschlag = { liste: [...], abbruch: 0 } bildet bildschirmzeit_nachschlag_lesen nach
+    if (u.pathname.endsWith('/rpc/bildschirmzeit_nachschlag_lesen') && nachschlag) {
+      if (nachschlag.abbruch > 0) { nachschlag.abbruch--; return route.abort('internetdisconnected'); }
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(nachschlag.liste || []) });
+    }
+    if (u.pathname.endsWith('/rpc/bildschirmzeit_nachschlag_lesen')) return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
     // kontakte = { gesetzt: [], abbruch: 0 } bildet bildschirmzeit_kontakte_setzen nach
     if (u.pathname.endsWith('/rpc/bildschirmzeit_kontakte_setzen') && kontakte) {
       if (kontakte.abbruch > 0) { kontakte.abbruch--; kontakte.abgebrochen = (kontakte.abgebrochen || 0) + 1; return route.abort('internetdisconnected'); }

@@ -23,12 +23,19 @@ App fürs Handy, für Tobi.
   Verlauf „Anruf“, bei verpasst „<Firma> zurückrufen“ (steht dann unter „Warten auf deine
   Antwort“), ein späteres Gespräch ab 20 Sekunden hakt das ab. Ohne Netz beim nächsten Mal, nichts
   doppelt. Nummern ohne Akte bleiben unberührt.
-- **Kontakte:** Mit derselben Verbindung schickt sie beim Start und bei „online“ die Namen für die
-  Nummern der Akten ab „beworben“ an Supabase (`bildschirmzeit_kontakte_setzen`): „Person (Firma)“
-  oder nur die Firma, ohne Rechtsform, Nummer als +49…. Die ganze Liste ersetzt die alte; geschickt
-  wird nur, was sich geändert hat (Stand im localStorage `bz-kontakte-gemeldet`, erst nach `true`).
-  Hat Tobi in der Bildschirmzeit-App „Kontakte benennen“ freigegeben, benennt die damit die Kontakte
-  auf dem Handy. Der Nur-Lesen-Link schickt nichts.
+- **Kontakte und Anruf-Briefings:** Mit derselben Verbindung schickt sie beim Start und bei „online“
+  je Akte ab „beworben“ einen Eintrag an Supabase (`bildschirmzeit_kontakte_setzen`): Name
+  „Person (Firma)“ oder die Firma, die Nummer der Akte (+49…), die Zentrale ohne Durchwahl,
+  weitere Nummern aus Briefing, Notizen und Verlauf (die eigene nicht) und ein kurzes Briefing
+  (Stelle, Stand, Termin, Ansprechperson, Forderung, Eintritt, Weg, offene Fragen, dann Claudes
+  Gesprächs-Briefing; höchstens 1500 Zeichen). Die ganze Liste ersetzt die alte; geschickt wird nur,
+  was sich geändert hat (Stand im localStorage `bz-kontakte-gemeldet-2`, erst nach `true`). Die
+  Bildschirmzeit-App benennt damit Kontakte und zeigt das Briefing beim Anruf. Was sie zu einer
+  unbekannten Nummer nachschlägt (`bildschirmzeit_nachschlag_lesen`), trägt die App vor den Anrufen
+  ein: Nummer in `kontakt.telefon` (oder `kontakt.weitere`), Notiz im Verlauf; dann passen auch die
+  Anrufe. `#bildschirmzeit-ki` (aus der Bildschirmzeit-App) fragt, ob sie den Claude-Schlüssel
+  bekommt; „Schlüssel geben“ öffnet `bildschirmzeit://ki#…`, von App zu App auf dem Handy. Der
+  Nur-Lesen-Link schickt und gibt nichts.
 - **Akte:** drei Reiter. „Infos“ (Score, Ort, Anfahrt, Gehalt, Weg, Kontakt, Termine, Offenes,
   Briefing, Abschicken, Notizen, zugeklappt Firma/Passung und Anzeige), „Unterlagen“ (nach dem
   Versand die verschickte PDF, dazu Anschreiben, Motivationsschreiben, Lebenslauf, Zeugnisse,

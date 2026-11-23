@@ -255,12 +255,14 @@ test('anrufe', async () => {
 });
 
 test('kontakte', async () => {
-  // Namen für die Kontakte auf dem Handy: Nummern der Akten ab „beworben“ an Supabase (die Widget-App benennt damit).
-  // Ohne Netz geht nichts verloren, Unverändertes geht nicht noch einmal raus. Erfundene Nummern und Namen.
+  // Kontaktnamen und Anruf-Briefings fürs Handy: Akten ab „beworben“ an Supabase (die Widget-App benennt damit Kontakte und
+  // zeigt das Briefing beim Anruf). Ohne Netz geht nichts verloren, Unverändertes geht nicht noch einmal raus. Erfundene Daten.
   const kontakte = { gesetzt: [], abbruch: 1 };
   const { seite, gh, fehler } = await appStarten({ kontakte, bildschirmzeit: 'q'.repeat(43) });
   const setzen = (id, felder) => gh.dateien.set(`apps/${id}.json`, Buffer.from(JSON.stringify({ ...json(gh, `apps/${id}.json`), ...felder }, null, 1) + '\n'));
-  setzen('test-mail', { status: 'beworben', kontakt: { name: 'Frau Erika Beispiel', rolle: 'Personal', email: 'bewerbung@klima-beispiel.test', telefon: '040 1234 56-0' } });
+  setzen('test-mail', { status: 'beworben', beworbenAm: '2026-11-20', gehaltWunsch: 64000, briefing: 'Sie ruft vom Handy an: 0171 2223334. Sonst die Zentrale.',
+    notizen: 'Offene Frage fürs Gespräch: Wie groß ist das Team?\nMeine eigene Nummer 040 000000 steht hier nur zum Test.',
+    kontakt: { name: 'Frau Erika Beispiel', rolle: 'Personal', email: 'bewerbung@klima-beispiel.test', telefon: '040 1234 56-0' } });
   setzen('test-raus', { status: 'interview', kontakt: { name: '', rolle: '', email: '', telefon: '+49 171 0000000' } });
   setzen('test-portal', { status: 'gemerkt', kontakt: { name: 'Max Muster', rolle: '', email: '', telefon: '030 999999' } });
   await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
@@ -275,10 +277,16 @@ test('kontakte', async () => {
   for (let i = 0; i < 40 && !kontakte.gesetzt.length; i++) await warte(250);
   assert.equal(kontakte.gesetzt.length, 1);
   assert.equal(kontakte.gesetzt[0].p_kennung, 'q'.repeat(43));
-  assert.deepEqual(kontakte.gesetzt[0].p_kontakte, [
-    { nummer: '+491710000000', name: 'Zeitwerk Personal' },
-    { nummer: '+49401234560', name: 'Erika Beispiel (Klima Beispiel)' },
-  ], 'nur Akten ab „beworben“, +49, ohne Frau/Herr und Rechtsform');
+  const l = kontakte.gesetzt[0].p_kontakte;
+  assert.deepEqual(l.map((e) => e.akte), ['test-mail', 'test-raus'], 'nur Akten ab „beworben“, nach Akte sortiert');
+  const [m, r] = l;
+  assert.deepEqual({ name: m.name, firma: m.firma, nummer: m.nummer, basis: m.basis, weitere: m.weitere },
+    { name: 'Erika Beispiel (Klima Beispiel)', firma: 'Klima Beispiel', nummer: '+49401234560', basis: '+4940123456', weitere: ['+491712223334'] },
+    'Name ohne Frau/Herr und Rechtsform, Nummer +49…, Zentrale ohne Durchwahl, weitere Nummer aus dem Briefing (die eigene nicht)');
+  assert.match(m.briefing, /^Klima Beispiel GmbH – Energiecontroller \(m\/w\/d\)\nBeworben am 20\.11\.2026 · Stand: Beworben\nAnsprechperson: Frau Erika Beispiel, Personal\nForderung 64\.000\s€/);
+  assert.match(m.briefing, /Offen fürs Gespräch:\n- Wie groß ist das Team\?/);
+  assert.match(m.briefing, /\n\nSie ruft vom Handy an: 0171 2223334/, 'am Ende Claudes Gesprächs-Briefing');
+  assert.deepEqual({ name: r.name, nummer: r.nummer, basis: r.basis }, { name: 'Zeitwerk Personal', nummer: '+491710000000', basis: null });
   // unverändert: nicht noch einmal
   await seite.evaluate(() => window.bzKontakte.melden());
   await warte(500);
@@ -289,12 +297,62 @@ test('kontakte', async () => {
   for (let i = 0; i < 40 && kontakte.gesetzt.length < 2; i++) await warte(250);
   assert.equal(kontakte.gesetzt.length, 2);
   assert.equal(kontakte.gesetzt[1].p_kontakte.length, 3);
-  assert.deepEqual(kontakte.gesetzt[1].p_kontakte.find((x) => x.nummer === '+4930999999'), { nummer: '+4930999999', name: 'Max Muster (Hafen Muster)' });
-  // Firmennamen: Rechtsform und Klammern weg, lange an einer Wortgrenze gekürzt
+  assert.equal(kontakte.gesetzt[1].p_kontakte.find((x) => x.akte === 'test-portal').name, 'Max Muster (Hafen Muster)');
+  // Firmennamen und Nummern im Text
   const f = await seite.evaluate(() => ['Muster Personal GmbH & Co. KG', 'Beispiel & Co (Kunde offen)', 'B.E.I.S.P.I.E.L. GmbH', 'Gesellschaft für Beispiele, Muster und Proben mbH']
     .map((x) => window.bzKontakte.firma(x)));
   assert.deepEqual(f, ['Muster Personal', 'Beispiel', 'B.E.I.S.P.I.E.L.', 'Gesellschaft für Beispiele']);
+  const n = await seite.evaluate(() => window.bzKontakte.nummernIn('Ruf an: +49 40 1234-56 oder (040) 765 43 21, Termin am 01.03.2027, Kennziffer 0012345, Fax 04193 7535-43'));
+  assert.deepEqual(n, ['+4940123456', '+49407654321', '+494193753543']);
   assert.deepEqual(fehler, []);
+});
+
+test('nachschlagen', async () => {
+  // Was die Widget-App zu einer unbekannten Nummer nachgeschlagen hat, kommt in die Akte; ein Anruf von der Nummer passt dann auch.
+  const jetzt = Date.now(), vor = (min) => new Date(jetzt - min * 60000).toISOString();
+  const nachschlag = { liste: [{ nummer: '+4930555666', zeit: vor(30), wer: 'Hafen Muster AG, Personalabteilung', akte: 'test-portal' },
+    { nummer: '+4930777888', zeit: vor(20), wer: 'Werbeanruf', akte: null }], abbruch: 1 };
+  const anrufe = { liste: [{ zeit: vor(30), nummer: '+4930555666', name: null, art: 'verpasst', sekunden: 0 }] };
+  const { seite, gh, fehler } = await appStarten({ anrufe, nachschlag, bildschirmzeit: 'q'.repeat(43) });
+  gh.dateien.set('apps/test-portal.json', Buffer.from(JSON.stringify({ ...json(gh, 'apps/test-portal.json'), status: 'beworben', kontakt: { name: 'Max Muster', rolle: '', email: '', telefon: '' } }, null, 1) + '\n'));
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.waitForSelector('#dash', { timeout: 20000 });
+  for (let i = 0; i < 40 && nachschlag.abbruch; i++) await warte(250);
+  await warte(500);
+  assert.equal((json(gh, 'apps/test-portal.json').verlauf || []).length, 0, 'ohne Netz nichts eingetragen');
+  await seite.evaluate((t) => window.bzAnrufe.abgleichen(t), jetzt + 10 * 60000);
+  for (let i = 0; i < 60 && !(json(gh, 'apps/test-portal.json').verlauf || []).some((v) => v.typ === 'anruf'); i++) await warte(250);
+  let a = json(gh, 'apps/test-portal.json');
+  assert.equal(a.kontakt.telefon, '+4930555666', 'die Nummer steht jetzt im Kontakt');
+  assert.match(a.verlauf.find((v) => v.nachschlag).text, /^Nummer \+4930555666 beim Anruf nachgeschlagen: Hafen Muster AG, Personalabteilung$/);
+  assert.ok(a.verlauf.some((v) => v.typ === 'anruf'), 'und der Anruf passt zur Akte');
+  assert.ok(a.aufgaben.some((k) => !k.erledigt && /zurückrufen/.test(k.text)));
+  // noch einmal: nichts doppelt
+  await seite.evaluate((t) => window.bzAnrufe.abgleichen(t), jetzt + 20 * 60000);
+  await warte(1000);
+  a = json(gh, 'apps/test-portal.json');
+  assert.equal(a.verlauf.filter((v) => v.nachschlag).length, 1);
+  assert.deepEqual(fehler, []);
+});
+
+test('ki-fuer-widget', async () => {
+  // #bildschirmzeit-ki aus der Widget-App: ein Tipp gibt den Claude-Schlüssel per bildschirmzeit://ki#… weiter, an keinen Server.
+  const { seite, fehler } = await appStarten();
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  const art = await seite.evaluate(() => window.bzPlattform.kiFuerWidget());
+  await seite.evaluate(() => { window.bzOeffnen = (u) => { window.__ziel = u; }; location.hash = '#bildschirmzeit-ki'; });
+  await seite.waitForSelector('#mdl', { timeout: 5000 });
+  assert.equal(await seite.evaluate(() => location.hash), '#uebersicht', 'der Anker ist gleich wieder weg');
+  assert.equal(art, 'claude');
+  await seite.click('#kwJa');
+  assert.equal(await seite.evaluate(() => window.__ziel), 'bildschirmzeit://ki#sk-ant-test-00000000000000000000000000');
+  assert.deepEqual(fehler, []);
+  // der Nur-Lesen-Link gibt keinen Schlüssel weiter
+  const nur = await appStarten({ nurLesen: true });
+  await nur.seite.waitForSelector('#lesemodus', { timeout: 20000 });
+  assert.equal(await nur.seite.evaluate(() => window.bzPlattform.kiFuerWidget()), '');
+  assert.equal(await nur.seite.evaluate(() => window.bzPlattform.kiAnWidget()), false);
 });
 
 test('kontakte-nur-lesen', async () => {

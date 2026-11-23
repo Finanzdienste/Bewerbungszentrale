@@ -755,7 +755,16 @@
     mcp: async () => { throw fehler('not_granted', 'In der App gibt es keinen direkten Gmail-Versand.'); },
   };
   window.claude = { use: (name) => (faehig[name] ? faehig[name]() : Promise.reject(fehler('not_granted', name))) };
-  window.bzPlattform = { uebergabeLink, abgleichen: () => abgleichen(), einrichten: () => einrichtenZeigen(''), offen: () => warteschlange.size + (nurLesen ? 0 : lokal.size), speichern: () => sofortSchreiben(), kiDa: () => !!kiSchluessel(), nurLesen: () => nurLesen, gmail, drive };
+  /** Für die Widget-App (index.html kiAnWidgetFragen): 'claude', 'anderer' oder ''; im Nur-Lesen-Link nie. */
+  const kiFuerWidget = () => { const k = nurLesen ? '' : kiSchluessel(); return !k ? '' : anbieterVon(k) === 'anthropic' ? 'claude' : 'anderer'; };
+  /** Öffnet bildschirmzeit://ki#<Schlüssel>: geht nur von App zu App auf dem Handy, an keinen Server. */
+  function kiAnWidget() {
+    if (kiFuerWidget() !== 'claude') return false;
+    const ziel = `bildschirmzeit://ki#${encodeURIComponent(kiSchluessel())}`;
+    if (typeof window.bzOeffnen === 'function') window.bzOeffnen(ziel); else location.href = ziel;
+    return true;
+  }
+  window.bzPlattform = { kiFuerWidget, kiAnWidget, uebergabeLink, abgleichen: () => abgleichen(), einrichten: () => einrichtenZeigen(''), offen: () => warteschlange.size + (nurLesen ? 0 : lokal.size), speichern: () => sofortSchreiben(), kiDa: () => !!kiSchluessel(), nurLesen: () => nurLesen, gmail, drive };
 
   zugangHerstellen();
   start();

@@ -930,6 +930,10 @@ function renderAll() {
 }
 const VIEWS = ['uebersicht','pipeline','liste','karte','termine','profil']; // die Radar-Ansicht ist nicht mehr erreichbar (Wunsch: nur, was sich abschicken lässt)
 function route() {
+  if (location.hash === '#bildschirmzeit-ki') { // die Widget-App fragt nach dem Claude-Schlüssel (kiAnWidgetFragen)
+    try { history.replaceState(history.state, '', `${location.pathname}${location.search}#${state.view_vorher || 'uebersicht'}`); } catch {}
+    setTimeout(kiAnWidgetFragen, 400);
+  }
   // Ein Link aus Tobis Widget-App (#bildschirmzeit=…) in der offenen App: js/bildschirmzeit.js nimmt ihn
   // gleich heraus (es hört nach uns). Man bleibt, wo man war – danach auch wieder in der Adresse.
   // Beim Start (noch keine Ansicht) gilt die Übersicht wie sonst.
@@ -4277,16 +4281,17 @@ function telNorm(t) {
 function anrufAkte(nummer, akten) {
   const n = telNorm(nummer); if (n.length < 6) return null;
   for (const a of akten) {
-    const t = String(a.kontakt?.telefon || ''); if (!t.trim()) continue;
-    if (telNorm(t) === n) return a;
+    const t = String(a.kontakt?.telefon || '');
+    if (t.trim() && telNorm(t) === n) return a;
     const m = t.match(/^(.*\d)\s*[-–]\s*\d{1,4}\s*$/), basis = m ? telNorm(m[1]) : '';
     if (basis.length >= 6 && n.startsWith(basis) && n.length - basis.length <= 4) return a;
   }
+  for (const a of akten) if ((a.kontakt?.weitere || []).some(w => telNorm(w) === n)) return a; // nachgeschlagene Nummern
   return null;
 }
 /** Neue Anrufe in die Akten (ändert `apps`), gibt die geänderten ids zurück. Doppeltes erkennt sie an Zeit und Nummer. */
 function anrufeEinordnen(liste, apps) {
-  const akten = Object.entries(apps).filter(([, a]) => a && !a.beispiel && String(a.kontakt?.telefon || '').trim()).map(([id, a]) => ({kontakt: a.kontakt, _id: id}));
+  const akten = Object.entries(apps).filter(([, a]) => a && !a.beispiel && (String(a.kontakt?.telefon || '').trim() || a.kontakt?.weitere?.length)).map(([id, a]) => ({kontakt: a.kontakt, _id: id}));
   const geaendert = new Set();
   for (const c of [...liste].filter(c => c && c.zeit && c.nummer).sort((x, y) => String(x.zeit).localeCompare(String(y.zeit)))) {
     const d = new Date(c.zeit); if (isNaN(d)) continue;
@@ -4315,6 +4320,13 @@ async function anrufeAbgleichen(jetzt = Date.now()) {
   if (ANRUFE.zuletzt && jetzt - ANRUFE.zuletzt < 5 * 60000) return;
   ANRUFE.laeuft = true;
   try {
+    // erst, was die Widget-App nachgeschlagen hat: Dann passen auch Anrufe von diesen Nummern zur Akte
+    try {
+      const rn = await fetch(`${ANRUF_SERVER.url}/rest/v1/rpc/bildschirmzeit_nachschlag_lesen`, {method: 'POST', headers: {apikey: ANRUF_SERVER.key, 'Content-Type': 'application/json', Accept: 'application/json'},
+        body: JSON.stringify({p_kennung: k, p_seit: new Date(jetzt - 14 * 864e5).toISOString()})});
+      const ln = rn.ok ? await rn.json() : null;
+      if (Array.isArray(ln)) { const ids = nachschlagEinordnen(ln, state.apps); for (const id of ids) saveApp(id, false); if (ids.length) renderSoon(); }
+    } catch { /* ohne Netz oder noch nicht eingespielt: beim nächsten Mal */ }
     const r = await fetch(`${ANRUF_SERVER.url}/rest/v1/rpc/bildschirmzeit_anrufe_lesen`, {method: 'POST', headers: {apikey: ANRUF_SERVER.key, 'Content-Type': 'application/json', Accept: 'application/json'},
       body: JSON.stringify({p_kennung: k, p_seit: new Date(jetzt - 14 * 864e5).toISOString()})});
     if (!r.ok) return; // noch nicht freigegeben oder gerade nicht erreichbar: beim nächsten Mal
@@ -4327,10 +4339,13 @@ async function anrufeAbgleichen(jetzt = Date.now()) {
 }
 window.bzAnrufe = {abgleichen: jetzt => anrufeAbgleichen(jetzt)}; // für die Tests
 
-/* ---------- Namen für Tobis Kontakte: die Nummern aus den Bewerbungen an Supabase, die Widget-App benennt damit die Kontakte ----------
-   Tobi, 23.11.2026: „Du kannst meine Telefon Kontakte auch umbennenen“ (Repo Bildschirmzeit, README „Kontakte“). Nur Akten, bei denen
-   schon etwas lief (ab „beworben“), mit Telefonnummer; Name „Person (Firma)“ oder nur die Firma. Die Liste ersetzt die alte ganz;
-   geschickt wird nur, was sich geändert hat. Ohne Netz: beim nächsten Start oder bei „online“ (gemerkt wird nur, was Supabase annahm). */
+/* ---------- Bewerbungen fürs Handy: Kontaktnamen und Anruf-Briefings an Supabase, die Widget-App benennt Kontakte und zeigt das Briefing ----------
+   Tobi, 23.11.2026: „Du kannst meine Telefon Kontakte auch umbennenen“ und „Geil wärs wenn er während des Telefonats direkt schon die
+   Nummer googlet … und ich n schriftliches briefing bekomme“ (Repo Bildschirmzeit, README „Anrufer erkennen“). Je Akte ab „beworben“:
+   Name „Person (Firma)“ oder die Firma, die Nummer der Akte, die Zentrale ohne Durchwahl, weitere Nummern aus Briefing, Notizen und
+   Verlauf und ein kurzes Briefing. Die Liste ersetzt die alte ganz; geschickt wird nur, was sich geändert hat. Ohne Netz: beim nächsten
+   Start oder bei „online“ (gemerkt wird nur, was Supabase annahm). Was die Widget-App zu unbekannten Nummern nachschlägt, trägt
+   nachschlagEinordnen in die Akte ein (Nummer in den Kontakt, Notiz im Verlauf). */
 const KONTAKT_RANG = {zusage: 7, angebot: 7, interview: 6, rueckmeldung: 5, beworben: 4, absage: 2, zurueckgezogen: 1};
 const KONTAKT_ENDE = /^(?:gmbh|ag|kg|kgaa|se|co|mbh|ohg|gbr|ug|e\.?v|eg|aör|haftungsbeschränkt|&|\+|und|deutschland|germany)\.?$/i;
 /** Firma für den Kontakt: ohne Klammern und Rechtsform am Ende, höchstens 32 Zeichen an einer Wortgrenze („Muster Personal GmbH & Co. KG“ → „Muster Personal“). */
@@ -4347,20 +4362,60 @@ function kontaktNummer(t) {
   const d = telNorm(t), n = d.startsWith('00') ? '+' + d.slice(2) : d.startsWith('0') ? '+49' + d.slice(1) : '';
   return /^\+[1-9][0-9]{5,31}$/.test(n) ? n : '';
 }
+/** Zentrale ohne Durchwahl („040 32 54 55-0“ → +4940325455). */
+function kontaktBasis(t) { const m = String(t || '').match(/^(.*\d)\s*[-–]\s*\d{1,4}\s*$/); const b = m ? kontaktNummer(m[1]) : ''; return b.length >= 9 ? b : ''; }
+const NUMMER_IM_TEXT = /(?:\+49|0049|\b0)[\s/()-]*[1-9](?:[\s/()-]*\d){5,13}/g;
+/** Telefonnummern aus freiem Text (Briefing, Notizen, Verlauf) als +49…; Datumsangaben und Kennziffern passen nicht. */
+function nummernIn(text) { return (String(text || '').match(NUMMER_IM_TEXT) || []).map(kontaktNummer).filter(Boolean); }
+/** Das Briefing für den Anruf, höchstens 1500 Zeichen: worum es geht, Stand, Termin, Ansprechperson, Forderung, Weg, Offenes, dann Claudes Gesprächs-Briefing. */
+function anrufBriefing(a) {
+  const p = P(), k = a.kontakt || {}, z = [`${a.firma || 'Firma'} – ${a.position || 'Bewerbung'}`];
+  z.push([a.beworbenAm ? `Beworben am ${fmtD(a.beworbenAm)}` : '', `Stand: ${S[a.status]?.label || a.status}`].filter(Boolean).join(' · '));
+  const t = naechsterTermin(a); if (t) z.push(`Termin: ${WT[t.d.getDay()]} ${fmtDs(t.datum)}, ${fmtT(t.d)} Uhr${t.art ? ` (${t.art})` : ''}`);
+  if (k.name) z.push(`Ansprechperson: ${k.name}${k.rolle ? `, ${k.rolle}` : ''}`);
+  const fo = [a.gehaltWunsch ? `Forderung ${eur(a.gehaltWunsch)}` : '', p.eintritt ? `Eintritt ${p.eintritt}` : '', p.kuendigung ? `Kündigungsfrist ${p.kuendigung}` : ''].filter(Boolean).join(' · ');
+  if (fo) z.push(fo);
+  if (a.anfahrt?.min) z.push(`Weg ${a.anfahrt.min} min${a.anfahrt.tage ? `, ${a.anfahrt.tage} Bürotage${a.anfahrt.geschaetzt ? ' (geschätzt)' : ''}` : ''}`);
+  const fr = offeneFragen(a); if (fr) z.push('Offen fürs Gespräch:\n' + fr);
+  let s = z.join('\n');
+  const b = String(a.briefing || '').trim(); if (b) s += '\n\n' + b;
+  return s.length > 1500 ? s.slice(0, 1499).replace(/\s+\S*$/, '') + '…' : s;
+}
 function kontaktListe(apps) {
-  const beste = new Map();
-  for (const a of Object.values(apps || {})) {
-    const r = KONTAKT_RANG[a?.status] || 0; if (!r || a.beispiel) continue;
-    const nummer = kontaktNummer(a.kontakt?.telefon); if (!nummer) continue;
-    const person = String(a.kontakt?.name || '').replace(/^\s*(?:Frau|Herr)\s+/i, '').trim(), firma = kontaktFirma(a.firma);
+  const eigene = kontaktNummer(P().telefon), eintraege = [];
+  for (const [id, a] of Object.entries(apps || {})) {
+    const r = KONTAKT_RANG[a?.status] || 0; if (!r || a.beispiel || !/^[A-Za-z0-9._-]{1,120}$/.test(id)) continue;
+    const k = a.kontakt || {}, person = String(k.name || '').replace(/^\s*(?:Frau|Herr)\s+/i, '').trim(), firma = kontaktFirma(a.firma);
     const name = (person && firma ? `${person} (${firma})` : person || firma).slice(0, 100); if (!name) continue;
-    const alt = beste.get(nummer);
-    if (!alt || r > alt.r || (r === alt.r && person && !alt.person)) beste.set(nummer, {nummer, name, r, person});
+    const nummer = kontaktNummer(k.telefon), basis = kontaktBasis(k.telefon);
+    const text = [...(k.weitere || []), a.briefing, a.notizen, ...(a.verlauf || []).map(v => v.text)].join('\n');
+    const weitere = [...new Set([...(k.weitere || []).map(kontaktNummer), ...nummernIn(text)])].filter(n => n && n !== nummer && n !== basis && n !== eigene).slice(0, 10);
+    eintraege.push({akte: id, name, firma: (firma || name).slice(0, 100), nummer: nummer || null, basis: basis || null, weitere, briefing: anrufBriefing(a), r, person});
   }
-  return [...beste.values()].sort((x, y) => x.nummer.localeCompare(y.nummer)).map(({nummer, name}) => ({nummer, name}));
+  // Eine Nummer gehört genau einer Akte: der mit dem weitesten Stand, bei Gleichstand der mit Ansprechperson.
+  const beste = new Map();
+  for (const e of eintraege) if (e.nummer) { const alt = beste.get(e.nummer); if (!alt || e.r > alt.r || (e.r === alt.r && e.person && !alt.person)) beste.set(e.nummer, e); }
+  return eintraege.map(e => (e.nummer && beste.get(e.nummer) !== e ? {...e, nummer: null} : e))
+    .sort((x, y) => x.akte.localeCompare(y.akte)).map(({r, person, ...e}) => e);
+}
+/** Nachgeschlagene Nummern (Widget-App) in die Akten: in den Kontakt (leer: als Nummer, sonst unter „weitere“) und als Notiz in den Verlauf. Nichts doppelt. */
+function nachschlagEinordnen(liste, apps) {
+  const geaendert = new Set();
+  for (const n of liste || []) {
+    const a = n?.akte && apps[n.akte]; if (!a || a.beispiel || !kontaktNummer(n.nummer) || !n.wer) continue;
+    const kid = `${n.nummer}|${n.zeit}`; a.verlauf ||= [];
+    if (a.verlauf.some(v => v.nachschlag === kid)) continue;
+    a.kontakt ||= {name: '', rolle: '', email: '', telefon: ''};
+    const bekannt = [a.kontakt.telefon, ...(a.kontakt.weitere || [])].some(t => t && telNorm(t) === telNorm(n.nummer));
+    if (!bekannt) { if (!String(a.kontakt.telefon || '').trim()) a.kontakt.telefon = n.nummer; else a.kontakt.weitere = [...(a.kontakt.weitere || []), n.nummer].slice(-10); }
+    const d = new Date(n.zeit);
+    a.verlauf.push({id: uid(), datum: (isNaN(d) ? new Date() : d).toISOString().replace(/\.\d+Z$/, 'Z'), typ: 'notiz', text: `Nummer ${n.nummer} beim Anruf nachgeschlagen: ${String(n.wer).slice(0, 300)}`, nachschlag: kid});
+    geaendert.add(n.akte);
+  }
+  return [...geaendert];
 }
 const KONTAKTE = {laeuft: false};
-const KONTAKTE_GEMELDET = 'bz-kontakte-gemeldet';
+const KONTAKTE_GEMELDET = 'bz-kontakte-gemeldet-2';
 const kurzHash = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) >>> 0; return `${s.length}-${h.toString(36)}`; };
 async function kontakteMelden() {
   const k = anrufKennung();
@@ -4375,7 +4430,21 @@ async function kontakteMelden() {
     if (r.ok && await r.json() === true) try { localStorage.setItem(KONTAKTE_GEMELDET, stand); } catch { /* dann beim nächsten Mal noch einmal */ }
   } catch { /* ohne Netz: beim nächsten Start oder bei „online“ */ } finally { KONTAKTE.laeuft = false; }
 }
-window.bzKontakte = {melden: () => kontakteMelden(), liste: apps => kontaktListe(apps), firma: kontaktFirma}; // für die Tests
+window.bzKontakte = {melden: () => kontakteMelden(), liste: apps => kontaktListe(apps), firma: kontaktFirma, nummernIn}; // für die Tests
+
+/* ---------- Der Claude-Schlüssel für die Widget-App (Nachschlagen unbekannter Anrufer) ----------
+   Die Widget-App öffnet …/Bewerbungszentrale/#bildschirmzeit-ki. Ein Tipp auf „Schlüssel geben“ öffnet bildschirmzeit://ki#<Schlüssel>:
+   Der Schlüssel geht nur von App zu App auf dem Handy, an keinen Server. Nur Claude-Schlüssel (sk-ant-…), der Nur-Lesen-Link gibt nichts. */
+function kiAnWidgetFragen() {
+  const art = window.bzPlattform?.kiFuerWidget?.() || '';
+  const text = art === 'claude'
+    ? 'Die Bildschirmzeit-App möchte deinen Claude-Schlüssel, um Nummern, die nicht in deinen Kontakten stehen, beim Anruf im Netz nachzuschlagen. Der Schlüssel geht nur auf deinem Handy von App zu App. Jede Suche kostet ein paar Cent (höchstens zehn am Tag).'
+    : art === 'anderer' ? 'Nachschlagen geht nur mit einem Claude-Schlüssel (sk-ant-…); in dieser App ist ein anderer eingerichtet.'
+    : 'In dieser App ist kein KI-Schlüssel eingerichtet.';
+  const m = modal(`<div class="modal-head"><h2>Schlüssel für die Widget-App</h2></div><div class="modal-body"><p>${text}</p></div><div class="modal-foot"><button class="btn" type="button" id="kwNein">${art === 'claude' ? 'Abbrechen' : 'OK'}</button>${art === 'claude' ? '<button class="btn solid" type="button" id="kwJa">Schlüssel geben</button>' : ''}</div>`, 'sm');
+  $('#kwNein', m).onclick = closeModal;
+  const ja = $('#kwJa', m); if (ja) ja.onclick = () => { closeModal(); window.bzPlattform.kiAnWidget(); };
+}
 
 /* ================= Ereignisse ================= */
 document.addEventListener('click', async e => {
