@@ -254,6 +254,63 @@ test('anrufe', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('kontakte', async () => {
+  // Namen für die Kontakte auf dem Handy: Nummern der Akten ab „beworben“ an Supabase (die Widget-App benennt damit).
+  // Ohne Netz geht nichts verloren, Unverändertes geht nicht noch einmal raus. Erfundene Nummern und Namen.
+  const kontakte = { gesetzt: [], abbruch: 1 };
+  const { seite, gh, fehler } = await appStarten({ kontakte, bildschirmzeit: 'q'.repeat(43) });
+  const setzen = (id, felder) => gh.dateien.set(`apps/${id}.json`, Buffer.from(JSON.stringify({ ...json(gh, `apps/${id}.json`), ...felder }, null, 1) + '\n'));
+  setzen('test-mail', { status: 'beworben', kontakt: { name: 'Frau Erika Beispiel', rolle: 'Personal', email: 'bewerbung@klima-beispiel.test', telefon: '040 1234 56-0' } });
+  setzen('test-raus', { status: 'interview', kontakt: { name: '', rolle: '', email: '', telefon: '+49 171 0000000' } });
+  setzen('test-portal', { status: 'gemerkt', kontakt: { name: 'Max Muster', rolle: '', email: '', telefon: '030 999999' } });
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.waitForSelector('#dash', { timeout: 20000 });
+  // erster Versuch ohne Netz
+  for (let i = 0; i < 40 && !kontakte.abgebrochen; i++) await warte(250);
+  assert.equal(kontakte.abgebrochen, 1, 'die App versucht es');
+  assert.equal(kontakte.gesetzt.length, 0);
+  // wieder Netz: „online“ schickt es
+  await seite.evaluate(() => window.dispatchEvent(new Event('online')));
+  for (let i = 0; i < 40 && !kontakte.gesetzt.length; i++) await warte(250);
+  assert.equal(kontakte.gesetzt.length, 1);
+  assert.equal(kontakte.gesetzt[0].p_kennung, 'q'.repeat(43));
+  assert.deepEqual(kontakte.gesetzt[0].p_kontakte, [
+    { nummer: '+491710000000', name: 'Zeitwerk Personal' },
+    { nummer: '+49401234560', name: 'Erika Beispiel (Klima Beispiel)' },
+  ], 'nur Akten ab „beworben“, +49, ohne Frau/Herr und Rechtsform');
+  // unverändert: nicht noch einmal
+  await seite.evaluate(() => window.bzKontakte.melden());
+  await warte(500);
+  assert.equal(kontakte.gesetzt.length, 1, 'nichts doppelt');
+  // eine neue Bewerbung: die ganze Liste neu
+  setzen('test-portal', { status: 'beworben' });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  for (let i = 0; i < 40 && kontakte.gesetzt.length < 2; i++) await warte(250);
+  assert.equal(kontakte.gesetzt.length, 2);
+  assert.equal(kontakte.gesetzt[1].p_kontakte.length, 3);
+  assert.deepEqual(kontakte.gesetzt[1].p_kontakte.find((x) => x.nummer === '+4930999999'), { nummer: '+4930999999', name: 'Max Muster (Hafen Muster)' });
+  // Firmennamen: Rechtsform und Klammern weg, lange an einer Wortgrenze gekürzt
+  const f = await seite.evaluate(() => ['Muster Personal GmbH & Co. KG', 'Beispiel & Co (Kunde offen)', 'B.E.I.S.P.I.E.L. GmbH', 'Gesellschaft für Beispiele, Muster und Proben mbH']
+    .map((x) => window.bzKontakte.firma(x)));
+  assert.deepEqual(f, ['Muster Personal', 'Beispiel', 'B.E.I.S.P.I.E.L.', 'Gesellschaft für Beispiele']);
+  assert.deepEqual(fehler, []);
+});
+
+test('kontakte-nur-lesen', async () => {
+  // der Nur-Lesen-Link (für Freunde) schickt nichts
+  const kontakte = { gesetzt: [] };
+  const { seite, gh, fehler } = await appStarten({ kontakte, bildschirmzeit: 'q'.repeat(43), nurLesen: true });
+  gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...json(gh, 'apps/test-mail.json'), status: 'beworben', kontakt: { name: 'Erika Beispiel', telefon: '040 123456' } }, null, 1) + '\n'));
+  await seite.waitForSelector('#lesemodus', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.waitForSelector('#dash', { timeout: 20000 });
+  await seite.evaluate(() => window.bzKontakte.melden());
+  await warte(1500);
+  assert.equal(kontakte.gesetzt.length, 0);
+  assert.deepEqual(fehler, []);
+});
+
 test('gehalt', async () => {
   const { seite, gh, fehler } = await appStarten();
   const a = json(gh, 'apps/test-portal.json');

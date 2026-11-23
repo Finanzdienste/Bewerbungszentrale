@@ -23,6 +23,12 @@ App fürs Handy, für Tobi.
   Verlauf „Anruf“, bei verpasst „<Firma> zurückrufen“ (steht dann unter „Warten auf deine
   Antwort“), ein späteres Gespräch ab 20 Sekunden hakt das ab. Ohne Netz beim nächsten Mal, nichts
   doppelt. Nummern ohne Akte bleiben unberührt.
+- **Kontakte:** Mit derselben Verbindung schickt sie beim Start und bei „online“ die Namen für die
+  Nummern der Akten ab „beworben“ an Supabase (`bildschirmzeit_kontakte_setzen`): „Person (Firma)“
+  oder nur die Firma, ohne Rechtsform, Nummer als +49…. Die ganze Liste ersetzt die alte; geschickt
+  wird nur, was sich geändert hat (Stand im localStorage `bz-kontakte-gemeldet`, erst nach `true`).
+  Hat Tobi in der Bildschirmzeit-App „Kontakte benennen“ freigegeben, benennt die damit die Kontakte
+  auf dem Handy. Der Nur-Lesen-Link schickt nichts.
 - **Akte:** drei Reiter. „Infos“ (Score, Ort, Anfahrt, Gehalt, Weg, Kontakt, Termine, Offenes,
   Briefing, Abschicken, Notizen, zugeklappt Firma/Passung und Anzeige), „Unterlagen“ (nach dem
   Versand die verschickte PDF, dazu Anschreiben, Motivationsschreiben, Lebenslauf, Zeugnisse,
