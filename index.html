@@ -943,6 +943,12 @@ function route() {
     return;
   }
   const [h0, h1] = (location.hash || '').slice(1).split('/');
+  if (h0 === 'akte' && h1) { // aus der Mitteilung der Widget-App (Anrufer erkennen): die Akte öffnen, sobald sie geladen ist
+    const id = decodeURIComponent(h1);
+    try { history.replaceState(history.state, '', `${location.pathname}${location.search}#uebersicht`); } catch {}
+    const oeffnen = n => { if (state.apps[id]) openDrawer(id); else if (n > 0) setTimeout(() => oeffnen(n - 1), 500); };
+    setTimeout(() => oeffnen(40), 0);
+  }
   if (h0 === 'liste' && h1) { state.listBereit = h1 === 'bereit'; state.listFilter = new Set(h1 === 'bereit' || h1 === 'alle' ? [] : [h1]); if (h1 === 'absage') state.hideClosed = false; } // aus den Kacheln im Dashboard
   const v = VIEWS.includes(h0) ? h0 : 'uebersicht';
   state.view = v;

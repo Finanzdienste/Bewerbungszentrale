@@ -336,6 +336,16 @@ test('nachschlagen', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('akte-link', async () => {
+  // #akte/<id> aus der Mitteilung der Widget-App öffnet die Akte, sobald sie geladen ist
+  const { seite, fehler } = await appStarten();
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => { location.hash = '#akte/test-mail'; });
+  await seite.waitForFunction(() => /Klima Beispiel/.test(document.querySelector('#drBody')?.textContent || ''), null, { timeout: 15000 });
+  assert.equal(await seite.evaluate(() => location.hash), '#uebersicht');
+  assert.deepEqual(fehler, []);
+});
+
 test('ki-fuer-widget', async () => {
   // #bildschirmzeit-ki aus der Widget-App: ein Tipp gibt den Claude-Schlüssel per bildschirmzeit://ki#… weiter, an keinen Server.
   const { seite, fehler } = await appStarten();

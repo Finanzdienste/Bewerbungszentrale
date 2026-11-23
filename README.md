@@ -36,6 +36,8 @@ App fürs Handy, für Tobi.
   Anrufe. `#bildschirmzeit-ki` (aus der Bildschirmzeit-App) fragt, ob sie den Claude-Schlüssel
   bekommt; „Schlüssel geben“ öffnet `bildschirmzeit://ki#…`, von App zu App auf dem Handy. Der
   Nur-Lesen-Link schickt und gibt nichts.
+- **Akten-Link:** `#akte/<id>` öffnet die Akte, sobald sie geladen ist (so öffnet ein Tipp auf die
+  Anruf-Mitteilung der Bildschirmzeit-App die passende Bewerbung).
 - **Akte:** drei Reiter. „Infos“ (Score, Ort, Anfahrt, Gehalt, Weg, Kontakt, Termine, Offenes,
   Briefing, Abschicken, Notizen, zugeklappt Firma/Passung und Anzeige), „Unterlagen“ (nach dem
   Versand die verschickte PDF, dazu Anschreiben, Motivationsschreiben, Lebenslauf, Zeugnisse,
