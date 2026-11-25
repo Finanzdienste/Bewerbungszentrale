@@ -734,14 +734,17 @@ const dayDiff = (a, b) => Math.round((parseD(isoDate(b)) - parseD(isoDate(a))) /
 const fmtD = s => { const d = parseD(s); return d ? d.toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'}) : '–'; };
 const fmtDs = s => { const d = parseD(s); return d ? d.toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit'}) : '–'; };
 const fmtT = d => d.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
-/** Stellenanzeigen und Portale auf Android direkt in Firefox öffnen, nicht im Browserfenster der App. */
-function firefoxIntent(url) { const m = /^(https?):\/\/(.+)$/i.exec(url || ''); return m ? `intent://${m[2]}#Intent;scheme=${m[1]};package=org.mozilla.firefox;end` : url; }
-/** Nur in Chrome auf Android an Firefox weitergeben. Läuft die App schon in Firefox, öffnet der Link dort einfach einen Tab. */
-function mitIntent(ua) { return /Android/i.test(ua) && !/Firefox\//i.test(ua); }
+/** Stellenanzeigen und Portale auf Android direkt in Firefox öffnen, nicht im Browserfenster der App.
+ *  rueckfall: nimmt Android den Sprung nicht an, geht die Seite wie bisher auf (statt gar nicht). */
+function firefoxIntent(url, rueckfall = false) { const m = /^(https?):\/\/(.+)$/i.exec(url || ''); return m ? `intent://${m[2]}#Intent;scheme=${m[1]};package=org.mozilla.firefox;${rueckfall ? `S.browser_fallback_url=${encodeURIComponent(url)};` : ''}end` : url; }
+/** In Chrome auf Android an Firefox weitergeben, ebenso aus der installierten App in Firefox (dort ginge der Link
+ *  sonst im kleinen Fenster mit ✕ auf statt in einem richtigen Firefox-Tab). Firefox im Browser-Tab: normaler Tab. */
+function mitIntent(ua, app = false) { return /Android/i.test(ua) && (!/Firefox\//i.test(ua) || app); }
+const alsApp = () => { try { return !matchMedia('(display-mode: browser)').matches; } catch { return false; } };
 document.addEventListener('click', e => {
   const a = e.target?.closest?.('a[data-ff]');
-  if (!a || !mitIntent(navigator.userAgent) || !/^https?:/i.test(a.href)) return;
-  e.preventDefault(); e.stopPropagation(); location.href = firefoxIntent(a.href);
+  if (!a || !mitIntent(navigator.userAgent, alsApp()) || !/^https?:/i.test(a.href)) return;
+  e.preventDefault(); e.stopPropagation(); location.href = firefoxIntent(a.href, true);
 }, true);
 const jetztISO = () => new Date().toISOString().replace(/\.\d+Z$/, 'Z');
 /** Die Mail genau so, wie sie rausging, für den Verlauf (nicht nur die Zusammenfassung). */
