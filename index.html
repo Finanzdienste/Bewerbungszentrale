@@ -4445,6 +4445,12 @@ window.bzKontakte = {melden: () => kontakteMelden(), liste: apps => kontaktListe
 /* ---------- Der Claude-Schlüssel für die Widget-App (Nachschlagen unbekannter Anrufer) ----------
    Die Widget-App öffnet …/Bewerbungszentrale/#bildschirmzeit-ki. Ein Tipp auf „Schlüssel geben“ öffnet bildschirmzeit://ki#<Schlüssel>:
    Der Schlüssel geht nur von App zu App auf dem Handy, an keinen Server. Nur Claude-Schlüssel (sk-ant-…), der Nur-Lesen-Link gibt nichts. */
+/** Die Datei ist fertig, aber der Tipp ist schon zu lange her (js/plattform.js downloads.save): ein Knopf zum Öffnen. Geht ohne Netz. */
+window.bzDateiAnbieten = ({url, name}) => {
+  const m = modal(`<div class="modal-head"><h2>Fertig</h2></div><div class="modal-body"><p>${esc(name)} ist erstellt.</p></div><div class="modal-foot"><button class="btn" type="button" id="dlZu">Schließen</button><a class="btn solid" id="dlOeffnen" href="${esc(url)}" download="${esc(name)}" rel="noopener">${/\.pdf$/i.test(name) ? 'PDF öffnen' : 'Datei öffnen'}</a></div>`, 'sm');
+  $('#dlZu', m).onclick = closeModal;
+  $('#dlOeffnen', m).addEventListener('click', () => setTimeout(closeModal, 300));
+};
 function kiAnWidgetFragen() {
   const art = window.bzPlattform?.kiFuerWidget?.() || '';
   // Noch kein Schlüssel: gleich hier einfügen lassen (ohne den GitHub-Schlüssel noch einmal einzugeben), dann weitergeben. Geht auch ohne Netz.

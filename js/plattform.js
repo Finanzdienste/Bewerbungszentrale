@@ -542,6 +542,15 @@
       const bytes = data instanceof Uint8Array ? data : typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
       const typ = mimeType || (/\.pdf$/i.test(filename) ? 'application/pdf' : /\.csv$/i.test(filename) ? 'text/csv' : /\.txt$/i.test(filename) ? 'text/plain' : 'application/octet-stream');
       const url = URL.createObjectURL(new Blob([bytes], { type: typ }));
+      // Firefox auf dem Handy öffnet die Datei nur, solange der Tipp noch frisch ist (wenige Sekunden). Dauerte das
+      // Erstellen länger (erste PDF, Schriften laden), kam bisher nur eine leere Seite (about:blank, Tobi 25.11.2026).
+      // Dann einen Knopf zum Öffnen anbieten: Der neue Tipp zählt wieder.
+      const frisch = !navigator.userActivation || navigator.userActivation.isActive;
+      if (!frisch && typeof window.bzDateiAnbieten === 'function') {
+        window.bzDateiAnbieten({ url, name: filename || 'datei' });
+        setTimeout(() => URL.revokeObjectURL(url), 600_000);
+        return;
+      }
       const a = document.createElement('a'); a.href = url; a.download = filename || 'datei'; a.rel = 'noopener';
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);

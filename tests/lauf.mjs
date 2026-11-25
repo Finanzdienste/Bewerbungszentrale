@@ -390,6 +390,33 @@ test('ki-fuer-widget-eintragen', async () => {
   assert.deepEqual(fehler.filter((f) => !/internetdisconnected|Failed to fetch|NetworkError/i.test(f)), []);
 });
 
+test('datei-anbieten', async () => {
+  // Dauert das Erstellen länger, ist der Tipp nicht mehr frisch: Firefox am Handy zeigte dann nur about:blank (25.11.2026).
+  // Dann kommt ein Knopf „PDF öffnen“, dessen Tipp die Datei öffnet. Ohne Netz.
+  const { seite, ctx, fehler } = await appStarten();
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.waitForSelector('#dash, #v-liste', { timeout: 20000 });
+  await zuAkte(seite, 'test-mail');
+  await seite.click('[data-tab="unterlagen"]');
+  await seite.waitForSelector('#pdfKarte [data-teil="brief"]', { timeout: 10000 });
+  await ctx.route('https://api.github.com/**', (r) => r.abort('internetdisconnected')); // ohne Netz zum Daten-Repo (wie im Test „pdf“)
+  await seite.evaluate(() => Object.defineProperty(navigator, 'userActivation', { configurable: true, value: { isActive: false, hasBeenActive: true } }));
+  await seite.click('#pdfKarte [data-teil="brief"]');
+  await seite.waitForSelector('#dlOeffnen', { timeout: 60000 });
+  assert.match(await seite.textContent('#mdl'), /Anschreiben_.*\.pdf ist erstellt/);
+  assert.equal(await seite.textContent('#dlOeffnen'), 'PDF öffnen');
+  const [d] = await Promise.all([seite.waitForEvent('download', { timeout: 20000 }), seite.click('#dlOeffnen')]);
+  assert.match(d.suggestedFilename(), /^Anschreiben_.*\.pdf$/);
+  await seite.waitForFunction(() => !document.querySelector('#mdl'), null, { timeout: 5000 });
+  // frischer Tipp: wie bisher sofort
+  await seite.evaluate(() => Object.defineProperty(navigator, 'userActivation', { configurable: true, value: { isActive: true, hasBeenActive: true } }));
+  const [d2] = await Promise.all([seite.waitForEvent('download', { timeout: 60000 }), seite.click('#pdfKarte [data-teil="brief"]')]);
+  assert.match(d2.suggestedFilename(), /^Anschreiben_.*\.pdf$/);
+  assert.equal(await seite.$('#dlOeffnen'), null);
+  assert.deepEqual(fehler.filter((f) => !/internetdisconnected|Failed to fetch|NetworkError/i.test(f)), []);
+});
+
 test('kontakte-nur-lesen', async () => {
   // der Nur-Lesen-Link (für Freunde) schickt nichts
   const kontakte = { gesetzt: [] };
