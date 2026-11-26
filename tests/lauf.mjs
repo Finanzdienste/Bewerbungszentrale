@@ -736,7 +736,7 @@ test('firefox', async () => {
   assert.deepEqual(sprung, [], 'kein Intent aus der Firefox-App');
   await neu.close();
 
-  // Der Umweg über die Widget-App (v88): Aus der installierten App macht Firefox aus jedem neuen Fenster das kleine Fenster mit ✕ und
+  // Der Umweg über die Widget-App (v89): Aus der installierten App macht Firefox aus jedem neuen Fenster das kleine Fenster mit ✕ und
   // verwirft Intents auf sich selbst. Eine andere App darf Firefox normal öffnen: bildschirmzeit://firefox?url=… . Von Haus aus aus,
   // im Profil einzuschalten, je Gerät. Ohne Netz.
   await ctx.route('https://api.github.com/**', (r) => r.abort('internetdisconnected'));
