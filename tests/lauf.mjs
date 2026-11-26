@@ -401,6 +401,15 @@ test('datei-anbieten', async () => {
   await seite.click('[data-tab="unterlagen"]');
   await seite.waitForSelector('#pdfKarte [data-teil="brief"]', { timeout: 10000 });
   await ctx.route('https://api.github.com/**', (r) => r.abort('internetdisconnected')); // ohne Netz zum Daten-Repo (wie im Test „pdf“)
+  // Firefox ohne navigator.userActivation (26.11.2026: weiter about:blank): Die App misst den Tipp selbst. Schriften kommen langsam,
+  // das Erstellen dauert also länger als eine Sekunde – dann der Knopf, nicht das stille Öffnen.
+  await seite.evaluate(() => Object.defineProperty(navigator, 'userActivation', { configurable: true, value: undefined }));
+  await seite.route('**/schrift/**', async (r) => { await warte(1500); await r.fallback(); });
+  await seite.click('#pdfKarte [data-teil="brief"]');
+  await seite.waitForSelector('#dlOeffnen', { timeout: 60000 });
+  await seite.click('#dlZu');
+  await seite.waitForFunction(() => !document.querySelector('#mdl'), null, { timeout: 5000 });
+  await seite.unroute('**/schrift/**');
   await seite.evaluate(() => Object.defineProperty(navigator, 'userActivation', { configurable: true, value: { isActive: false, hasBeenActive: true } }));
   await seite.click('#pdfKarte [data-teil="brief"]');
   await seite.waitForSelector('#dlOeffnen', { timeout: 60000 });
