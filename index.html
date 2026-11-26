@@ -4448,10 +4448,11 @@ window.bzKontakte = {melden: () => kontakteMelden(), liste: apps => kontaktListe
 /* ---------- Der Claude-Schlüssel für die Widget-App (Nachschlagen unbekannter Anrufer) ----------
    Die Widget-App öffnet …/Bewerbungszentrale/#bildschirmzeit-ki. Ein Tipp auf „Schlüssel geben“ öffnet bildschirmzeit://ki#<Schlüssel>:
    Der Schlüssel geht nur von App zu App auf dem Handy, an keinen Server. Nur Claude-Schlüssel (sk-ant-…), der Nur-Lesen-Link gibt nichts. */
-/** Die Datei ist fertig, aber der Tipp ist schon zu lange her (js/plattform.js downloads.save): ein Knopf zum Öffnen. Geht ohne Netz.
-    fenster: PDF in Firefox auf Android – ein normaler Link in ein neues Fenster, ohne download-Attribut (mit ihm zeigt die installierte App dort about:blank). */
-window.bzDateiAnbieten = ({url, name, fenster}) => {
-  const m = modal(`<div class="modal-head"><h2>Fertig</h2></div><div class="modal-body"><p>${esc(name)} ist erstellt.</p></div><div class="modal-foot"><button class="btn" type="button" id="dlZu">Schließen</button><a class="btn solid" id="dlOeffnen" href="${esc(url)}" ${fenster ? 'target="_blank"' : `download="${esc(name)}"`} rel="noopener">${/\.pdf$/i.test(name) ? 'PDF öffnen' : 'Datei öffnen'}</a></div>`, 'sm');
+/** Nur Firefox auf Android (js/plattform.js pdfImFenster): Die PDF ist fertig, aber Firefox lässt von selbst kein Fenster mehr zu,
+    weil der Tipp zu lange her ist. Ein Knopf mit normalem Link in ein neues Fenster, ohne download-Attribut (mit ihm zeigt die
+    installierte App dort about:blank). Geht ohne Netz. */
+window.bzPdfAnbieten = ({url, name}) => {
+  const m = modal(`<div class="modal-head"><h2>Fertig</h2></div><div class="modal-body"><p>${esc(name)} ist erstellt.</p></div><div class="modal-foot"><button class="btn" type="button" id="dlZu">Schließen</button><a class="btn solid" id="dlOeffnen" href="${esc(url)}" target="_blank" rel="noopener">PDF öffnen</a></div>`, 'sm');
   $('#dlZu', m).onclick = closeModal;
   $('#dlOeffnen', m).addEventListener('click', () => setTimeout(closeModal, 300));
 };

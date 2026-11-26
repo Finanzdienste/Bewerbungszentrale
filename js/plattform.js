@@ -539,22 +539,17 @@
   };
 
   /* ------------------------------------------------ Downloads */
-  // Wann zuletzt getippt wurde: für den Knopf „PDF öffnen“ (v79, v82), wenn das Erstellen länger als eine Sekunde dauerte.
-  const TIPP_MS = 1000;
-  let letzterTipp = 0;
-  for (const art of ['pointerdown', 'pointerup', 'click', 'keydown', 'touchend']) document.addEventListener(art, () => { letzterTipp = Date.now(); }, true);
-  const tippFrisch = () => Date.now() - letzterTipp < TIPP_MS && (!navigator.userActivation || navigator.userActivation.isActive);
-
   /*
    * PDF in Firefox auf Android: nie mit dem download-Attribut.
    * Firefox lädt PDFs dort nicht herunter, es zeigt sie im eigenen Betrachter. Trägt der Link „download“, verlegt es die
    * Anzeige in einen neuen Tab und fordert ihn ohne Adresse an. Die installierte App hat keine Tabs: Firefox lädt die
    * leere Adresse dann im App-Fenster selbst, es bleibt about:blank (Tobi, 25. und 26.11.2026; Mozilla-Fehler 1953287,
-   * offen). Mit der Tipp-Zeit hat das nichts zu tun, deshalb halfen v79 und v82 nicht – auch ihr Knopf trug „download“.
+   * offen). Mit der Tipp-Zeit hat das nichts zu tun: Der Knopf „PDF öffnen“ für langsame PDFs (v79) und die eigene
+   * Tipp-Messung (v82) halfen deshalb nicht und sind in v86 wieder ausgebaut.
    * Stattdessen bekommt die PDF über den Service Worker eine echte Adresse (sw.js, Vorrat AUSGABE) und geht als normaler
    * Link in einem neuen Fenster auf: in der installierten App im kleinen Fenster mit ✕ wie die Portal-Links, die App
-   * bleibt dahinter offen. Geht ohne Netz. Ohne Service Worker (privates Fenster, allererster Start) derselbe Link auf
-   * die Blob-Adresse.
+   * bleibt dahinter offen, gespeichert wird dort mit „Download“ (Tobi, 26.11.2026: „Gut hat geklappt“). Geht ohne Netz.
+   * Ohne Service Worker (privates Fenster, allererster Start) derselbe Link auf die Blob-Adresse.
    */
   const firefoxHandy = () => /Android/i.test(navigator.userAgent) && /Firefox\//i.test(navigator.userAgent);
   const AUSGABE = 'bz-ausgabe-v1', AUSGABE_BEHALTEN = 6;
@@ -580,10 +575,10 @@
     let url = await echteAdresse(blob, name);
     if (!url) { url = URL.createObjectURL(blob); setTimeout(() => URL.revokeObjectURL(url), 600_000); }
     // Ein neues Fenster lässt Firefox nur zu, solange der Tipp noch gilt (das meldet navigator.userActivation.isActive),
-    // sonst fragt es nach „Pop-up erlauben?“. Dann der Knopf: Ein Tipp auf einen normalen Link geht immer.
-    const tippGilt = navigator.userActivation ? navigator.userActivation.isActive === true : Date.now() - letzterTipp < TIPP_MS;
-    if (tippGilt) { try { window.open(url, '_blank', 'noopener'); return; } catch { /* dann der Knopf */ } }
-    if (typeof window.bzDateiAnbieten === 'function') window.bzDateiAnbieten({ url, name, fenster: true });
+    // sonst fragt es nach „Pop-up erlauben?“. Dann, und in alten Fassungen ohne diese Abfrage, ein Knopf: Ein Tipp auf
+    // einen normalen Link geht immer.
+    if (navigator.userActivation?.isActive === true) { try { window.open(url, '_blank', 'noopener'); return; } catch { /* dann der Knopf */ } }
+    if (typeof window.bzPdfAnbieten === 'function') window.bzPdfAnbieten({ url, name });
     else location.assign(url);
   }
   const downloads = {
@@ -592,14 +587,7 @@
       const typ = mimeType || (/\.pdf$/i.test(filename) ? 'application/pdf' : /\.csv$/i.test(filename) ? 'text/csv' : /\.txt$/i.test(filename) ? 'text/plain' : 'application/octet-stream');
       const blob = new Blob([bytes], { type: typ });
       if (typ === 'application/pdf' && firefoxHandy()) return pdfImFenster(blob, filename || 'datei.pdf');
-      const url = URL.createObjectURL(blob);
-      // Überall sonst lädt der Browser die Datei herunter. Dauerte das Erstellen länger als eine Sekunde, kommt seit v79
-      // ein Knopf, dessen Tipp sie lädt (gedacht war er für Firefox am Handy; die Ursache dort war eine andere, siehe oben).
-      if (!tippFrisch() && typeof window.bzDateiAnbieten === 'function') {
-        window.bzDateiAnbieten({ url, name: filename || 'datei' });
-        setTimeout(() => URL.revokeObjectURL(url), 600_000);
-        return;
-      }
+      const url = URL.createObjectURL(blob); // überall sonst lädt der Browser die Datei herunter
       const a = document.createElement('a'); a.href = url; a.download = filename || 'datei'; a.rel = 'noopener';
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);

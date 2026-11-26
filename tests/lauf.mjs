@@ -390,9 +390,10 @@ test('ki-fuer-widget-eintragen', async () => {
   assert.deepEqual(fehler.filter((f) => !/internetdisconnected|Failed to fetch|NetworkError/i.test(f)), []);
 });
 
-test('datei-anbieten', async () => {
-  // Dauert das Erstellen länger als eine Sekunde, kommt ein Knopf „PDF öffnen“, dessen Tipp die Datei lädt. Ohne Netz.
-  // (Gedacht war er für Firefox am Handy; die Ursache für about:blank dort war aber das download-Attribut, siehe „pdf-firefox-handy“.)
+test('laden-ohne-knopf', async () => {
+  // Außer in Firefox auf Android lädt eine PDF immer gleich herunter, auch wenn das Erstellen dauert. Den Knopf „PDF öffnen“ für
+  // langsame PDFs (v79) und die eigene Tipp-Messung (v82) gab es nur wegen einer falschen Annahme: about:blank in Firefox am Handy
+  // kam vom download-Attribut (siehe „pdf-firefox-handy“). Beides ist in v86 wieder ausgebaut. Ohne Netz.
   const { seite, ctx, fehler } = await appStarten();
   await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
   await seite.evaluate(() => window.bzPlattform.abgleichen());
@@ -401,28 +402,19 @@ test('datei-anbieten', async () => {
   await seite.click('[data-tab="unterlagen"]');
   await seite.waitForSelector('#pdfKarte [data-teil="brief"]', { timeout: 10000 });
   await ctx.route('https://api.github.com/**', (r) => r.abort('internetdisconnected')); // ohne Netz zum Daten-Repo (wie im Test „pdf“)
-  // Firefox ohne navigator.userActivation (26.11.2026: weiter about:blank): Die App misst den Tipp selbst. Schriften kommen langsam,
-  // das Erstellen dauert also länger als eine Sekunde – dann der Knopf, nicht das stille Öffnen.
+  // Das Erstellen dauert länger als eine Sekunde (Schriften kommen langsam), und der Browser kennt navigator.userActivation nicht
   await seite.evaluate(() => Object.defineProperty(navigator, 'userActivation', { configurable: true, value: undefined }));
   await seite.route('**/schrift/**', async (r) => { await warte(1500); await r.fallback(); });
-  await seite.click('#pdfKarte [data-teil="brief"]');
-  await seite.waitForSelector('#dlOeffnen', { timeout: 60000 });
-  await seite.click('#dlZu');
-  await seite.waitForFunction(() => !document.querySelector('#mdl'), null, { timeout: 5000 });
-  await seite.unroute('**/schrift/**');
-  await seite.evaluate(() => Object.defineProperty(navigator, 'userActivation', { configurable: true, value: { isActive: false, hasBeenActive: true } }));
-  await seite.click('#pdfKarte [data-teil="brief"]');
-  await seite.waitForSelector('#dlOeffnen', { timeout: 60000 });
-  assert.match(await seite.textContent('#mdl'), /Anschreiben_.*\.pdf ist erstellt/);
-  assert.equal(await seite.textContent('#dlOeffnen'), 'PDF öffnen');
-  const [d] = await Promise.all([seite.waitForEvent('download', { timeout: 20000 }), seite.click('#dlOeffnen')]);
+  const [d] = await Promise.all([seite.waitForEvent('download', { timeout: 60000 }), seite.click('#pdfKarte [data-teil="brief"]')]);
   assert.match(d.suggestedFilename(), /^Anschreiben_.*\.pdf$/);
-  await seite.waitForFunction(() => !document.querySelector('#mdl'), null, { timeout: 5000 });
-  // frischer Tipp: wie bisher sofort
-  await seite.evaluate(() => Object.defineProperty(navigator, 'userActivation', { configurable: true, value: { isActive: true, hasBeenActive: true } }));
+  assert.equal(await seite.$('#mdl'), null, 'kein Kasten, kein Knopf');
+  await seite.unroute('**/schrift/**');
+  // Der Browser meldet, der Tipp gelte nicht mehr: trotzdem gleich
+  await seite.evaluate(() => Object.defineProperty(navigator, 'userActivation', { configurable: true, value: { isActive: false, hasBeenActive: true } }));
   const [d2] = await Promise.all([seite.waitForEvent('download', { timeout: 60000 }), seite.click('#pdfKarte [data-teil="brief"]')]);
   assert.match(d2.suggestedFilename(), /^Anschreiben_.*\.pdf$/);
-  assert.equal(await seite.$('#dlOeffnen'), null);
+  assert.equal(await seite.$('#mdl'), null);
+  assert.equal(await seite.evaluate(() => typeof window.bzDateiAnbieten), 'undefined', 'der alte Kasten ist ausgebaut');
   assert.deepEqual(fehler.filter((f) => !/internetdisconnected|Failed to fetch|NetworkError/i.test(f)), []);
 });
 
@@ -479,6 +471,13 @@ test('pdf-firefox-handy', async () => {
   assert.ok(neu, 'der Tipp auf den Knopf öffnet ein neues Fenster');
   await neu.close().catch(() => {});
   await seite.waitForFunction(() => !document.querySelector('#mdl'), null, { timeout: 5000 });
+  // eine alte Firefox-Fassung ohne navigator.userActivation: ebenfalls der Knopf, kein eigenes Raten
+  await seite.evaluate(() => Object.defineProperty(navigator, 'userActivation', { configurable: true, value: undefined }));
+  await seite.click('#pdfKarte [data-teil="brief"]');
+  await seite.waitForSelector('#dlOeffnen', { timeout: 60000 });
+  assert.equal(await seite.evaluate(() => window.__offen.length), 1);
+  await seite.click('#dlZu');
+  await seite.waitForFunction(() => !document.querySelector('#mdl'), null, { timeout: 5000 });
 
   // 3) Nur die neuesten sechs bleiben liegen
   await seite.evaluate(async () => { window.__tipp(true); const d = await window.claude.use('downloads'); for (let i = 0; i < 8; i++) { window.__tipp(true); await d.save({ filename: `Probe_${i}.pdf`, data: new Uint8Array([37, 80, 68, 70]) }); await new Promise((r) => setTimeout(r, 5)); } });
@@ -496,7 +495,7 @@ test('pdf-firefox-handy', async () => {
 
   // 5) Was keine PDF ist, lädt auch dort wie bisher herunter; und kein einziger PDF-Download-Link bis hierher
   assert.deepEqual(geladen, [], 'keine PDF über einen Download-Link');
-  const [csv] = await Promise.all([seite.waitForEvent('download', { timeout: 10000 }), seite.evaluate(async () => { window.__tipp(true); document.body.dispatchEvent(new Event('click', { bubbles: true })); const d = await window.claude.use('downloads'); await d.save({ filename: 'Liste.csv', data: 'a;b' }); })]);
+  const [csv] = await Promise.all([seite.waitForEvent('download', { timeout: 10000 }), seite.evaluate(async () => { const d = await window.claude.use('downloads'); await d.save({ filename: 'Liste.csv', data: 'a;b' }); })]);
   assert.equal(csv.suggestedFilename(), 'Liste.csv');
   assert.deepEqual(fehler.filter((f) => !/internetdisconnected|Failed to fetch|NetworkError/i.test(f)), []);
 });
