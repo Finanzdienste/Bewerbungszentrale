@@ -736,12 +736,38 @@ const fmtDs = s => { const d = parseD(s); return d ? d.toLocaleDateString('de-DE
 const fmtT = d => d.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
 /** Stellenanzeigen und Portale auf Android direkt in Firefox öffnen, nicht im Browserfenster der App. */
 function firefoxIntent(url) { const m = /^(https?):\/\/(.+)$/i.exec(url || ''); return m ? `intent://${m[2]}#Intent;scheme=${m[1]};package=org.mozilla.firefox;end` : url; }
-/** Nur in Chrome auf Android an Firefox weitergeben. Läuft die App schon in Firefox, öffnet der Link dort einfach einen Tab. */
+/** Nur in Chrome auf Android an Firefox weitergeben. In Firefox selbst geht der Link im Browser-Tab von allein als Tab auf,
+    aus der installierten App im kleinen Fenster mit ✕ – oder, eingeschaltet, über die Widget-App (anWidget). */
 function mitIntent(ua) { return /Android/i.test(ua) && !/Firefox\//i.test(ua); }
+/* Aus der in Firefox installierten App kommt kein Link von selbst in einen richtigen Firefox-Tab (Firefox 161, im Quelltext nachgelesen):
+   Ein neues Fenster wird dort immer das kleine Fenster mit ✕ (CustomTabWindowFeature richtet es fest an Firefox selbst), und einen Intent,
+   der auf Firefox selbst zeigt, verwirft Firefox still (AppLinksUseCases.safeParseUri; deshalb v80: „passiert nichts“). Eine andere App
+   darf Firefox dagegen ganz normal öffnen. Darum der Umweg über Tobis Widget-App (von Tobi am 27.11.2026 so gewählt): Sie nimmt
+   bildschirmzeit://firefox?url=<Adresse> an und öffnet die Adresse in Firefox (README „Links in einem richtigen Firefox-Tab“).
+   Je Gerät im Profil einzuschalten (firefoxTabPanel), von Haus aus aus. Braucht kein Netz. */
+function widgetLink(url) { return /^https?:\/\//i.test(url || '') ? `bildschirmzeit://firefox?url=${encodeURIComponent(url)}` : url; }
+const FF_TAB = 'bz-firefox-tab';
+const firefoxTabAn = () => { try { return localStorage.getItem(FF_TAB) === '1'; } catch { return false; } };
+/** Läuft die App als installierte App in Firefox auf Android? (Im Browser-Tab dort braucht es den Umweg nicht.) */
+const firefoxApp = () => { const ua = navigator.userAgent; try { return /Android/i.test(ua) && /Firefox\//i.test(ua) && !matchMedia('(display-mode: browser)').matches; } catch { return false; } };
+/** Gibt die Adresse an die Widget-App. Tut sich danach nichts (die Widget-App fehlt oder kann es noch nicht, oder Firefox nimmt den Link
+    gerade nicht an), bleibt der bisherige Weg einen Tipp entfernt. Fragt Firefox nach oder wechselt die App, kommt der Hinweis nicht. */
+function anWidget(url) {
+  let tat = document.visibilityState !== 'visible';
+  const merk = () => { tat = true; };
+  window.addEventListener('blur', merk); document.addEventListener('visibilitychange', merk);
+  const ziel = widgetLink(url);
+  if (typeof window.bzOeffnen === 'function') window.bzOeffnen(ziel); else location.href = ziel;
+  setTimeout(() => {
+    window.removeEventListener('blur', merk); document.removeEventListener('visibilitychange', merk);
+    if (!tat) toast('Firefox geht nicht auf?', {action: {label: 'Hier öffnen', fn: () => window.open(url, '_blank', 'noopener')}});
+  }, 1500);
+}
 document.addEventListener('click', e => {
   const a = e.target?.closest?.('a[data-ff]');
-  if (!a || !mitIntent(navigator.userAgent) || !/^https?:/i.test(a.href)) return;
-  e.preventDefault(); e.stopPropagation(); location.href = firefoxIntent(a.href);
+  if (!a || !/^https?:/i.test(a.href)) return;
+  if (mitIntent(navigator.userAgent)) { e.preventDefault(); e.stopPropagation(); location.href = firefoxIntent(a.href); return; }
+  if (firefoxApp() && firefoxTabAn()) { e.preventDefault(); e.stopPropagation(); anWidget(a.href); }
 }, true);
 const jetztISO = () => new Date().toISOString().replace(/\.\d+Z$/, 'Z');
 /** Die Mail genau so, wie sie rausging, für den Verlauf (nicht nur die Zusammenfassung). */
@@ -1969,7 +1995,7 @@ function renderProfil(force) {
     <span class="ki-status" id="wohnortSt" style="margin-top:8px">${p.heim ? `Gespeichert: ${Number(p.heim.lat).toFixed(4)}, ${Number(p.heim.lon).toFixed(4)}${p.heimStand ? `, geändert am ${fmtD(p.heimStand)}` : ''}` : 'Noch kein Wohnort gespeichert.'}</span>
   </section>
   ${(() => { const z = ordnerZeile(list().filter(istBereit)); return z ? `<section class="panel" id="mappenPanel"><div class="panel-head"><h2>Bewerbungsmappen</h2><span class="sub">als Ordner auf dem PC und in Google Drive</span></div>${z}</section>` : ''; })()}
-  ${firefoxPanel()}
+  ${firefoxPanel()}${firefoxTabPanel()}
   <div class="profil-rest">${cvPanel()}${linkedinPanel()}${bildschirmzeitPanel()}</div>`;
   wohnortKarte();
 }
@@ -1980,6 +2006,25 @@ function firefoxPanel() {
     <div class="ki-row" style="margin:0 0 8px"><button class="btn sm primary" type="button" data-act="nach-firefox">${ic('ext')}App mit Zugang in Firefox öffnen</button></div>
     <p class="desc" id="firefoxSt" style="margin:0">Fragt Android nach der App, tippe auf Firefox. In Firefox dann im Menü ⋮ auf „Zum Startbildschirm hinzufügen“ und die alte App vom Startbildschirm löschen. Beim ersten Senden per Gmail fragt Firefox einmal nach deinem Google-Konto.</p>
   </section>`;
+}
+/** Nur in der in Firefox auf Android installierten App: Anzeigen und Portale über Tobis Widget-App in einem richtigen Firefox-Tab öffnen
+    (anWidget). Je Gerät gemerkt, von Haus aus aus – die Widget-App muss den Einstieg bildschirmzeit://firefox kennen. */
+function firefoxTabPanel() {
+  if (!firefoxApp()) return '';
+  const an = firefoxTabAn();
+  return `<section class="panel" id="firefoxTabPanel"><div class="panel-head"><h2>Anzeigen in Firefox</h2><span class="sub">${an ? 'gehen über die Widget-App in einem richtigen Tab auf' : 'gehen im kleinen Fenster über der App auf'}</span></div>
+    <div class="ki-row" style="margin:0 0 8px"><button class="btn sm ${an ? '' : 'primary'}" type="button" data-act="firefox-tab" aria-pressed="${an}">${ic('ext')}${an ? 'Wieder im kleinen Fenster öffnen' : 'In einem richtigen Firefox-Tab öffnen'}</button></div>
+    <p class="desc" style="margin:0">${an
+      ? 'Fragt Firefox bei jedem Link nach: in Firefox unter Einstellungen → „Links in Apps öffnen“ „Immer“ wählen. Tut sich nach dem Tipp nichts, kann deine Widget-App das noch nicht; dann hilft „Hier öffnen“ im Hinweis unten.'
+      : 'Aus der installierten App öffnet Firefox Links immer im kleinen Fenster mit ✕ (dort ⋮ → „In Firefox öffnen“). Von selbst in einen richtigen Tab geht es nur über deine Widget-App: Sie braucht dafür die neueste Fassung.'}</p>
+  </section>`;
+}
+function firefoxTabUmschalten() {
+  try { if (firefoxTabAn()) localStorage.removeItem(FF_TAB); else localStorage.setItem(FF_TAB, '1'); }
+  catch { toast('Das lässt sich auf diesem Gerät nicht merken.'); return; }
+  const alt = $('#firefoxTabPanel'); if (!alt) return; // nur den Abschnitt nachziehen, damit Eingaben im Profil bleiben
+  const vorlage = document.createElement('template'); vorlage.innerHTML = firefoxTabPanel();
+  const neu = vorlage.content.firstElementChild; if (neu) alt.replaceWith(neu);
 }
 async function nachFirefox() {
   const link = window.bzPlattform?.uebergabeLink?.() || '', st = $('#firefoxSt');
@@ -4628,6 +4673,7 @@ document.addEventListener('click', async e => {
     if (act === 'ordner-waehlen') return ordnerWaehlen();
     if (act === 'wohnort-gps') return wohnortGps();
     if (act === 'nach-firefox') return nachFirefox();
+    if (act === 'firefox-tab') return firefoxTabUmschalten();
     if (act === 'drive-verbinden') return driveVerbinden();
     if (act === 'zurueckholen') { const rid = t.closest('[data-rid]')?.dataset.rid; if (rid) zurueckholen(rid); return; }
     if (act === 'sammel-mail') return sammelMailModal();

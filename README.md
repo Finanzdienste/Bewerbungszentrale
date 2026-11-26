@@ -57,7 +57,7 @@ App fürs Handy, für Tobi.
   Abschlusszeugnisse getrennt, wenn es beide gibt (auch im Ordner „Allgemein“), alles davon auch in
   jedem Drive-Ordner, Dateinamen höchstens 50 Zeichen, bei englischen Anzeigen englisch wie `CV_…`, `Cover_Letter_…`, in „Portal-Infos.txt“ dazu Berufserfahrung, Ausbildung, Sprachen und Kenntnisse in den Feldern von Workday & Co. zum Kopieren (weil Workday den Lebenslauf falsch ausliest), Anschreiben und Begleitmail zum Kopieren; in Firefox auf Android geht eine PDF nie über einen Download-Link auf, sondern als normaler Link in einem neuen Fenster, unter einer echten Adresse `ausgabe/<Kennung>/<Dateiname>` vom Service Worker (v84; in der installierten App im kleinen Fenster mit ✕ und „Download“, die App bleibt dahinter offen, geht ohne Netz; lässt Firefox von selbst kein Fenster mehr zu, weil der Tipp zu lange her ist, kommt dort ein Knopf „PDF öffnen“ mit demselben Link; Hinweis und Statuszeile sagen dort, was wirklich geschieht – „Eine PDF geht in einem eigenen Fenster auf. Dort auf „Download“ tippen …“ und „Geöffnet: … Seiten“ statt „Landet in den Downloads …“ und „Gespeichert: … Seiten“, auch im Teilen-Fenster (v87, `downloads.save` gibt dafür zurück, was geschah)): Mit dem `download`-Attribut zeigt Firefox die PDF dort in einem neuen Tab ohne Adresse an, und die installierte App, die keine Tabs hat, zeigt dann nur about:blank (Mozilla-Fehler 1953287, Tobi 25. und 26.11.2026; an der Tipp-Zeit lag es nie: der Knopf für langsame PDFs aus v79 und die eigene Tipp-Messung aus v82 sind in v86 wieder ausgebaut, überall sonst lädt eine PDF immer gleich herunter; Tests `pdf-firefox-handy`, `sw-ausgabe`, `laden-ohne-knopf`)) und „Verlauf“ (oben „Du bist dran“
   mit Antwortvorschlag oder Rückruf, darunter nur der Gesprächsverlauf mit den Mails im Wortlaut).
-  Links zu Anzeigen und Portalen öffnen auf Android direkt in Firefox. Aus der in Firefox installierten App gehen sie im kleinen Fenster mit ✕ auf (⋮ → „In Firefox öffnen“ für einen richtigen Tab); ein Intent nach Firefox geht dort nicht, Firefox nimmt ihn still nicht an (v80, Tobi 26.11.2026: „passiert nichts“). In Chrome auf Android
+  Links zu Anzeigen und Portalen öffnen auf Android direkt in Firefox. Aus der in Firefox installierten App gehen sie im kleinen Fenster mit ✕ auf (⋮ → „In Firefox öffnen“ für einen richtigen Tab); ein Intent nach Firefox geht dort nicht, Firefox nimmt ihn still nicht an (v80, Tobi 26.11.2026: „passiert nichts“). Von selbst in einen richtigen Tab geht es dort nur über die Widget-App, siehe „Links in einem richtigen Firefox-Tab“ (v88). In Chrome auf Android
   übergibt „In Firefox nutzen“ im Profil den Zugang per Link (nur im Anker) an Firefox.
 - **Vanilla-JS-PWA ohne Bauschritt**, live über GitHub Pages. Alles hier ist
   öffentlich lesbar, darum stehen hier keine persönlichen Daten.
@@ -161,6 +161,43 @@ zieht ihre Zeit seit dem 19.11.2026 von Chrome ab und zeigt sie als
   Worker speichert diese Anfragen nie.
 - Geprüft von `node tests/lauf.mjs bildschirmzeit` (Supabase nachgebaut,
   erfundene Kennungen).
+
+## Links in einem richtigen Firefox-Tab
+
+Tobi, 27.11.2026: „Zur Anzeige“ soll aus der in Firefox installierten App
+richtig in Firefox aufgehen, nicht im kleinen Fenster mit ✕ über der App.
+
+**Warum es nicht direkt geht** (Firefox 161, im Quelltext nachgelesen): Ein
+Link, der ein neues Fenster will, wird in der installierten App immer zum
+kleinen Fenster – `CustomTabWindowFeature` richtet es fest an Firefox selbst.
+Und einen Intent, der auf Firefox selbst zeigt (`intent://…;package=org.mozilla.firefox`,
+auch `fenix://open?url=…`), verwirft Firefox still: `AppLinksUseCases.safeParseUri`
+(„Ignore intents that would open in the browser itself“) und
+`createBrowsableIntents` („don't self target“). Deshalb passierte in v80 nichts.
+Eine **andere** App darf Firefox dagegen ganz normal öffnen.
+
+**Der Umweg** (von Tobi gewählt): Die App gibt den Link an die Widget-App,
+die öffnet ihn in Firefox.
+
+- Vertrag: `bildschirmzeit://firefox?url=<Adresse, mit encodeURIComponent kodiert>`.
+  Die Widget-App öffnet die Adresse mit `ACTION_VIEW` im Paket
+  `org.mozilla.firefox` (neuer Task, keine Custom-Tab-Extras, sonst wird es
+  wieder das kleine Fenster), ohne eigene Oberfläche, und beendet sich sofort.
+  Ohne Firefox: derselbe Intent ohne Paket. Nur `http`/`https`. Ihr
+  Intent-Filter braucht `VIEW`, `DEFAULT` und `BROWSABLE` (Firefox hängt
+  `BROWSABLE` an jeden Link, den es an eine App gibt).
+- In der App: `widgetLink`, `anWidget`, `firefoxApp` in `index.html`, für alle
+  Links mit `data-ff`. Nur in der installierten App in Firefox auf Android, und
+  nur eingeschaltet: Profil → „Anzeigen in Firefox“ (je Gerät,
+  `localStorage` `bz-firefox-tab`, von Haus aus aus). Tut sich 1,5 Sekunden
+  nach dem Tipp nichts (kein Wechsel, keine Nachfrage), bietet ein Hinweis
+  „Hier öffnen“ den alten Weg an.
+- Firefox fragt vor jedem Sprung in eine App nach, außer unter Einstellungen →
+  „Links in Apps öffnen“ steht „Immer“ (dann gehen auch andere Links ohne
+  Nachfrage in ihre Apps).
+- Stand 27.11.2026: Die Widget-App kennt den Einstieg noch nicht (eigener
+  Chat im Repo Bildschirmzeit). Bis dahin bleibt der Schalter aus.
+- Geprüft von `node tests/lauf.mjs firefox`.
 
 ## Läufe
 

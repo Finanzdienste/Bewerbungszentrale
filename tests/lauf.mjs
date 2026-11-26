@@ -715,7 +715,10 @@ test('firefox', async () => {
   assert.equal(mitIntent('Mozilla/5.0 (Linux; Android 14; SM-S921B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36'), true, 'Chrome auf Android: an Firefox geben');
   assert.equal(mitIntent('Mozilla/5.0 (Android 14; Mobile; rv:145.0) Gecko/145.0 Firefox/145.0'), false, 'schon in Firefox: normaler Tab');
   assert.equal(mitIntent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'), false);
-  const { seite, fehler } = await appStarten();
+  const k = html.indexOf('function widgetLink'); const widgetLink = new Function(`${html.slice(k, html.indexOf('\n', k))}; return widgetLink;`)();
+  assert.equal(widgetLink('https://www.doerner.de/job/test?x=1&y=2#z'), 'bildschirmzeit://firefox?url=https%3A%2F%2Fwww.doerner.de%2Fjob%2Ftest%3Fx%3D1%26y%3D2%23z', 'die ganze Adresse kodiert im Parameter url');
+  assert.equal(widgetLink('mailto:a@b.test'), 'mailto:a@b.test');
+  const { seite, ctx, fehler } = await appStarten();
   await zuAkte(seite, 'test-portal');
   await seite.waitForSelector('.fakten', { timeout: 10000 });
   assert.equal(await seite.locator('#anzeigeOben a[data-ff]').count(), 1, 'Anzeige-Link ganz oben und markiert');
@@ -723,7 +726,8 @@ test('firefox', async () => {
   await seite.evaluate(() => {
     Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 (Android 14; Mobile; rv:145.0) Gecko/145.0 Firefox/145.0' });
     const mm = window.matchMedia.bind(window);
-    window.matchMedia = (q) => /display-mode/.test(q) ? { matches: /standalone/.test(q), media: q, addEventListener() {}, removeEventListener() {} } : mm(q);
+    window.__modus = 'standalone'; // 'browser': Firefox im Browser-Tab
+    window.matchMedia = (q) => /display-mode/.test(q) ? { matches: q.includes(window.__modus), media: q, addEventListener() {}, removeEventListener() {} } : mm(q);
   });
   const sprung = [];
   seite.on('request', (r) => { if (r.url().startsWith('intent:')) sprung.push(r.url()); });
@@ -731,7 +735,58 @@ test('firefox', async () => {
   assert.ok(neu, 'Link öffnet ein neues Fenster');
   assert.deepEqual(sprung, [], 'kein Intent aus der Firefox-App');
   await neu.close();
-  assert.deepEqual(fehler, []);
+
+  // Der Umweg über die Widget-App (v88): Aus der installierten App macht Firefox aus jedem neuen Fenster das kleine Fenster mit ✕ und
+  // verwirft Intents auf sich selbst. Eine andere App darf Firefox normal öffnen: bildschirmzeit://firefox?url=… . Von Haus aus aus,
+  // im Profil einzuschalten, je Gerät. Ohne Netz.
+  await ctx.route('https://api.github.com/**', (r) => r.abort('internetdisconnected'));
+  await seite.evaluate(() => { window.__ziel = []; window.bzOeffnen = (u) => { window.__ziel.push(u); }; });
+  const anzeige = await seite.getAttribute('#anzeigeOben a[data-ff]', 'href');
+  const auf = async () => { const vor = ctx.pages().length; const [s] = await Promise.all([ctx.waitForEvent('page', { timeout: 4000 }).catch(() => null), seite.click('#anzeigeOben a[data-ff]')]); if (s) await s.close(); return !!s || ctx.pages().length > vor; };
+  const profil = async () => { if (await seite.isVisible('#drClose')) await seite.click('#drClose', { timeout: 3000 }).catch(() => {}); /* die Akte schließt sich beim Wechsel auch von selbst */ await seite.goto('http://app.test/Bewerbungszentrale/#profil'); await seite.waitForSelector('#wohnortPanel', { timeout: 10000 }); };
+  await profil();
+  assert.equal(await seite.evaluate(() => localStorage.getItem('bz-firefox-tab')), null, 'von Haus aus aus');
+  assert.match(await seite.textContent('#firefoxTabPanel'), /gehen im kleinen Fenster über der App auf.*In einem richtigen Firefox-Tab öffnen.*⋮ → „In Firefox öffnen“.*nur über deine Widget-App/s);
+  await seite.click('[data-act="firefox-tab"]');
+  await seite.waitForFunction(() => /Wieder im kleinen Fenster öffnen/.test(document.querySelector('#firefoxTabPanel')?.textContent || ''), null, { timeout: 5000 });
+  assert.equal(await seite.evaluate(() => localStorage.getItem('bz-firefox-tab')), '1');
+  assert.match(await seite.textContent('#firefoxTabPanel'), /über die Widget-App in einem richtigen Tab auf.*„Links in Apps öffnen“ „Immer“/s);
+  // eingeschaltet: Der Link geht an die Widget-App, kein neues Fenster
+  await zuAkte(seite, 'test-portal');
+  await seite.waitForSelector('#anzeigeOben a[data-ff]', { timeout: 10000 });
+  assert.equal(await auf(), false, 'kein kleines Fenster mehr');
+  assert.deepEqual(await seite.evaluate(() => window.__ziel), [`bildschirmzeit://firefox?url=${encodeURIComponent(anzeige)}`]);
+  // Tut sich nichts (die Widget-App kann es noch nicht): Der alte Weg bleibt einen Tipp entfernt
+  await seite.waitForSelector('#toasts .toast button', { timeout: 5000 });
+  assert.match(await seite.textContent('#toasts .toast'), /Firefox geht nicht auf\?.*Hier öffnen/s);
+  const [ersatz] = await Promise.all([ctx.waitForEvent('page', { timeout: 10000 }).catch(() => null), seite.click('#toasts .toast button')]);
+  assert.ok(ersatz, '„Hier öffnen“ öffnet die Anzeige wie bisher');
+  await ersatz.close();
+  await seite.waitForFunction(() => !document.querySelector('#toasts .toast'), null, { timeout: 8000 });
+  // Tut sich etwas (Firefox fragt nach oder die App wechselt): kein Hinweis
+  await seite.click('#anzeigeOben a[data-ff]');
+  await seite.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await warte(2200);
+  assert.equal(await seite.locator('#toasts .toast').count(), 0, 'kein Hinweis, wenn Firefox übernimmt');
+  assert.equal(await seite.evaluate(() => window.__ziel.length), 2);
+  // Firefox im Browser-Tab: Dort geht der Link von selbst als Tab auf, also kein Umweg und kein Abschnitt im Profil
+  await seite.evaluate(() => { window.__modus = 'browser'; });
+  assert.equal(await auf(), true, 'im Browser-Tab normal');
+  assert.equal(await seite.evaluate(() => window.__ziel.length), 2);
+  await profil();
+  assert.equal(await seite.locator('#firefoxTabPanel').count(), 0);
+  // wieder aus: wie vorher im kleinen Fenster
+  await seite.evaluate(() => { window.__modus = 'standalone'; });
+  await seite.goto('http://app.test/Bewerbungszentrale/#uebersicht'); await profil();
+  await seite.click('[data-act="firefox-tab"]');
+  await seite.waitForFunction(() => /In einem richtigen Firefox-Tab öffnen/.test(document.querySelector('#firefoxTabPanel')?.textContent || ''), null, { timeout: 5000 });
+  assert.equal(await seite.evaluate(() => localStorage.getItem('bz-firefox-tab')), null);
+  await zuAkte(seite, 'test-portal');
+  await seite.waitForSelector('#anzeigeOben a[data-ff]', { timeout: 10000 });
+  assert.equal(await auf(), true, 'ausgeschaltet: wieder ein neues Fenster');
+  assert.equal(await seite.evaluate(() => window.__ziel.length), 2);
+  assert.deepEqual(sprung, []);
+  assert.deepEqual(fehler.filter((f) => !/internetdisconnected|Failed to fetch|NetworkError/i.test(f)), []);
 });
 
 test('dateinamen', async () => {
