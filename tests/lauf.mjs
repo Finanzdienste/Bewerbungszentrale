@@ -588,22 +588,22 @@ test('firefox', async () => {
   assert.equal(mitIntent('Mozilla/5.0 (Linux; Android 14; SM-S921B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36'), true, 'Chrome auf Android: an Firefox geben');
   assert.equal(mitIntent('Mozilla/5.0 (Android 14; Mobile; rv:145.0) Gecko/145.0 Firefox/145.0'), false, 'schon in Firefox: normaler Tab');
   assert.equal(mitIntent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'), false);
-  // als installierte App in Firefox: sonst geht der Link im kleinen Fenster mit ✕ auf, nicht in einem Firefox-Tab
-  assert.equal(mitIntent('Mozilla/5.0 (Android 14; Mobile; rv:145.0) Gecko/145.0 Firefox/145.0', true), true, 'Firefox-App: an Firefox geben');
-  assert.equal(mitIntent('Mozilla/5.0 (X11; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0', true), false, 'nicht am PC');
-  assert.equal(firefoxIntent('https://jobs.test/stelle?id=1', true), 'intent://jobs.test/stelle?id=1#Intent;scheme=https;package=org.mozilla.firefox;S.browser_fallback_url=https%3A%2F%2Fjobs.test%2Fstelle%3Fid%3D1;end', 'mit Rückfall auf die Seite selbst');
   const { seite, fehler } = await appStarten();
   await zuAkte(seite, 'test-portal');
   await seite.waitForSelector('.fakten', { timeout: 10000 });
   assert.equal(await seite.locator('#anzeigeOben a[data-ff]').count(), 1, 'Anzeige-Link ganz oben und markiert');
-  // Firefox am Handy, App vom Startbildschirm: der Tipp springt per Intent nach Firefox
+  // Installierte App in Firefox am Handy: kein Intent (den nimmt Firefox dort still nicht an, v80: „passiert nichts“), der Link geht normal auf
   await seite.evaluate(() => {
     Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 (Android 14; Mobile; rv:145.0) Gecko/145.0 Firefox/145.0' });
     const mm = window.matchMedia.bind(window);
     window.matchMedia = (q) => /display-mode/.test(q) ? { matches: /standalone/.test(q), media: q, addEventListener() {}, removeEventListener() {} } : mm(q);
   });
-  const [sprung] = await Promise.all([seite.waitForEvent('request', { predicate: (r) => r.url().startsWith('intent:'), timeout: 10000 }).catch(() => null), seite.click('#anzeigeOben a[data-ff]')]);
-  assert.equal(sprung?.url(), 'intent://example.org/stelle/1', 'Sprung nach Firefox (den Intent-Teil hinter # zeigt die Anfrage nicht, den prüft firefoxIntent oben)');
+  const sprung = [];
+  seite.on('request', (r) => { if (r.url().startsWith('intent:')) sprung.push(r.url()); });
+  const [neu] = await Promise.all([seite.context().waitForEvent('page', { timeout: 10000 }).catch(() => null), seite.click('#anzeigeOben a[data-ff]')]);
+  assert.ok(neu, 'Link öffnet ein neues Fenster');
+  assert.deepEqual(sprung, [], 'kein Intent aus der Firefox-App');
+  await neu.close();
   assert.deepEqual(fehler, []);
 });
 

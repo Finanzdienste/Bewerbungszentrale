@@ -47,7 +47,7 @@ App fürs Handy, für Tobi.
   Abschlusszeugnisse getrennt, wenn es beide gibt (auch im Ordner „Allgemein“), alles davon auch in
   jedem Drive-Ordner, Dateinamen höchstens 50 Zeichen, bei englischen Anzeigen englisch wie `CV_…`, `Cover_Letter_…`, in „Portal-Infos.txt“ dazu Berufserfahrung, Ausbildung, Sprachen und Kenntnisse in den Feldern von Workday & Co. zum Kopieren (weil Workday den Lebenslauf falsch ausliest), Anschreiben und Begleitmail zum Kopieren; dauert das Erstellen so lange, dass der Tipp nicht mehr frisch ist (`navigator.userActivation`), kommt ein Knopf „PDF öffnen“, weil Firefox am Handy sonst nur eine leere Seite zeigt) und „Verlauf“ (oben „Du bist dran“
   mit Antwortvorschlag oder Rückruf, darunter nur der Gesprächsverlauf mit den Mails im Wortlaut).
-  Links zu Anzeigen und Portalen öffnen auf Android direkt in Firefox, auch aus der in Firefox installierten App (sonst gingen sie dort im kleinen Fenster mit ✕ auf; nimmt Android den Sprung nicht an, öffnet die Seite wie bisher). In Chrome auf Android
+  Links zu Anzeigen und Portalen öffnen auf Android direkt in Firefox. Aus der in Firefox installierten App gehen sie im kleinen Fenster mit ✕ auf (⋮ → „In Firefox öffnen“ für einen richtigen Tab); ein Intent nach Firefox geht dort nicht, Firefox nimmt ihn still nicht an (v80, Tobi 26.11.2026: „passiert nichts“). In Chrome auf Android
   übergibt „In Firefox nutzen“ im Profil den Zugang per Link (nur im Anker) an Firefox.
 - **Vanilla-JS-PWA ohne Bauschritt**, live über GitHub Pages. Alles hier ist
   öffentlich lesbar, darum stehen hier keine persönlichen Daten.
