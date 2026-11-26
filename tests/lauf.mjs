@@ -1457,6 +1457,25 @@ test('score-stundenlohn', async () => {
   assert.deepEqual(fehler.filter((f) => !/Failed to fetch|NetworkError|internetdisconnected|ERR_INTERNET/i.test(f)), []);
 });
 
+test('remote-anzeige', async () => {
+  // Komplett remote: kein Arbeitsweg, auch wenn im Datensatz noch eine Autozeit zum fernen Firmensitz steht
+  const { seite, gh, fehler } = await appStarten();
+  gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...json(gh, 'apps/test-mail.json'), status: 'beworben', beworbenAm: '2026-11-20',
+    anfahrt: { min: 300, auto: 300, art: 'auto', tage: 0, tageGrund: 'komplett remote' } }, null, 1) + '\n'));
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.goto('http://app.test/Bewerbungszentrale/#uebersicht');
+  await seite.waitForSelector('#dash [data-bereich="beworben"] [data-open="test-mail"]', { state: 'attached', timeout: 10000 });
+  const zeile = await seite.textContent('#dash [data-bereich="beworben"] [data-open="test-mail"]');
+  assert.match(zeile, /remote/);
+  assert.doesNotMatch(zeile, /300 min/);
+  await seite.goto('http://app.test/Bewerbungszentrale/#akte/test-mail');
+  await seite.waitForSelector('#fahrtText', { timeout: 10000 });
+  assert.match(await seite.textContent('#fahrtText'), /Komplett remote, kein täglicher Arbeitsweg/);
+  assert.doesNotMatch(await seite.textContent('.fakten'), /300 min/);
+  assert.deepEqual(fehler, []);
+});
+
 test('wohnort', async () => {
   // Wohnort im Profil setzen: landet als heim im Profil (Daten-Repo), oben gibt es keine Knöpfe zum Anlegen mehr
   const { seite, gh, fehler } = await appStarten({ breite: 1280 });

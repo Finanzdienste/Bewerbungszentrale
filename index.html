@@ -1147,7 +1147,7 @@ function dashBereicheHTML() {
   const gehoert = {antwort: wartetAufDich, bereit: a => bereitSet.has(a.id), vorbereitung: a => a.status === 'gemerkt' && !bereitSet.has(a.id), absage: a => a.status === 'absage' || a.status === 'zurueckgezogen', alle: () => true};
   const passt = a => !q || matches(a, q);
   const zeile = (a, k) => { const w = wertungVon(a), an = a.anfahrt || {}, nt = naechsterTermin(a);
-    const d = [a.ort, an.min ? `${an.min} min` : '', a.status === 'gemerkt' ? (istPortal(a) ? 'über Portal' : 'per Mail') : '', a.fristBis && a.status === 'gemerkt' ? `Frist ${fmtDs(a.fristBis)}` : '', nt ? `${WT[nt.d.getDay()]} ${fmtDs(isoDate(nt.d))}, ${fmtT(nt.d)}` : '', a.eingangAm && a.status === 'beworben' ? 'Eingang bestätigt' : '', a.status !== 'gemerkt' && a.beworbenAm ? `beworben ${relTage(a.beworbenAm)}` : ''].filter(Boolean).join(' · ');
+    const d = [a.ort, fahrtKurz(a), a.status === 'gemerkt' ? (istPortal(a) ? 'über Portal' : 'per Mail') : '', a.fristBis && a.status === 'gemerkt' ? `Frist ${fmtDs(a.fristBis)}` : '', nt ? `${WT[nt.d.getDay()]} ${fmtDs(isoDate(nt.d))}, ${fmtT(nt.d)}` : '', a.eingangAm && a.status === 'beworben' ? 'Eingang bestätigt' : '', a.status !== 'gemerkt' && a.beworbenAm ? `beworben ${relTage(a.beworbenAm)}` : ''].filter(Boolean).join(' · ');
     const auf = k === 'antwort' ? (a.aufgaben || []).find(x => !x.erledigt && /(?:^|\s)(?:antworten|zurückrufen|rückruf)\b/i.test(x.text || '')) : null;
     return `<li data-open="${a.id}" tabindex="0" style="--tone:${w.wert != null ? ringColor(w.wert) : 'var(--muted)'}"><span class="ico" style="font-family:var(--f-mono);font-size:12px;font-weight:600">${w.wert != null ? (w.geschaetzt ? '≈' : '') + w.wert : '–'}</span><span style="min-width:0"><div class="t">${esc(a.position || 'Position fehlt')} · ${esc(a.firma || 'Ohne Firma')}</div><div class="d">${esc(auf ? auf.text.replace(/\s*\((?:Antwort liegt in der App bereit)\)/, '') : d)}</div></span></li>`; };
   const gezeigt = new Set(); // bei der Suche klappt „Alle“ nur auf, wenn ein Treffer in keinem anderen Bereich steht
@@ -1381,8 +1381,12 @@ function fahrtChip(x) {
   const ca = pendelGeschaetzt(x);
   return `<span class="chip ${pm >= 6 ? 'warn' : ''}" title="${esc(`${an.min} min einfach ${WEG_ART[an.art] || ''}, ${zahlDe(pendelTage(x))} Bürotage${ca ? ' (geschätzt, die Anzeige nennt keine)' : ''}${alt ? (pm ? `, minus ${pm} in der Gesamtwertung` : '') : ', zählt im Stundenlohn'}`)}">${ca ? '≈ ' : ''}${zahlDe(h)} Std. Fahrt pro Woche</span>`;
 }
+/** Fahrzeit für Listen: bei komplett remote kein Weg (die gespeicherte Autozeit zu einem fernen Firmensitz zählt nicht). */
+const fahrMin = a => pendelTage(a) === 0 ? 0 : a.anfahrt?.min ?? null;
+const fahrtKurz = a => pendelTage(a) === 0 ? 'remote' : a.anfahrt?.min ? `${a.anfahrt.min} min` : '';
 function fahrtHTML(a) {
   const an = a.anfahrt;
+  if (pendelTage(a) === 0) return 'Komplett remote, kein täglicher Arbeitsweg.';
   if (!an || (!an.min && an.tage !== 0)) return 'Die Fahrzeit berechnet der Morgenlauf, sobald Ort oder Anschrift der Firma bekannt sind.';
   const teile = [];
   if (an.min) {
@@ -1518,7 +1522,7 @@ function renderListe() {
   const wvMap = new Map(rows.map(a => [a.id, wertungVon(a).wert ?? -1])); // einmal je Zeile statt in jedem Vergleich
   const wv = a => wvMap.get(a.id) ?? -1;
   const zuletzt = (f, auf) => (x, y) => { const a = f(x), b = f(y); return a == null ? (b == null ? 0 : 1) : b == null ? -1 : auf ? (a < b ? -1 : a > b ? 1 : 0) : (b < a ? -1 : b > a ? 1 : 0); }; // ohne Wert ans Ende
-  const cmp = {score: (x, y) => wv(y) - wv(x), gehalt: zuletzt(gehaltWert, false), fahrt: zuletzt(a => a.anfahrt?.min ?? null, true), frist: zuletzt(a => a.fristBis || null, true), neu: (x, y) => (y.gefundenAm || y.erstellt || '').localeCompare(x.gefundenAm || x.erstellt || ''), firma: (x, y) => (x.firma || '').localeCompare(y.firma || '', 'de'), status: (x, y) => (RANG[y.status] ?? -1) - (RANG[x.status] ?? -1) || wv(y) - wv(x)}[sortier] || ((x, y) => wv(y) - wv(x));
+  const cmp = {score: (x, y) => wv(y) - wv(x), gehalt: zuletzt(gehaltWert, false), fahrt: zuletzt(fahrMin, true), frist: zuletzt(a => a.fristBis || null, true), neu: (x, y) => (y.gefundenAm || y.erstellt || '').localeCompare(x.gefundenAm || x.erstellt || ''), firma: (x, y) => (x.firma || '').localeCompare(y.firma || '', 'de'), status: (x, y) => (RANG[y.status] ?? -1) - (RANG[x.status] ?? -1) || wv(y) - wv(x)}[sortier] || ((x, y) => wv(y) - wv(x));
   rows.sort((x, y) => cmp(x, y) || (x.firma || '').localeCompare(y.firma || '', 'de'));
   const getrennt = false;
   const counts = Object.fromEntries(STUFEN.map(s => [s.key, allL.filter(a => a.status === s.key).length]));
@@ -1839,7 +1843,7 @@ function renderKarte() {
 }
 function karteAkte(r) {
   const a = r.akte, an = a.anfahrt || {};
-  return `<li data-open="${a.id}" tabindex="0" style="--tone:${ringColor(r.gesamt)}"><span class="ico" style="font-family:var(--f-mono);font-size:12px;font-weight:600">${r.gesamt}</span><span style="min-width:0"><div class="t">${esc(a.position || '')} · ${esc(a.firma || '')}</div><div class="d">${esc([a.ort, an.min ? `${an.min} min` : '', istPortal(a) ? 'über Portal' : 'per Mail'].filter(Boolean).join(' · '))}</div></span></li>`;
+  return `<li data-open="${a.id}" tabindex="0" style="--tone:${ringColor(r.gesamt)}"><span class="ico" style="font-family:var(--f-mono);font-size:12px;font-weight:600">${r.gesamt}</span><span style="min-width:0"><div class="t">${esc(a.position || '')} · ${esc(a.firma || '')}</div><div class="d">${esc([a.ort, fahrtKurz(a), istPortal(a) ? 'über Portal' : 'per Mail'].filter(Boolean).join(' · '))}</div></span></li>`;
 }
 function karteListe(rs) {
   if (rs[0]?.akte) return `<h3 class="karte-h">${rs.length} ${rs.length === 1 ? 'Bewerbung' : 'Bewerbungen'} an dieser Stelle der Karte</h3><ul class="todo">${[...rs].sort((x, y) => y.gesamt - x.gesamt).map(karteAkte).join('')}</ul>`; return `<h3 class="karte-h">${rs.length} ${rs.length === 1 ? 'Stelle' : 'Stellen'} an dieser Stelle der Karte</h3><div class="radar-list">${[...rs].sort((x, y) => y.gesamt - x.gesamt).slice(0, 40).map(radarItem).join('')}</div>`; }
@@ -2309,7 +2313,7 @@ function portalInfos(a) {
   const z = [`${a.firma || ''}`, `${a.position || ''}`, '', `Link zur Anzeige: ${a.link || '–'}`, a.kennziffer ? `Kennziffer: ${a.kennziffer}` : '',
     a.kontakt?.name ? `Ansprechperson: ${a.kontakt.name}${a.kontakt.rolle ? ` (${a.kontakt.rolle})` : ''}` : '', a.anschrift ? `Anschrift: ${a.anschrift}` : '', '',
     `Gehaltsvorstellung: ${a.gehaltWunsch ? eur(a.gehaltWunsch) + ' brutto im Jahr' : '–'}`, `Frühester Eintritt: ${eintritt || '–'}${p.kuendigung ? ` (Kündigungsfrist ${p.kuendigung})` : ''}`,
-    `Arbeitszeit: ${p.arbeitszeit || 'Vollzeit'}`, an.min ? `Anfahrt: ${an.min} min pro Weg${Number.isFinite(pendelTage(a)) ? `, ${zahlDe(pendelTage(a))} Bürotage${pendelGeschaetzt(a) ? ' (geschätzt)' : ''}` : ''}` : '',
+    `Arbeitszeit: ${p.arbeitszeit || 'Vollzeit'}`, pendelTage(a) === 0 ? 'Anfahrt: keine, komplett remote' : an.min ? `Anfahrt: ${an.min} min pro Weg${Number.isFinite(pendelTage(a)) ? `, ${zahlDe(pendelTage(a))} Bürotage${pendelGeschaetzt(a) ? ' (geschätzt)' : ''}` : ''}` : '',
     ...(offen.length ? ['', 'Offene Punkte:', ...offen] : []), '', 'Deine Angaben zum Ausfüllen:', `Name: ${p.name || ''}`, `Anschrift: ${p.adresse || ''}`, `Telefon: ${p.telefon || ''}`, `E-Mail: ${p.email || ''}`,
     ...formularBlock(a), '', 'Anschreiben zum Einfügen in ein Textfeld:', '', String(a.anschreiben || '').split('\n').slice(2).join('\n').trim()];
   return z.filter((x, i) => x !== '' || z[i - 1] !== '').join('\r\n') + '\r\n';
