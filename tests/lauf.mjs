@@ -1358,6 +1358,14 @@ test('linkedin', async () => {
   await seite.waitForSelector('#li-text', { timeout: 10000 });
   assert.match(await seite.inputValue('#li-text'), /^Hallo \[Vorname\],/);
   assert.equal(await seite.locator('[data-act="li-ki"], [data-act="li-angeschrieben"]').count(), 0);
+  // Schon beworben, noch keine Antwort: die Karte bleibt; nach einer Absage nicht mehr
+  for (const [status, da] of [['beworben', 1], ['absage', 0]]) {
+    gh.dateien.set('apps/test-portal.json', Buffer.from(JSON.stringify({ ...json(gh, 'apps/test-portal.json'), status }, null, 1) + '\n'));
+    await seite.evaluate(() => window.bzPlattform.abgleichen());
+    await seite.goto('http://app.test/Bewerbungszentrale/#akte/test-portal'); // wie aus der Widget-App, die Liste zeigt nicht jeden Status
+    await seite.waitForSelector('.fakten', { timeout: 20000 });
+    assert.equal(await seite.locator('#netzwerk').count(), da, status);
+  }
   assert.deepEqual(fehler, []);
 });
 

@@ -2041,7 +2041,8 @@ function liSuche(a) {
   return [firma, bereich].filter(Boolean).join(' ');
 }
 function netzwerkHTML(a) {
-  if (a.status !== 'gemerkt' || a.verworfen || a.beispiel) return '';
+  // Auch nach dem Absenden, solange keine Antwort da ist: Ein Kontakt ins Team hilft dann am meisten (Tobi, 26.11.2026).
+  if (!['gemerkt', 'beworben'].includes(a.status) || a.verworfen || a.beispiel) return '';
   const suche = liSuche(a), text = a.netzwerk?.nachricht || '';
   const url = 'https://www.linkedin.com/search/results/people/?keywords=' + encodeURIComponent(suche) + '&origin=GLOBAL_SEARCH_HEADER';
   const schon = (a.verlauf || []).some(v => /LinkedIn/.test(v.text || '') && /angeschrieben/.test(v.text || ''));
@@ -3368,6 +3369,7 @@ function infosHTML(a) {
     </dl>
     ${planHTML(a)}
     ${bereitHTML(a)}
+    ${a.status === 'beworben' ? netzwerkHTML(a) : ''}
     ${a.notizen ? `<section><h3 class="v-kopf">Notizen</h3><div class="lesetext" id="d-notizen">${esc(a.notizen)}</div></section>` : ''}
     ${unterlagenHTML(a)}
     ${a.stellenText ? `<details class="mehr" id="m-anzeige"><summary>Stellenanzeige</summary><div class="mehr-in"><div class="lesetext" id="d-stelle">${esc(a.stellenText)}</div></div></details>` : ''}`;
