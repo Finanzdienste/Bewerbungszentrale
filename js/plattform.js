@@ -577,11 +577,15 @@
     // Ein neues Fenster lässt Firefox nur zu, solange der Tipp noch gilt (das meldet navigator.userActivation.isActive),
     // sonst fragt es nach „Pop-up erlauben?“. Dann, und in alten Fassungen ohne diese Abfrage, ein Knopf: Ein Tipp auf
     // einen normalen Link geht immer.
-    if (navigator.userActivation?.isActive === true) { try { window.open(url, '_blank', 'noopener'); return; } catch { /* dann der Knopf */ } }
-    if (typeof window.bzPdfAnbieten === 'function') window.bzPdfAnbieten({ url, name });
-    else location.assign(url);
+    if (navigator.userActivation?.isActive === true) { try { window.open(url, '_blank', 'noopener'); return 'fenster'; } catch { /* dann der Knopf */ } }
+    if (typeof window.bzPdfAnbieten === 'function') { window.bzPdfAnbieten({ url, name }); return 'knopf'; }
+    location.assign(url); return 'fenster';
   }
   const downloads = {
+    /** Geht eine PDF hier in einem Fenster auf, statt in den Downloads zu landen (Firefox auf Android)? Danach richtet die App ihren Hinweis. */
+    get pdfGehtAuf() { return firefoxHandy(); },
+    /** Gibt zurück, was mit der Datei geschah, damit die App nicht „Gespeichert“ meldet, wo nur ein Fenster aufging:
+        'geladen' (Download), 'fenster' (PDF im neuen Fenster) oder 'knopf' (Knopf „PDF öffnen“ angeboten). */
     async save({ filename, data, mimeType }) {
       const bytes = data instanceof Uint8Array ? data : typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
       const typ = mimeType || (/\.pdf$/i.test(filename) ? 'application/pdf' : /\.csv$/i.test(filename) ? 'text/csv' : /\.txt$/i.test(filename) ? 'text/plain' : 'application/octet-stream');
@@ -591,6 +595,7 @@
       const a = document.createElement('a'); a.href = url; a.download = filename || 'datei'; a.rel = 'noopener';
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      return 'geladen';
     },
   };
 

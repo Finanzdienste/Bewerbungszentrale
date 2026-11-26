@@ -405,9 +405,14 @@ test('laden-ohne-knopf', async () => {
   // Das Erstellen dauert länger als eine Sekunde (Schriften kommen langsam), und der Browser kennt navigator.userActivation nicht
   await seite.evaluate(() => Object.defineProperty(navigator, 'userActivation', { configurable: true, value: undefined }));
   await seite.route('**/schrift/**', async (r) => { await warte(1500); await r.fallback(); });
+  assert.match(await seite.textContent('#pdfKarte .desc'), /Landet in den Downloads deines Geräts, von dort lädst du es ins Portal hoch\./);
   const [d] = await Promise.all([seite.waitForEvent('download', { timeout: 60000 }), seite.click('#pdfKarte [data-teil="brief"]')]);
   assert.match(d.suggestedFilename(), /^Anschreiben_.*\.pdf$/);
   assert.equal(await seite.$('#mdl'), null, 'kein Kasten, kein Knopf');
+  await seite.waitForFunction(() => /^Gespeichert: \d+ Seiten\.$/.test(document.querySelector('#mappeStatus3')?.textContent || ''), null, { timeout: 10000 });
+  const [probe, was] = await Promise.all([seite.waitForEvent('download', { timeout: 10000 }), seite.evaluate(async () => { const dl = await window.claude.use('downloads'); return { auf: dl.pdfGehtAuf, wie: await dl.save({ filename: 'Probe.pdf', data: new Uint8Array([37, 80, 68, 70]) }) }; })]);
+  assert.equal(probe.suggestedFilename(), 'Probe.pdf');
+  assert.deepEqual(was, { auf: false, wie: 'geladen' }, 'save meldet, was geschah');
   await seite.unroute('**/schrift/**');
   // Der Browser meldet, der Tipp gelte nicht mehr: trotzdem gleich
   await seite.evaluate(() => Object.defineProperty(navigator, 'userActivation', { configurable: true, value: { isActive: false, hasBeenActive: true } }));
@@ -443,6 +448,13 @@ test('pdf-firefox-handy', async () => {
     Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: { controller: {} } });
     window.__tipp = (gilt) => Object.defineProperty(navigator, 'userActivation', { configurable: true, value: { isActive: gilt, hasBeenActive: true } });
   });
+  // Der Hinweis unter den Knöpfen sagt dort, wie es wirklich läuft: Fenster, dann „Download“ (Tobi, 26.11.2026: so sah es am Handy aus)
+  await seite.click('[data-tab="details"]'); await seite.click('[data-tab="unterlagen"]');
+  await seite.waitForSelector('#pdfKarte [data-teil="brief"]', { timeout: 10000 });
+  const hinweis = await seite.textContent('#pdfKarte .desc');
+  assert.match(hinweis, /Eine PDF geht in einem eigenen Fenster auf\. Dort auf „Download“ tippen, dann liegt sie in den Downloads deines Geräts/);
+  assert.doesNotMatch(hinweis, /Landet in den Downloads/);
+  assert.equal(await seite.evaluate(async () => (await window.claude.use('downloads')).pdfGehtAuf), true);
   const ausgabe = /^http:\/\/app\.test\/Bewerbungszentrale\/ausgabe\/[0-9a-z]{9}-[0-9a-z]+\/Anschreiben_[A-Za-z0-9_-]+\.pdf$/;
   const alsSw = (r) => r.fulfill({ status: 200, contentType: 'application/pdf', headers: { 'X-Bz-Ausgabe': '1' }, body: '%PDF-1.4 test' });
   await seite.route('**/ausgabe/**', alsSw);
@@ -455,6 +467,7 @@ test('pdf-firefox-handy', async () => {
   assert.match(adresse, ausgabe, 'echte Adresse mit dem Dateinamen');
   assert.equal(ziel, '_blank'); assert.equal(art, 'noopener');
   assert.equal(await seite.$('#dlOeffnen'), null, 'kein Knopf nötig');
+  await seite.waitForFunction(() => /^Geöffnet: \d+ Seiten\.$/.test(document.querySelector('#mappeStatus3')?.textContent || ''), null, { timeout: 10000 }); // nicht „Gespeichert“
   const abgelegt = await seite.evaluate(async (u) => { const r = window.__vorrat.get(u); const b = new Uint8Array(await r.clone().arrayBuffer()); return { name: window.__vorratName, typ: r.headers.get('Content-Type'), marke: r.headers.get('X-Bz-Ausgabe'), anfang: String.fromCharCode(...b.slice(0, 5)), groesse: b.length }; }, adresse);
   assert.deepEqual({ name: abgelegt.name, typ: abgelegt.typ, marke: abgelegt.marke, anfang: abgelegt.anfang }, { name: 'bz-ausgabe-v1', typ: 'application/pdf', marke: '1', anfang: '%PDF-' }, 'die PDF liegt für den Service Worker bereit');
   assert.ok(abgelegt.groesse > 1000);
@@ -467,6 +480,7 @@ test('pdf-firefox-handy', async () => {
   assert.match(knopf.href, ausgabe);
   assert.deepEqual({ ziel: knopf.ziel, laden: knopf.laden, rel: knopf.rel, text: knopf.text }, { ziel: '_blank', laden: false, rel: 'noopener', text: 'PDF öffnen' });
   assert.equal(await seite.evaluate(() => window.__offen.length), 1, 'ohne gültigen Tipp kein Versuch, selbst ein Fenster zu öffnen');
+  await seite.waitForFunction(() => /^Erstellt: \d+ Seiten\.$/.test(document.querySelector('#mappeStatus3')?.textContent || ''), null, { timeout: 10000 }); // noch nicht geöffnet
   const [neu] = await Promise.all([ctx.waitForEvent('page', { timeout: 10000 }), seite.click('#dlOeffnen')]);
   assert.ok(neu, 'der Tipp auf den Knopf öffnet ein neues Fenster');
   await neu.close().catch(() => {});
@@ -480,7 +494,8 @@ test('pdf-firefox-handy', async () => {
   await seite.waitForFunction(() => !document.querySelector('#mdl'), null, { timeout: 5000 });
 
   // 3) Nur die neuesten sechs bleiben liegen
-  await seite.evaluate(async () => { window.__tipp(true); const d = await window.claude.use('downloads'); for (let i = 0; i < 8; i++) { window.__tipp(true); await d.save({ filename: `Probe_${i}.pdf`, data: new Uint8Array([37, 80, 68, 70]) }); await new Promise((r) => setTimeout(r, 5)); } });
+  await seite.evaluate(async () => { window.__tipp(true); const d = await window.claude.use('downloads'); window.__wie = []; for (let i = 0; i < 8; i++) { window.__tipp(true); window.__wie.push(await d.save({ filename: `Probe_${i}.pdf`, data: new Uint8Array([37, 80, 68, 70]) })); await new Promise((r) => setTimeout(r, 5)); } });
+  assert.deepEqual(await seite.evaluate(() => [...new Set(window.__wie)]), ['fenster'], 'save meldet, was geschah');
   const liegt = await seite.evaluate(() => [...window.__vorrat.keys()].sort().map((u) => u.split('/').pop()));
   assert.deepEqual(liegt, ['Probe_2.pdf', 'Probe_3.pdf', 'Probe_4.pdf', 'Probe_5.pdf', 'Probe_6.pdf', 'Probe_7.pdf']);
 
@@ -495,8 +510,9 @@ test('pdf-firefox-handy', async () => {
 
   // 5) Was keine PDF ist, lädt auch dort wie bisher herunter; und kein einziger PDF-Download-Link bis hierher
   assert.deepEqual(geladen, [], 'keine PDF über einen Download-Link');
-  const [csv] = await Promise.all([seite.waitForEvent('download', { timeout: 10000 }), seite.evaluate(async () => { const d = await window.claude.use('downloads'); await d.save({ filename: 'Liste.csv', data: 'a;b' }); })]);
+  const [csv] = await Promise.all([seite.waitForEvent('download', { timeout: 10000 }), seite.evaluate(async () => { const d = await window.claude.use('downloads'); window.__csv = await d.save({ filename: 'Liste.csv', data: 'a;b' }); })]);
   assert.equal(csv.suggestedFilename(), 'Liste.csv');
+  assert.equal(await seite.evaluate(() => window.__csv), 'geladen');
   assert.deepEqual(fehler.filter((f) => !/internetdisconnected|Failed to fetch|NetworkError/i.test(f)), []);
 });
 
@@ -886,7 +902,17 @@ test('ohne-teilen', async () => {
   await seite.waitForSelector('#wa-pdf:not([hidden])', { timeout: 60000 });
   const [dl] = await Promise.all([seite.waitForEvent('download'), seite.click('#wa-pdf')]);
   assert.match(dl.suggestedFilename(), /\.pdf$/);
+  assert.equal(await seite.textContent('#wa-st'), 'PDF gespeichert.');
   assert.match(await seite.getAttribute('#wa-open', 'href') || '#', /^#|^https:\/\/wa\.me/);
+  // Firefox auf Android: Die PDF geht in einem Fenster auf, gespeichert ist sie erst nach „Download“ dort
+  await seite.evaluate(() => {
+    Object.defineProperty(navigator, 'userAgent', { configurable: true, get: () => 'Mozilla/5.0 (Android 14; Mobile; rv:161.0) Gecko/161.0 Firefox/161.0' });
+    Object.defineProperty(navigator, 'userActivation', { configurable: true, value: { isActive: true, hasBeenActive: true } });
+    window.__offen = []; window.open = (...a) => { window.__offen.push(a); return null; };
+  });
+  await seite.click('#wa-pdf');
+  await seite.waitForFunction(() => window.__offen.length === 1, null, { timeout: 20000 });
+  await seite.waitForFunction(() => document.querySelector('#wa-st')?.textContent === 'PDF geöffnet. Gespeichert ist sie erst nach „Download“ im Fenster.', null, { timeout: 10000 });
 });
 
 test('ki', async () => {

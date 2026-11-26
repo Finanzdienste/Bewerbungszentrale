@@ -3049,12 +3049,15 @@ async function mappeBauen(a, opt = {}) {
   const fn = teil === 'anlagen' ? dateiName('Zeugnisse', {}) : nurArt ? dateiName(teil === 'arbeit' ? 'Arbeitszeugnisse' : 'Abschlusszeugnisse', {}) : teil === 'ohnecv' ? dateiName('Anschreiben_Zeugnisse', a) : dateiName(teil === 'brief' ? (opt.motiv ? 'Motivationsschreiben' : 'Anschreiben') : opt.nurCv ? 'Lebenslauf' : 'Bewerbung', a);
   return {...r, ds, cv: !!cv, filename: fn};
 }
+/** Erstes Wort der Statuszeile nach DL.save einer PDF. Überall lädt der Browser sie herunter; nur in Firefox auf Android geht sie in einem
+    eigenen Fenster auf und wird erst dort mit „Download“ gespeichert (js/plattform.js downloads.save) – „Gespeichert“ wäre dort falsch. */
+const pdfFertig = wie => wie === 'fenster' ? 'Geöffnet' : wie === 'knopf' ? 'Erstellt' : 'Gespeichert';
 async function cvHerunterladen(a, layout, stEl) {
   const st = t => { if (stEl) stEl.innerHTML = t; };
   if (!DL) { st('Download ist in dieser Ansicht nicht verfügbar.'); return; }
   if (!P().cv) { st('Noch keine Lebenslauf-Daten im Profil.'); return; }
   st('<span class="pulse"></span>Lebenslauf wird gesetzt …');
-  try { const r = await mappeBauen(a || {}, {nurCv: true, layout}); await DL.save({filename: r.filename, data: r.bytes}); st(`Gespeichert: ${r.seiten} Seiten.`); }
+  try { const r = await mappeBauen(a || {}, {nurCv: true, layout}); const wie = await DL.save({filename: r.filename, data: r.bytes}); st(`${pdfFertig(wie)}: ${r.seiten} Seiten.`); }
   catch (e) { st(e?.code === 'declined' ? '' : 'Lebenslauf konnte nicht erstellt werden.'); }
 }
 async function dateiOeffnen(id) {
@@ -3078,12 +3081,12 @@ async function mappeErstellen(id) {
   st('<span class="pulse"></span>Mappe wird erstellt …');
   try {
     const r = await mappeBauen(a);
-    await DL.save({filename: r.filename, data: r.bytes});
+    const wie = await DL.save({filename: r.filename, data: r.bytes});
     const cur = state.apps[id] || a;
     unterlagenAbhaken(cur, r.ds);
     cur.verlauf.push({id:uid(), datum:today(), typ:'notiz', text:`Bewerbungsmappe erstellt (${r.seiten} Seiten)`});
     saveApp(id); renderDrawerHead();
-    st(`Gespeichert: ${r.seiten} Seiten, ${mb(r.bytes.length)}.${r.fehler.length ? ` Nicht lesbar und weggelassen: ${esc(r.fehler.join(', '))}` : ''}`);
+    st(`${pdfFertig(wie)}: ${r.seiten} Seiten, ${mb(r.bytes.length)}.${r.fehler.length ? ` Nicht lesbar und weggelassen: ${esc(r.fehler.join(', '))}` : ''}`);
   } catch (e) {
     if (e?.code === 'declined') { st(''); return; }
     st(e?.message === 'pdf-lib' ? 'PDF-Werkzeug konnte nicht geladen werden. Prüfe die Verbindung.' : 'Mappe konnte nicht erstellt werden. Versuch es nochmal.');
@@ -3140,7 +3143,7 @@ async function waModal(id, art = 'whatsapp') {
   };
   $('#wa-open', m).onclick = () => { $('#wa-open', m).href = waLink(); notiz('Text über WhatsApp'); };
   $('#wa-pdf', m).onclick = async () => {
-    try { await DL.save({filename: mappe.filename, data: mappe.bytes}); $('#wa-st', m).textContent = 'PDF gespeichert.'; }
+    try { const wie = await DL.save({filename: mappe.filename, data: mappe.bytes}); $('#wa-st', m).textContent = wie === 'fenster' ? 'PDF geöffnet. Gespeichert ist sie erst nach „Download“ im Fenster.' : wie === 'knopf' ? 'PDF erstellt.' : 'PDF gespeichert.'; }
     catch (e) { if (e?.code !== 'declined') $('#wa-st', m).textContent = 'Speichern hat nicht geklappt.'; }
   };
   if (!kannTeilen) {
@@ -3403,7 +3406,7 @@ async function teilHerunterladen(a, teil, stEl) {
   st('<span class="pulse"></span>PDF wird erstellt …');
   try {
     const r = await mappeBauen(a, {teil: teil === 'motiv' ? 'brief' : teil, motiv: teil === 'motiv'}); // Motivationsschreiben: dasselbe Schreiben, für Portale mit diesem Feld
-    await DL.save({filename: r.filename, data: r.bytes}); st(`Gespeichert: ${r.seiten} Seiten.`);
+    const wie = await DL.save({filename: r.filename, data: r.bytes}); st(`${pdfFertig(wie)}: ${r.seiten} Seiten.`);
   } catch (e) { st(e?.code === 'declined' ? '' : 'PDF konnte nicht erstellt werden.'); }
 }
 async function gesendetOeffnen(a, i, stEl) {
@@ -3436,7 +3439,7 @@ function unterlagenTabHTML(a) {
   const cvKnopf = p.cv ? `<button class="btn sm" type="button" data-act="cv-akte" ${DL ? '' : 'hidden'}>${ic('down')}Lebenslauf</button>` : '';
   const pdf = (a.anschreiben || p.cv) ? `<section class="ki-card" id="pdfKarte"><h3>${ic('doc')}Als PDF</h3>
     <div class="ki-row">${a.anschreiben ? teilKnopf('brief', 'Anschreiben') + teilKnopf('motiv', 'Motivationsschreiben') : ''}${cvKnopf}${teilKnopf('anlagen', 'Zeugnisse')}${zeugnisseGetrennt() ? teilKnopf('arbeit', 'Arbeitszeugnisse') + teilKnopf('abschluss', 'Abschlusszeugnisse') : ''}${a.anschreiben ? teilKnopf('ohnecv', 'Anschreiben und Zeugnisse') + teilKnopf('alles', 'Ganze Mappe') : ''}${p.foto?.url ? teilKnopf('foto', 'Bewerbungsfoto') : ''}</div>
-    <p class="desc">${raus && !gd.length ? 'Aus den gespeicherten Texten neu erzeugt. ' : ''}Landet in den Downloads deines Geräts, von dort lädst du es ins Portal hoch.</p><span class="ki-status" id="mappeStatus3"></span></section>` : '';
+    <p class="desc">${raus && !gd.length ? 'Aus den gespeicherten Texten neu erzeugt. ' : ''}${DL?.pdfGehtAuf ? 'Eine PDF geht in einem eigenen Fenster auf. Dort auf „Download“ tippen, dann liegt sie in den Downloads deines Geräts, und von dort lädst du sie ins Portal hoch.' : 'Landet in den Downloads deines Geräts, von dort lädst du es ins Portal hoch.'}</p><span class="ki-status" id="mappeStatus3"></span></section>` : '';
   const brief = a.anschreiben ? `<section><div class="ki-row" style="justify-content:space-between"><h3 class="v-kopf">Anschreiben</h3><button class="btn sm" type="button" data-copy="ki-anschreiben">${ic('copy')}Kopieren</button></div><div class="lesetext" id="ki-anschreiben">${esc(a.anschreiben)}</div></section>` : '';
   const mail = a.mailtext && !istPortal(a) ? `<section><div class="ki-row" style="justify-content:space-between"><h3 class="v-kopf">Begleitmail</h3><button class="btn sm" type="button" data-copy="u-mailtext">${ic('copy')}Kopieren</button></div><div class="lesetext" id="u-mailtext">${esc(a.mailtext)}</div></section>` : '';
   const html = (raus ? gesendetHTML(a) : '') + pdf + brief + mail;
