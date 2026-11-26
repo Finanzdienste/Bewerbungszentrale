@@ -1368,6 +1368,40 @@ test('dash-score', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('score-stundenlohn', async () => {
+  // Score = 30 % Eignung + 70 % Reiz, Reiz = 40 % Stelle + 40 % Stundenlohn + 20 % Firma (Tobi, 26.11.2026); der Fahrweg steckt im Stundenlohn
+  const { seite, ctx, gh, fehler } = await appStarten();
+  const setze = (f) => gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...json(gh, 'apps/test-mail.json'), ...f }, null, 1) + '\n'));
+  setze({ analyse: { formel: 2, score: 60, stelle: 70, arbeitgeber: 60, beschaeftigte: 2000, vermittler: false, bonus: 0, reiz: 0, gesamt: 0, fazit: 'Erfundenes Fazit.' },
+    gehaltErwartet: { wert: 60000, quelle: 'schaetzung', grund: 'Mitte von 5 vergleichbaren Anzeigen' }, wochenstunden: 40, anfahrt: { min: 30, tage: 5, art: 'oepnv', tageGrund: 'laut Anzeige' } });
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await zuAkte(seite, 'test-mail');
+  await seite.waitForSelector('#lohnText', { timeout: 10000 });
+  // Maßstab (erfunden): 50.000 € bei 40 + 5 Std. = 21,37 €; hier 60.000 € / 52 / (40 + 5 Std.) = 25,64 € → 43 Punkte
+  assert.match(await seite.textContent('#lohnText'), /25,64 € pro Stunde: 60\.000\s€ im Jahr \(geschätzt: Mitte von 5 vergleichbaren Anzeigen\), 40 Std\. plus 5 Std\. Fahrt pro Woche\. Heute: 21,37 €/);
+  assert.match(await seite.textContent('#scoreTeile'), /Eignung 60 · Reiz 59 aus Stelle 70, Stundenlohn 43 und Firma 68/);
+  assert.match(await seite.textContent('#firmaText'), /Größe 75 \(rund 2\.000 Beschäftigte\) und Arbeitgeber 60/);
+  assert.equal((await seite.textContent('.fakten dd b')).trim(), '59', 'gespeicherter alter Wert zählt nicht, die App rechnet selbst');
+  assert.match(await seite.textContent('#fahrtStunden'), /zählt im Stundenlohn mit/);
+  assert.doesNotMatch(await seite.textContent('.fakten'), /minus \d+ für die Fahrt/);
+  // Komplett Homeoffice: kein Pendeln, 60.000 € / 52 / 40 = 28,85 € → 75 Punkte, Reiz 72, Score 68
+  setze({ buerotage: 0 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.goto('http://app.test/Bewerbungszentrale/#akte/test-mail');
+  await seite.waitForFunction(() => /28,85 €/.test(document.querySelector('#lohnText')?.textContent || ''), null, { timeout: 10000 });
+  assert.match(await seite.textContent('#lohnText'), /kein Pendeln/);
+  assert.equal((await seite.textContent('.fakten dd b')).trim(), '68');
+  // Liste: Reiz, Eignung, Stundenlohn und Firma; ohne Netz dasselbe (der Maßstab liegt im Vorrat)
+  const zeile = async () => { await seite.waitForSelector('#v-liste [data-open="test-mail"] .radar-werte', { timeout: 20000 }); return seite.textContent('#v-liste [data-open="test-mail"]'); };
+  await seite.goto('http://app.test/Bewerbungszentrale/#liste');
+  assert.match(await zeile(), /\b68Gesamt.*72 Reiz.*60 Eignung.*28,85 € pro Std\..*68 Firma/s);
+  await ctx.route('**/*', (r) => (new URL(r.request().url()).hostname === 'app.test' ? r.fallback() : r.abort('internetdisconnected'))); // ab hier kein Netz
+  await seite.reload();
+  assert.match(await zeile(), /\b68Gesamt.*28,85 € pro Std\./s, 'ohne Netz derselbe Score');
+  assert.deepEqual(fehler.filter((f) => !/Failed to fetch|NetworkError|internetdisconnected|ERR_INTERNET/i.test(f)), []);
+});
+
 test('wohnort', async () => {
   // Wohnort im Profil setzen: landet als heim im Profil (Daten-Repo), oben gibt es keine Knöpfe zum Anlegen mehr
   const { seite, gh, fehler } = await appStarten({ breite: 1280 });

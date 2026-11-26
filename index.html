@@ -767,7 +767,7 @@ const state = {
   listSort: {key:'aktivitaet', dir:'desc'}, listFilter: new Set(), listBereit: false, hideClosed: false,
   openId: null, drawerTab: 'details', drOffen: new Set(),
   coach: {text:'', running:false, err:''},
-  lauf: null,
+  lauf: null, wertung: null,
   listArt: '', listWeg: '', listSortier: (() => { try { return localStorage.getItem('bz-liste-sortier') || 'score'; } catch { return 'score'; } })(), zeigAuswertung: (() => { try { return !!localStorage.getItem('bz-auswertung'); } catch { return false; } })(), radarSuche: '', radar: {}, radarPakete: {}, radarWahl: {}, firmenWahl: {}, radarLoaded: false, radarFilter: 'gut', radarBereich: '', radarRemote: false, radarSort: 'gesamt', radarZeig: 60, radarAnsicht: 'liste', radarFirma: '', firmenZeig: 60, firmenVermittler: false, firmenNein: false, karteAuswahl: [],
 };
 const radarDirty = new Set();
@@ -1304,7 +1304,8 @@ document.addEventListener('drop', e => { const b = e.target.closest?.('[data-dro
 
 /* ================= Liste: alle Bewerbungen als Rangliste ================= */
 /* Initiativbewerbung: keine Anzeige, also stammen die Konditionen aus den Firmendaten.
-   Damit die Firma nicht doppelt zählt: Gesamt = 70 % Reiz + 30 % Eignung (offen, 50). */
+   Gleiche Formel wie bei Stellen: Stelle aus Branche und Fokus (unbefristet ein Plus), Stundenlohn aus den Gehältern der Firma
+   und dem Fahrweg, Firma aus den Firmendaten, Eignung offen (50). */
 const INI_DOMB = {'Kreislaufwirtschaft': 20, 'Meer & Hafen': 18, 'Klima & Energie': 22, 'Umwelt & Natur': 24, 'Forschung': 18};
 const INI_FUNB = {'Daten & Automatisierung': 16, 'Logistik & Supply Chain': 10, 'Finanzen & Controlling': 6};
 const INI_FUN = [['Daten & Automatisierung', /data|daten|analyst|analytics|business intelligence|\bbi\b|reporting|power bi|automatis|rpa\b|prozess|digitalis|\berp\b|sap|business analyst|product owner|scientist/i],
@@ -1333,16 +1334,11 @@ function iniWertung(a) {
   const gr = mitDaten ? (f.gruende || []) : []; const txt = gr.join(' | ');
   const dom = mitDaten ? ((/Branche: ([^|]+)/.exec(txt) || [])[1] || '').trim() || null : (a.bereich || null);
   const fun = (INI_FUN.find(([, re]) => re.test(a.initiativ?.fokus || '')) || [])[0] || null;
-  let reiz = 35 + Math.min(36, (INI_DOMB[dom] || 0) + (INI_FUNB[fun] || 0));
+  const stelle = klemm(40 + Math.min(40, (INI_DOMB[dom] || 0) + (INI_FUNB[fun] || 0)) + (/unbefristet/.test(txt) ? 6 : 0));
   const m = /Gehälter um (\d+) Tsd/.exec(txt);
-  if (m) { const top = +m[1] * 1000; reiz += top >= 65000 ? 14 : top >= 60000 ? 10 : top >= 55000 ? 5 : top < 45000 ? -20 : top < 50000 ? -12 : 0; }
-  else if (/eher niedrig/.test(txt)) reiz -= 12;
-  if (/Tarifbindung/.test(txt)) reiz += 8;
-  if (/unbefristet/.test(txt)) reiz += 6;
-  if (/Homeoffice/.test(txt)) reiz += 6;
-  if (/Zusatzleistungen/.test(txt)) reiz += 5;
-  reiz = Math.max(0, Math.min(100, reiz)); const eignung = 50;
-  return {wert: Math.round(0.7 * reiz + 0.3 * eignung), art: 'Gesamt', ini: true, reiz, eignung, eignungOffen: true, firma: mitDaten ? f.score : (w.firma ?? null), geschaetzt: !mitDaten, gruende: mitDaten ? gr : (w.gruende || [])};
+  const lohn = lohnVon(m && !(Number(a.gehaltErwartet?.wert) >= 10000) ? {...a, gehaltErwartet: {wert: +m[1] * 1000, quelle: 'schaetzung', grund: 'Gehälter der Firma laut Firmendaten'}} : a);
+  const firma = mitDaten ? f.score : (w.firma ?? 50), eignung = 50, s = scoreAus({eignung, stelle, firma, lohn});
+  return {wert: s.wert, art: 'Gesamt', neu: true, ini: true, reiz: s.reiz, stelle, eignung, eignungOffen: true, firma, lohn, geschaetzt: !mitDaten, gruende: mitDaten ? gr : (w.gruende || [])};
 }
 /* Anfahrt je Stelle: Weg ab Wohnung mit ÖPNV und Rad (berechnet vom Morgenlauf im Daten-Repo, das Auto steht nur zur Info dabei), mal Bürotage.
    Bürotage: Eintrag der Person (buerotage) vor dem Wert aus der Anzeige. Dieselbe Formel steht in werkzeug/anfahrt.py. */
@@ -1355,9 +1351,9 @@ function pendelGeschaetzt(x) { const an = x?.anfahrt || {}; return !Number.isFin
 function fahrtChip(x) {
   const h = pendelStunden(x); if (h == null) return '';
   if (h === 0) return '<span class="chip good">ohne Pendeln</span>';
-  const an = x.anfahrt || {}, pm = pendelMalus(h);
+  const an = x.anfahrt || {}, pm = pendelMalus(h), alt = altWertung(x);
   const ca = pendelGeschaetzt(x);
-  return `<span class="chip ${pm >= 6 ? 'warn' : ''}" title="${esc(`${an.min} min einfach ${WEG_ART[an.art] || ''}, ${zahlDe(pendelTage(x))} Bürotage${ca ? ' (geschätzt, die Anzeige nennt keine)' : ''}${pm ? `, minus ${pm} in der Gesamtwertung` : ''}`)}">${ca ? '≈ ' : ''}${zahlDe(h)} Std. Fahrt pro Woche</span>`;
+  return `<span class="chip ${pm >= 6 ? 'warn' : ''}" title="${esc(`${an.min} min einfach ${WEG_ART[an.art] || ''}, ${zahlDe(pendelTage(x))} Bürotage${ca ? ' (geschätzt, die Anzeige nennt keine)' : ''}${alt ? (pm ? `, minus ${pm} in der Gesamtwertung` : '') : ', zählt im Stundenlohn'}`)}">${ca ? '≈ ' : ''}${zahlDe(h)} Std. Fahrt pro Woche</span>`;
 }
 function fahrtHTML(a) {
   const an = a.anfahrt;
@@ -1376,11 +1372,85 @@ function fahrtStundenHTML(a) {
   if (t == null) return '';
   const quelle = Number.isFinite(a.buerotage) ? 'Laut deiner Angabe.' : esc(an.tageGrund ? an.tageGrund.charAt(0).toUpperCase() + an.tageGrund.slice(1) + '.' : '');
   if (h == null) return quelle;
-  if (h === 0) return `${quelle} Kein Pendeln, kein Abzug in der Gesamtwertung.`;
+  const alt = altWertung(a);
+  if (h === 0) return `${quelle} Kein Pendeln${alt ? ', kein Abzug in der Gesamtwertung' : ', das hebt den Stundenlohn'}.`;
   const pm = pendelMalus(h);
-  return `${quelle} Rund <b>${zahlDe(h)} Stunden pro Woche</b> unterwegs, hin und zurück${pendelGeschaetzt(a) ? ' (geschätzt, die Anzeige nennt keine Bürotage)' : ''}. ${pm ? `Das zieht ${pm} ${pm === 1 ? 'Punkt' : 'Punkte'} von der Gesamtwertung ab.` : 'Bis 2,5 Stunden pro Woche gibt es keinen Abzug.'}`;
+  return `${quelle} Rund <b>${zahlDe(h)} Stunden pro Woche</b> unterwegs, hin und zurück${pendelGeschaetzt(a) ? ' (geschätzt, die Anzeige nennt keine Bürotage)' : ''}. ${!alt ? 'Die Fahrzeit zählt im Stundenlohn mit.' : pm ? `Das zieht ${pm} ${pm === 1 ? 'Punkt' : 'Punkte'} von der Gesamtwertung ab.` : 'Bis 2,5 Stunden pro Woche gibt es keinen Abzug.'}`;
 }
-function wertungVon(a) { const w = wertungBasis(a); if (w.wert == null) return w; const gb = grossAkte(a), bm = a.art === 'initiativ' ? 0 : beratMalus(a.position), pm = pendelMalus(pendelStunden(a)); return (gb || bm || pm) ? {...w, wert: Math.max(0, Math.min(100, w.wert + gb - bm - pm)), gross: gb > 0, beratung: bm > 0, fahrt: pm} : w; }
+/* ================= Score (Tobi, 26.11.2026: „Es gibt nur Eignung und Reiz“) =================
+   Score = 30 % Eignung + 70 % Reiz. Reiz = 40 % Stelle + 40 % Stundenlohn + 20 % Firma; ohne Firmenwert
+   (Personalvermittler) je 50 % Stelle und Stundenlohn, am Ende minus 5. Firma = 50 % Größe + 50 % Arbeitgeber.
+   Stundenlohn = erwartetes Jahresgehalt / 52 / (Wochenstunden + Fahrstunden pro Woche); Punkte: SC.heute beim heutigen
+   Stundenlohn der Person (system/wertung im Daten-Repo), je Euro mehr oder weniger SC.jeEuro Punkte. So zählen Homeoffice und
+   kurzer Weg von selbst, jeder Punkt genau einmal. Dieselbe Rechnung steht in werkzeug/wertung.py im Daten-Repo.
+   Akten und Radar-Einträge, die noch nach der alten Formel bewertet sind, rechnen weiter wie früher (Groß-Bonus, Fahrzeit-Abzug). */
+const SC = {eignung: 0.3, reiz: 0.7, stelle: 0.4, lohn: 0.4, firma: 0.2, jeEuro: 10, heute: 0, std: 40, ohneFirma: 5};
+const GROESSE = [[10000, 100], [1000, 75], [250, 50], [50, 25], [1, 0]], GROESSE_OFFEN = 25;
+const klemm = x => Math.max(0, Math.min(100, x));
+const groessePunkte = n => { n = Number(n); return Number.isFinite(n) && n >= 1 ? GROESSE.find(([ab]) => n >= ab)[1] : GROESSE_OFFEN; };
+const firmaWert = (ag, n) => ag == null ? null : Math.round(0.5 * groessePunkte(n) + 0.5 * Number(ag));
+const euroStd = x => x.toFixed(2).replace('.', ',');
+/** Heutiger Stundenlohn der Person mit Fahrweg, aus system/wertung (heute: gehalt, wochenstunden, fahrtStunden). */
+function lohnBasis() { const h = state.wertung?.heute; if (!(Number(h?.gehalt) > 0)) return null; return Number(h.gehalt) / 52 / ((Number(h.wochenstunden) || SC.std) + (Number(h.fahrtStunden) || 0)); }
+/** Was die Firma wohl zahlt: gehaltErwartet, sonst die Spanne der Anzeige (Monatsangaben mal 12), sonst grob die Forderung. */
+function gehaltErwartetVon(x) {
+  const g = x.gehaltErwartet; if (Number(g?.wert) >= 10000) return {wert: Number(g.wert), quelle: g.quelle || 'schaetzung', grund: g.grund || ''};
+  const jahr = v => { v = Number(v); return v >= 15000 ? v : v > 0 ? v * 12 : null; };
+  const lo = jahr(x.gehaltMin ?? x.gehaltVon), hi = jahr(x.gehaltMax ?? x.gehaltBis);
+  if (lo || hi) return {wert: ((lo || hi) + (hi || lo)) / 2, quelle: 'anzeige', grund: 'laut Anzeige'};
+  if (Number(x.gehaltWunsch) >= 10000) return {wert: Number(x.gehaltWunsch), quelle: 'schaetzung', grund: 'grob nach deiner Forderung'};
+  return null;
+}
+/** Stundenlohn mit Fahrweg: {eurH, punkte, gehalt, quelle, grund, std, stdOffen, fahrt, fahrtOffen}, ohne Gehalt null. */
+function lohnVon(x) {
+  const g = gehaltErwartetVon(x); if (!g) return null;
+  const stdOk = Number(x.wochenstunden) >= 35, std = stdOk ? Number(x.wochenstunden) : SC.std, h = pendelStunden(x), b = lohnBasis();
+  const eurH = g.wert / 52 / (std + (h ?? 0));
+  return {eurH, punkte: b == null ? 50 : klemm(Math.round(SC.heute + (eurH - b) * SC.jeEuro)), gehalt: g.wert, quelle: g.quelle, grund: g.grund, std, stdOffen: !stdOk, fahrt: h, fahrtOffen: h == null || pendelGeschaetzt(x)};
+}
+/** Score aus den Teilen: t = {eignung, stelle, firma (null ohne Firmenwert), lohn, bonus}. */
+function scoreAus(t) {
+  const lp = t.lohn?.punkte ?? 50;
+  const reiz = t.firma == null ? 0.5 * t.stelle + 0.5 * lp : SC.stelle * t.stelle + SC.lohn * lp + SC.firma * t.firma;
+  return {wert: klemm(Math.round(SC.eignung * t.eignung + SC.reiz * reiz) - (t.firma == null ? SC.ohneFirma : 0) + (t.bonus || 0)), reiz: Math.round(reiz)};
+}
+/** Score einer Akte nach der neuen Formel (analyse.stelle oder wertung.stelle), sonst null. */
+function wertungNeu(a) {
+  const an = a.analyse || {}, w = a.wertung || {};
+  const stelle = an.stelle ?? w.stelle; if (stelle == null) return null;
+  const eRoh = an.score ?? w.eignung, eignung = eRoh ?? (a.art === 'initiativ' ? 50 : 60);
+  const vermittler = !!(an.vermittler ?? w.vermittler), ag = an.arbeitgeber ?? w.arbeitgeber, n = an.beschaeftigte ?? w.beschaeftigte;
+  const firma = vermittler ? null : ag != null ? firmaWert(ag, n) : (an.firma ?? w.firma ?? null);
+  const lohn = lohnVon(a), bm = a.art === 'initiativ' ? 0 : beratMalus(a.position);
+  const s = scoreAus({eignung, stelle: Number(stelle), firma, lohn, bonus: (an.bonus ?? w.bonus ?? 0) - bm});
+  return {wert: s.wert, art: 'Gesamt', neu: true, reiz: s.reiz, eignung, eignungOffen: eRoh == null, stelle: Number(stelle), firma, arbeitgeber: ag, beschaeftigte: n,
+    groesse: firma == null || ag == null ? null : groessePunkte(n), lohn, vermittler, beratung: bm > 0, geschaetzt: an.stelle == null && !!w.geschaetzt, gruende: an.stelle == null ? w.gruende : undefined};
+}
+/** Radar-Eintrag mit Score: neue Formel bei formel 2, sonst wie früher. */
+function radarWert(r) {
+  const chance = r.chance == null ? null : Number(r.chance), bm = beratMalus(r.titel);
+  if (r.formel === 2 && r.stelle != null) {
+    const firma = r.vermittler ? null : (firmaWert(r.arbeitgeber, r.beschaeftigte) ?? r.firma_score ?? null), lohn = lohnVon(r);
+    const s = scoreAus({eignung: chance ?? 50, stelle: Number(r.stelle), firma, lohn, bonus: (r.bonus || 0) - bm});
+    return {...r, neu: true, reiz: s.reiz, chance, firma_score: firma, lohn, gross: false, beratung: bm > 0, fahrt: 0, gesamt: s.wert};
+  }
+  const reiz = Number(r.reiz ?? r.score ?? 0), gb = grossRadar(r), pm = pendelMalus(pendelStunden(r));
+  return {...r, reiz, chance, gross: gb > 0, beratung: bm > 0, fahrt: pm, gesamt: klemm(gesamtVon({...r, reiz, chance}) + gb - bm - pm)};
+}
+/** Noch nach der alten Formel bewertet (Akte oder Radar-Eintrag)? Dann gilt dort der alte Fahrzeit-Abzug. */
+const altWertung = x => x.formel === 2 || (x.analyse?.stelle ?? x.wertung?.stelle ?? x.stelle) != null ? false : (x.analyse?.gesamt ?? x.wertung?.gesamt ?? x.gesamt) != null;
+/** Ein Satz zum Stundenlohn für Akte und Tooltip. */
+function lohnSatz(l) {
+  if (!l) return 'Kein Gehalt bekannt, der Stundenlohn zählt neutral.';
+  const b = lohnBasis(), gq = l.quelle === 'anzeige' ? 'laut Anzeige' : l.quelle === 'tarif' ? 'nach Tarif' : 'geschätzt';
+  return `${l.quelle === 'schaetzung' || l.stdOffen || l.fahrtOffen ? '≈ ' : ''}${euroStd(l.eurH)} € pro Stunde: ${eur(l.gehalt)} im Jahr (${gq}${l.grund && l.quelle === 'schaetzung' ? `: ${l.grund}` : ''}), ${zahlDe(l.std)} Std.${l.stdOffen ? ' (angenommen)' : ''}${l.fahrt ? ` plus ${zahlDe(l.fahrt)} Std. Fahrt${l.fahrtOffen ? ' (geschätzt)' : ''}` : l.fahrt === 0 ? ', kein Pendeln' : ''} pro Woche${b ? `. Heute: ${euroStd(b)} €` : ''}.`;
+}
+function wertungVon(a) {
+  const n = wertungNeu(a); if (n) return n;
+  const w = wertungBasis(a); if (w.wert == null || w.neu) return w;
+  const gb = grossAkte(a), bm = a.art === 'initiativ' ? 0 : beratMalus(a.position), pm = pendelMalus(pendelStunden(a)); // alte Formel
+  return (gb || bm || pm) ? {...w, wert: Math.max(0, Math.min(100, w.wert + gb - bm - pm)), gross: gb > 0, beratung: bm > 0, fahrt: pm} : w;
+}
 function wertungBasis(a) {
   const an = a.analyse || {}, w = a.wertung || {};
   if (a.art === 'initiativ') {
@@ -1393,21 +1463,18 @@ function wertungBasis(a) {
   return wertSchaetzung(a);
 }
 /** Grobe Schätzung, wenn weder Analyse noch Wertung da sind (Direktansprache, von Hand angelegt): jede Stelle bekommt einen Wert.
-    Reiz aus Titel (Suchbegriffe, Gehalt der Stellenfamilie), Gehalt laut Anzeige und eigenem Interesse, Eignung offen (60), Formel wie im Morgenlauf. */
+    Stelle aus Titel (Suchbegriffe) und eigenem Interesse, Stundenlohn aus Gehalt und Fahrweg, Firma aus den Firmendaten, Eignung offen (60). */
 function wertSchaetzung(a) {
   const titel = String(a.position || ''), gruende = [];
   const begriffe = String(P().suche?.begriffe || '').split(/\s*,\s*/).filter(b => b.length > 3);
   const treffer = begriffe.filter(b => titel.toLowerCase().includes(b.toLowerCase())).length;
-  let reiz = 52 + Math.min(12, treffer * 6); if (treffer) gruende.push('passt zu den Suchbegriffen');
-  const top = Math.max(Number(a.gehaltMax) || 0, Number(a.gehaltMin) || 0) / 1000;
-  const k = top >= 10 ? top : (GEH_KAT.find(([re]) => re.test(titel)) || [null, 50, 60])[2];
-  reiz += k >= 65 ? 8 : k >= 60 ? 3 : k < 50 ? -10 : k < 55 ? -5 : 0; gruende.push(top >= 10 ? `Gehalt bis ${Math.round(top)}k laut Anzeige` : `Gehalt grob nach Stellenfamilie (bis ${k}k)`);
-  if (/sachbearbeit|assistenz|aushilfe/i.test(titel)) { reiz -= 8; gruende.push('klingt nach Sachbearbeitung'); }
-  reiz += ((Number(a.interesse) || 3) - 3) * 4;
-  reiz = Math.max(0, Math.min(100, reiz));
-  const f = a.art === 'initiativ' ? null : iniFirma(a), fs = f && !f.agentur && f.score != null ? f.score : null, eignung = 60;
-  const wert = Math.max(0, Math.min(100, Math.round(fs == null ? 0.6 * reiz + 0.4 * eignung - 5 : 0.5 * reiz + 0.3 * eignung + 0.2 * fs)));
-  return {wert, art: 'Schätzung', reiz, eignung, eignungOffen: true, firma: fs, geschaetzt: true, gruende: [...gruende, 'Eignung offen, kaum Infos zur Stelle']};
+  let stelle = 58 + Math.min(12, treffer * 6); if (treffer) gruende.push('passt zu den Suchbegriffen');
+  if (/sachbearbeit|assistenz|aushilfe/i.test(titel)) { stelle -= 8; gruende.push('klingt nach Sachbearbeitung'); }
+  stelle = klemm(stelle + ((Number(a.interesse) || 3) - 3) * 4);
+  const lohn = lohnVon(a); gruende.push(lohn ? `Stundenlohn ${euroStd(lohn.eurH)} €` : 'Gehalt unbekannt');
+  const f = a.art === 'initiativ' ? null : iniFirma(a), fs = f && !f.agentur && f.score != null ? f.score : null, eignung = 60, bm = beratMalus(titel);
+  const s = scoreAus({eignung, stelle, firma: fs, lohn, bonus: -bm});
+  return {wert: s.wert, art: 'Schätzung', neu: true, reiz: s.reiz, stelle, eignung, eignungOffen: true, firma: fs, lohn, beratung: bm > 0, geschaetzt: true, gruende: [...gruende, 'Eignung offen, kaum Infos zur Stelle']};
 }
 function renderListe() {
   const el = $('#v-liste');
@@ -1434,15 +1501,17 @@ function renderListe() {
   const item = (a, i) => {
     const w = wertungVon(a); const ini = istIni(a);
     const titel = ini ? `Initiativbewerbung${a.bereich ? ' · ' + a.bereich : ''}` : (a.position || 'Ohne Position');
-    const werte = w.art === 'Gesamt' ? [w.reiz != null ? `<span><b>${Math.round(w.reiz)}</b> Reiz</span>` : '', w.eignung != null ? `<span><b>${Math.round(w.eignung)}</b> Eignung${w.eignungOffen ? ' (offen)' : ''}</span>` : '', w.firma != null ? `<span${w.ini ? ' title="Steckt bei Initiativbewerbungen schon im Reiz und zählt nicht extra"' : ''}><b>${Math.round(w.firma)}</b> Firma${w.ini ? ' (im Reiz enthalten)' : ''}</span>` : ''].join('')
+    const werte = w.neu ? [`<span title="Stelle, Stundenlohn mit Fahrweg und Firma"><b>${w.reiz}</b> Reiz</span>`, `<span><b>${Math.round(w.eignung)}</b> Eignung${w.eignungOffen ? ' (offen)' : ''}</span>`,
+        w.lohn ? `<span title="${esc(lohnSatz(w.lohn))}"><b>${w.lohn.quelle === 'anzeige' ? '' : '≈'}${euroStd(w.lohn.eurH)} €</b> pro Std.</span>` : '', w.firma != null ? `<span title="Größe und Arbeitgeber"><b>${Math.round(w.firma)}</b> Firma</span>` : ''].join('')
+      : w.art === 'Gesamt' ? [w.reiz != null ? `<span><b>${Math.round(w.reiz)}</b> Reiz</span>` : '', w.eignung != null ? `<span><b>${Math.round(w.eignung)}</b> Eignung${w.eignungOffen ? ' (offen)' : ''}</span>` : '', w.firma != null ? `<span${w.ini ? ' title="Steckt bei Initiativbewerbungen schon im Reiz und zählt nicht extra"' : ''}><b>${Math.round(w.firma)}</b> Firma${w.ini ? ' (im Reiz enthalten)' : ''}</span>` : ''].join('')
       : ini ? `<span>${esc((w.gruende || []).slice(0, 2).join(' · ') || 'Firmenwertung folgt')}</span>` : '';
     const fertig = !!(a.anschreiben && String(a.anschreiben).trim());
     return `<article class="radar-item rang-item" data-open="${a.id}" tabindex="0">
       <div class="rang-nr">${i + 1}</div>
-      <div class="radar-score" style="--c:${w.wert == null ? 'var(--muted)' : ringColor(w.wert)}" title="${w.ini ? 'Gesamtwertung: 70 % Reiz (mit den Firmendaten) und 30 % Eignung' : w.art === 'Gesamt' ? 'Gesamtwertung aus Reiz, Eignung und Firma' : w.art === 'Firma' ? 'Wertung des Unternehmens' + (w.geschaetzt ? ', grob geschätzt' : '') : w.art === 'Schätzung' ? 'Grob geschätzt, weil kaum Infos zur Stelle da sind: ' + (w.gruende || []).join(', ') : 'Eignung laut Analyse'}${w.geschaetzt && w.art !== 'Schätzung' ? ' (geschätzt' + (w.gruende?.length ? ': ' + w.gruende.join(', ') : '') + ')' : ''}">${w.wert == null ? '–' : (w.geschaetzt ? '≈' : '') + w.wert}<small>${w.art}</small></div>
+      <div class="radar-score" style="--c:${w.wert == null ? 'var(--muted)' : ringColor(w.wert)}" title="${w.neu && w.art !== 'Schätzung' ? 'Score: 30 % Eignung und 70 % Reiz (Stelle, Stundenlohn mit Fahrweg, Firma)' : w.ini ? 'Gesamtwertung: 70 % Reiz (mit den Firmendaten) und 30 % Eignung' : w.art === 'Gesamt' ? 'Gesamtwertung aus Reiz, Eignung und Firma' : w.art === 'Firma' ? 'Wertung des Unternehmens' + (w.geschaetzt ? ', grob geschätzt' : '') : w.art === 'Schätzung' ? 'Grob geschätzt, weil kaum Infos zur Stelle da sind: ' + (w.gruende || []).join(', ') : 'Eignung laut Analyse'}${w.geschaetzt && w.art !== 'Schätzung' ? ' (geschätzt' + (w.gruende?.length ? ': ' + w.gruende.join(', ') : '') + ')' : ''}">${w.wert == null ? '–' : (w.geschaetzt ? '≈' : '') + w.wert}<small>${w.art}</small></div>
       <div class="radar-main"><div class="t1">${esc(titel)}</div><div class="t2">${esc([a.firma || 'Ohne Firma', a.ort].filter(Boolean).join(' · '))} · ${esc(Number(a.gehaltMin) < 10000 && Number(a.gehaltMax) < 10000 && Number(a.gehaltWunsch) >= 10000 ? `ca. ${kEur(a.gehaltWunsch)} €` : gehaltText(ini ? a.initiativ?.fokus : a.position, a.wertung?.fk || iniFirma(a)?.key, w.gross, a.gehaltMin, a.gehaltMax))}</div>
         ${werte ? `<div class="radar-werte">${werte}</div>` : ''}
-        <div class="radar-chips">${a.status !== 'gemerkt' ? `<span class="stamp" style="--stage:${stageVar(a.status)}">${S[a.status].label}</span>` : ''}${ini ? '<span class="chip acc">Initiativ</span>' : ''}${w.gross ? '<span class="chip good">großes Unternehmen</span>' : ''}${w.beratung ? '<span class="chip warn">Beratung, viel Präsentieren</span>' : ''}${ini ? '' : fahrtChip(a)}<span class="chip ${fertig ? 'good' : ''}">${fertig ? 'Unterlagen fertig' : 'Unterlagen folgen'}</span>${a.sprache === 'en' ? '<span class="chip">auf Englisch</span>' : ''}${w.geschaetzt ? '<span class="chip warn">Wertung geschätzt</span>' : ''}${nachfassFaellig(a) ? '<span class="chip warn">Nachfragen fällig</span>' : ''}</div></div>
+        <div class="radar-chips">${a.status !== 'gemerkt' ? `<span class="stamp" style="--stage:${stageVar(a.status)}">${S[a.status].label}</span>` : ''}${ini ? '<span class="chip acc">Initiativ</span>' : ''}${w.gross || w.groesse >= 75 ? '<span class="chip good">großes Unternehmen</span>' : ''}${w.beratung ? '<span class="chip warn">Beratung, viel Präsentieren</span>' : ''}${ini ? '' : fahrtChip(a)}<span class="chip ${fertig ? 'good' : ''}">${fertig ? 'Unterlagen fertig' : 'Unterlagen folgen'}</span>${a.sprache === 'en' ? '<span class="chip">auf Englisch</span>' : ''}${w.geschaetzt ? '<span class="chip warn">Wertung geschätzt</span>' : ''}${nachfassFaellig(a) ? '<span class="chip warn">Nachfragen fällig</span>' : ''}</div></div>
     </article>`;
   };
   const wegChip = (k, l, n) => `<button type="button" class="fchip" data-lweg="${k}" aria-pressed="${state.listWeg === k}">${l}<span class="c">${n}</span></button>`;
@@ -1502,7 +1571,7 @@ function radarListeRoh() {
   const m = new Map();
   for (const [pid, pk] of Object.entries(state.radarPakete || {})) { if (pid === 'firmen') continue; for (const it of (pk.items || [])) if (it && it.id) m.set(it.id, it); }
   for (const [id, it] of Object.entries(state.radar || {})) m.set(id, {...it, id});
-  return [...m.values()].map(r => { const reiz = Number(r.reiz ?? r.score ?? 0), chance = r.chance == null ? null : Number(r.chance); const gb = grossRadar(r), bm = beratMalus(r.titel), pm = pendelMalus(pendelStunden(r)); return {...r, reiz, chance, gross: gb > 0, beratung: bm > 0, fahrt: pm, gesamt: Math.max(0, Math.min(100, gesamtVon({...r, reiz, chance}) + gb - bm - pm))}; });
+  return [...m.values()].map(radarWert);
 }
 function radarListe() {
   const m = new Map();
@@ -1510,9 +1579,7 @@ function radarListe() {
   for (const [id, it] of Object.entries(state.radar || {})) m.set(id, {...it, id});
   return [...m.values()].map(r => {
     const w = state.radarWahl[r.id] || {};
-    const reiz = Number(r.reiz ?? r.score ?? 0), chance = r.chance == null ? null : Number(r.chance);
-    const gb = grossRadar(r), bm = beratMalus(r.titel), pm = pendelMalus(pendelStunden(r));
-    return {...r, reiz, chance, gross: gb > 0, beratung: bm > 0, fahrt: pm, gesamt: Math.max(0, Math.min(100, gesamtVon({...r, reiz, chance}) + gb - bm - pm)), bereich: r.bereich || 'Sonstiges', wahl: w.wahl || '', akteId: w.akteId || r.akteId || ''};
+    return {...radarWert(r), bereich: r.bereich || 'Sonstiges', wahl: w.wahl || '', akteId: w.akteId || r.akteId || ''};
   }).filter(r => !r.akteId && !state.apps['ba-' + r.id] && state.firmenWahl[r.fk]?.wahl !== 'nein');
 }
 /* Große Arbeitgeber: Wunsch der Person, bekommen +5 auf die Gesamtwertung */
@@ -1556,9 +1623,9 @@ function radarItem(r) {
   const ortText = r.remote ? 'Komplett remote' : [r.ort, r.km != null ? `${Math.round(r.km)} km` : '', r.anfahrt?.min ? `${r.anfahrt.min} min Fahrt` : ''].filter(Boolean).join(', ');
   const fz = r.firma_score;
   return `<article class="radar-item" data-rid="${esc(r.id)}" data-wahl="${esc(r.wahl || '')}">
-      <div class="radar-score" style="--c:${ringColor(r.gesamt)}" title="Gesamtwertung aus Reiz (50 %), Eignung (30 %) und Firma (20 %)${r.fahrt ? `, minus ${r.fahrt} für die Fahrzeit` : ''}">${Math.round(r.gesamt) || 0}<small>Gesamt</small></div>
+      <div class="radar-score" style="--c:${ringColor(r.gesamt)}" title="${r.neu ? 'Score: 30 % Eignung und 70 % Reiz (Stelle, Stundenlohn mit Fahrweg, Firma)' : `Gesamtwertung aus Reiz (50 %), Eignung (30 %) und Firma (20 %)${r.fahrt ? `, minus ${r.fahrt} für die Fahrzeit` : ''}`}">${Math.round(r.gesamt) || 0}<small>Gesamt</small></div>
       <div class="radar-main"><div class="t1">${esc(r.titel)}</div><div class="t2">${esc([r.firma, ortText].filter(Boolean).join(' · '))}${r.datum ? ` · online seit ${fmtD(r.datum)}` : ''}${Number(r.gehaltVon) >= 10000 ? ` · ab ${eur(r.gehaltVon)} im Jahr` : ` · ${esc(gehaltText(r.titel, r.fk, r.gross))}`}${r.quelle && r.quelle !== 'Bundesagentur für Arbeit' ? ` · über ${esc(r.quelle)}` : ''}${r.sprache === 'en' ? ' · Anzeige auf Englisch' : ''}</div>
-        <div class="radar-werte"><span title="Wie gut der Job für dich wäre: Themen, Gehalt, Konditionen"><b>${Math.round(r.reiz)}</b> Reiz</span><span title="Wie gut dein Profil zu den Anforderungen passt"><b>${r.chance == null ? '–' : Math.round(r.chance)}</b> Eignung (${eignungText(r.chance) || 'offen'})</span><span title="Wertung des Unternehmens: Branche, Tarif, Befristung, Homeoffice, Gehälter"><b>${fz == null ? '–' : Math.round(fz)}</b> Firma${fz == null ? ' (Vermittler)' : ''}</span></div>
+        <div class="radar-werte"><span title="${r.neu ? 'Wie gut der Job für dich wäre: Stelle, Stundenlohn mit Fahrweg und Firma' : 'Wie gut der Job für dich wäre: Themen, Gehalt, Konditionen'}"><b>${Math.round(r.reiz)}</b> Reiz</span><span title="Wie gut dein Profil zu den Anforderungen passt"><b>${r.chance == null ? '–' : Math.round(r.chance)}</b> Eignung (${eignungText(r.chance) || 'offen'})</span>${r.neu && r.lohn ? `<span title="${esc(lohnSatz(r.lohn))}"><b>${r.lohn.quelle === 'anzeige' ? '' : '≈'}${euroStd(r.lohn.eurH)} €</b> pro Std.</span>` : ''}<span title="${r.neu ? 'Größe und Arbeitgeber (Branche, Leistungen, Arbeitsklima)' : 'Wertung des Unternehmens: Branche, Tarif, Befristung, Homeoffice, Gehälter'}"><b>${fz == null ? '–' : Math.round(fz)}</b> Firma${fz == null ? ' (Vermittler)' : ''}</span></div>
         <div class="radar-chips"><span class="chip acc">${esc(r.bereich)}</span>${r.gross ? '<span class="chip good">großes Unternehmen</span>' : ''}${r.beratung ? '<span class="chip warn">Beratung, viel Präsentieren</span>' : ''}${fahrtChip(r)}${(r.plus || []).filter(x => x !== r.bereich).map(x => `<span class="chip good">${esc(x)}</span>`).join('')}${(r.minus || []).map(x => `<span class="chip warn">${esc(x)}</span>`).join('')}</div>
         ${r.wahl === 'ja' ? `<p class="radar-hint">Wird beim nächsten Lauf (täglich 6:40 Uhr) als Bewerbung mit Analyse, Anschreiben und Lebenslauf angelegt.</p>` : ''}</div>
       <div class="radar-act">${/^https?:\/\//.test(r.link || '') ? `<a class="btn sm" href="${esc(r.link)}" target="_blank" rel="noopener" data-ff>${ic('ext')}Anzeige</a>` : ''}
@@ -3349,7 +3416,9 @@ function infosHTML(a) {
   const w = wertungVon(a), k = a.kontakt || {};
   const link = /^https?:\/\//.test(a.link || '') ? a.link : '', mail = (k.email || '').trim();
   const z = (l, inhalt) => inhalt ? `<div class="fz"><dt>${l}</dt><dd>${inhalt}</dd></div>` : '';
-  const score = w.wert == null ? '' : `<b style="color:${ringColor(w.wert)}">${w.geschaetzt ? '≈ ' : ''}${w.wert}</b> <span class="muted">${w.geschaetzt ? 'grob geschätzt' : w.art === 'Gesamt' ? `Reiz ${w.reiz ?? '–'} · Eignung ${w.eignung ?? '–'} · Firma ${w.firma ?? '–'}${w.fahrt ? ` · minus ${w.fahrt} für die Fahrt` : ''}` : esc(w.art)}</span>${a.analyse?.fazit ? `<div class="fz-txt">${esc(a.analyse.fazit)}</div>` : ''}`;
+  const teileNeu = w.neu ? `${w.geschaetzt ? 'grob geschätzt: ' : ''}Eignung ${Math.round(w.eignung)}${w.eignungOffen ? ' (offen)' : ''} · Reiz ${w.reiz} aus Stelle ${Math.round(w.stelle)}, Stundenlohn ${w.lohn ? w.lohn.punkte : 50} und Firma ${w.firma ?? '–'}${w.beratung ? ' · minus 5 für Beratung' : ''}` : '';
+  const firmaSatz = w.neu && w.groesse != null ? `Firma ${w.firma}: Größe ${w.groesse}${Number(w.beschaeftigte) ? ` (rund ${Number(w.beschaeftigte).toLocaleString('de-DE')} Beschäftigte)` : ' (unbekannt)'} und Arbeitgeber ${Math.round(w.arbeitgeber)}.` : w.neu && w.firma == null && w.vermittler ? 'Firma unbekannt (Personalvermittler): minus 5.' : '';
+  const score = w.wert == null ? '' : `<b style="color:${ringColor(w.wert)}">${w.geschaetzt ? '≈ ' : ''}${w.wert}</b> <span class="muted" id="scoreTeile">${w.neu ? teileNeu : w.geschaetzt ? 'grob geschätzt' : w.art === 'Gesamt' ? `Reiz ${w.reiz ?? '–'} · Eignung ${w.eignung ?? '–'} · Firma ${w.firma ?? '–'}${w.fahrt ? ` · minus ${w.fahrt} für die Fahrt` : ''}` : esc(w.art)}</span>${w.neu ? `<div class="fz-txt" id="lohnText">${w.lohn ? 'Stundenlohn ' : ''}${esc(lohnSatz(w.lohn))}</div>${firmaSatz ? `<div class="fz-txt" id="firmaText">${esc(firmaSatz)}</div>` : ''}` : ''}${a.analyse?.fazit ? `<div class="fz-txt">${esc(a.analyse.fazit)}</div>` : ''}`;
   const portal = istPortal(a); // eine Kontakt-Mailadresse allein heißt nicht, dass per Mail beworben wird
   const weg = portal ? 'Über das Portal der Firma' : `Per Mail an <span style="user-select:all">${esc(mail)}</span>`;
   // der Link zur Anzeige und zum Portal steht immer ganz oben in „Infos“
@@ -4746,6 +4815,8 @@ async function init() {
   db.collection('radarwahl').onSnapshot(radarSnap('radarWahl', {dirty: true}), () => {});
   db.collection('firmenwahl').onSnapshot(radarSnap('firmenWahl', {dirty: true, prefix: 'f:'}), () => {});
   db.doc('system/lauf').onSnapshot(snap => { state.lauf = snap.exists ? clone(snap.data()) : null; if (state.view !== 'profil') renderAll(); }, () => {});
+  // Maßstab für den Stundenlohn im Score (heutiger Stundenlohn der Person mit Fahrweg), liegt nur im Daten-Repo
+  db.doc('system/wertung').onSnapshot(snap => { state.wertung = snap.exists ? clone(snap.data()) : null; if (state.view !== 'profil') renderAll(); }, () => {});
 }
 init();
 ordnerStart();

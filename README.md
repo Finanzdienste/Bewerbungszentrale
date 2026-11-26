@@ -17,6 +17,15 @@ App fürs Handy, für Tobi.
   Neuheit, die Sortierung bleibt gemerkt. Darunter die Bereiche nach Stand, in jedem der höchste
   Score oben (bei Gleichstand Vorbereitete nach Frist, sonst das Neueste zuerst); Suchtreffer, die in
   keinem Bereich stehen, verlinkt ein Hinweis auf „Alle“.
+- **Score** (seit 26.11.2026, „Es gibt nur Eignung und Reiz“): 30 % Eignung + 70 % Reiz. Reiz =
+  40 % Stelle + 40 % Stundenlohn + 20 % Firma (ohne Firmenwert, bei Personalvermittlern, je 50 %
+  Stelle und Stundenlohn, dann minus 5). Firma = 50 % Größe (nach Beschäftigten, je größer desto
+  besser) + 50 % Arbeitgeber. Stundenlohn = erwartetes Jahresgehalt (`gehaltErwartet`) / 52 /
+  (Wochenstunden + Fahrstunden pro Woche), 10 Punkte je Euro über dem heutigen Stundenlohn aus
+  `system/wertung` im Daten-Repo. So zählen Homeoffice und kurzer Weg von selbst, ein eigener
+  Fahrzeit-Abzug und der Groß-Bonus entfallen. Die App rechnet live (Bürotage ändern den Score sofort),
+  dieselbe Rechnung steht in `werkzeug/wertung.py`. Akten und Radar-Einträge mit alter Bewertung
+  (ohne `stelle`) rechnen weiter wie früher.
 - **Anrufe:** Ist die App mit Tobis Bildschirmzeit-App verbunden und hat er dort die Anrufliste
   freigegeben, holt sie beim Start und bei „online“ (höchstens alle 5 Minuten) die Anrufe der
   letzten 14 Tage aus Supabase (`bildschirmzeit_anrufe_lesen`, Repo Bildschirmzeit) und ordnet sie
