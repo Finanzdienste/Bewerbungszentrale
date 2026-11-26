@@ -1647,7 +1647,7 @@ function renderRadarInnen() {
   const neu = all.filter(r => !r.wahl && r.datum && dayDiff(parseD(r.datum), new Date()) <= 7).length;
   const firmen = firmenListe();
   const minS = Number(P().suche?.minScore) || 55;
-  const inFrage = r => (r.gesamt >= minS || r.reiz >= 70) && !(r.minus || []).includes('Leitungsstelle');
+  const inFrage = r => (r.gesamt >= minS || r.reiz >= (r.neu ? 60 : 70)) && !(r.minus || []).includes('Leitungsstelle'); // wie radar_kandidaten im Morgenlauf
   const fertigIds = new Set(Object.entries(state.radarWahl).filter(([, w]) => w.akteId).map(([id]) => id));
   const kandidaten = [...radarListeRoh()].filter(r => inFrage(r) && state.firmenWahl[r.fk]?.wahl !== 'nein' && state.radarWahl[r.id]?.wahl !== 'nein');
   const fertig = kandidaten.filter(r => fertigIds.has(r.id) || state.apps['ba-' + r.id] || state.apps[r.id]).length;
