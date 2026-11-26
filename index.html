@@ -1101,7 +1101,7 @@ const DASH_BEREICHE = [['antwort', 'Warten auf deine Antwort'], ['bereit', 'Vorb
 const dashOffen = (() => { try { const o = JSON.parse(localStorage.getItem('bz-dash-offen') || 'null'); if (Array.isArray(o)) return new Set(o); } catch {} return new Set(['antwort', 'bereit']); })();
 const dashMerken = () => { try { localStorage.setItem('bz-dash-offen', JSON.stringify([...dashOffen])); } catch {} };
 /** Dashboard: oben „x per Mail schicken“ (wenn etwas bereitliegt), Suche und Filter, darunter die Bereiche groß untereinander,
-    jeder mit seiner Zahl und zum Aufklappen. Vorbereitete stehen nach Score sortiert. */
+    jeder mit seiner Zahl und zum Aufklappen. In jedem Bereich steht der höchste Score oben. */
 function dashboardBoard() {
   const mail = mailBereit(), lesen = window.bzPlattform?.nurLesen?.();
   return `${mail.length && !lesen ? `<div class="mailfeld" id="mailFeld"><span><b>${mail.length} per Mail schicken</b><small>${esc(mail.slice(0, 3).map(a => a.firma).join(', '))}${mail.length > 3 ? ' …' : ''}</small></span><button class="btn primary" type="button" data-act="sammel-mail">${ic('mail')}Jetzt senden</button></div>` : ''}
@@ -1130,7 +1130,8 @@ function dashBereicheHTML() {
     const alleDrin = alle.filter(a => (k === 'alle' || !vergeben.has(a.id)) && (gehoert[k] || (x => x.status === k))(a));
     if (k !== 'alle') alleDrin.forEach(a => vergeben.add(a.id));
     if (!alleDrin.length && ['antwort', 'angebot', 'zusage'].includes(k)) return '';
-    const items = alleDrin.filter(passt).sort(['bereit', 'vorbereitung', 'alle'].includes(k) ? (x, y) => sc(y) - sc(x) || (x.fristBis || '9999').localeCompare(y.fristBis || '9999') : (x, y) => lastActivity(y).localeCompare(lastActivity(x)));
+    // jeder Bereich nach Score (Tobi, 26.11.2026), bei Gleichstand Vorbereitete nach Frist, sonst das Neueste zuerst
+    const items = alleDrin.filter(passt).sort((x, y) => sc(y) - sc(x) || (['bereit', 'vorbereitung', 'alle'].includes(k) ? (x.fristBis || '9999').localeCompare(y.fristBis || '9999') : lastActivity(y).localeCompare(lastActivity(x))));
     if (k !== 'alle') items.forEach(a => gezeigt.add(a.id));
     const offen = q ? items.length > 0 && (k !== 'alle' || dashOffen.has(k) || items.some(a => !gezeigt.has(a.id))) : dashOffen.has(k);
     const farbe = k === 'antwort' ? 'var(--warn)' : k === 'bereit' ? 'var(--accent)' : k === 'vorbereitung' ? stageVar('gemerkt') : stageVar(k);

@@ -14,7 +14,8 @@ App fürs Handy, für Tobi.
   und Claude-Sitzungen ins Daten-Repo. Den Status setzt die App nur selbst, wenn sie eine Mail sendet.
 - **Dashboard:** Suche und rechts daneben „Alle“: die ganze Liste mit Filtern (Stellen,
   Initiativ, Portal, Mail, Status) und Sortierung nach Score, Gehalt, Fahrzeit, Frist oder
-  Neuheit, die Sortierung bleibt gemerkt. Darunter die Bereiche nach Stand; Suchtreffer, die in
+  Neuheit, die Sortierung bleibt gemerkt. Darunter die Bereiche nach Stand, in jedem der höchste
+  Score oben (bei Gleichstand Vorbereitete nach Frist, sonst das Neueste zuerst); Suchtreffer, die in
   keinem Bereich stehen, verlinkt ein Hinweis auf „Alle“.
 - **Anrufe:** Ist die App mit Tobis Bildschirmzeit-App verbunden und hat er dort die Anrufliste
   freigegeben, holt sie beim Start und bei „online“ (höchstens alle 5 Minuten) die Anrufe der

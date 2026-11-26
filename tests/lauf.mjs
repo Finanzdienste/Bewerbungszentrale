@@ -1324,6 +1324,25 @@ test('dashboard', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('dash-score', async () => {
+  // In jedem Bereich steht der höchste Score oben, nicht das Neueste (Hafen Muster 80 vor Klima Beispiel 70)
+  const { seite, gh, fehler } = await appStarten({ breite: 412 });
+  const setze = (id, extra) => gh.dateien.set(`apps/${id}.json`, Buffer.from(JSON.stringify({ ...json(gh, `apps/${id}.json`), ...extra }, null, 1) + '\n'));
+  const reihe = (k) => seite.$$eval(`#dash [data-bereich="${k}"] [data-open]`, (lis) => lis.map((li) => li.dataset.open));
+  setze('test-portal', { status: 'beworben', beworbenAm: '2026-11-05', aufgaben: [{ id: 'a1', text: 'Hafen Muster antworten', erledigt: false }] });
+  setze('test-mail', { status: 'beworben', beworbenAm: '2026-11-20', aufgaben: [{ id: 'a2', text: 'Klima Beispiel zurückrufen', erledigt: false }] });
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.goto('http://app.test/Bewerbungszentrale/#uebersicht');
+  await seite.waitForSelector('#dash [data-bereich="antwort"] [data-open="test-mail"]', { timeout: 10000 });
+  assert.deepEqual(await reihe('antwort'), ['test-portal', 'test-mail'], 'Warten auf deine Antwort: nach Score');
+  for (const id of ['test-portal', 'test-mail']) setze(id, { aufgaben: [] });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.waitForSelector('#dash [data-bereich="beworben"] [data-open="test-mail"]', { state: 'attached', timeout: 10000 });
+  assert.deepEqual(await reihe('beworben'), ['test-portal', 'test-mail'], 'Beworben: nach Score, obwohl Klima Beispiel neuer ist');
+  assert.deepEqual(fehler, []);
+});
+
 test('wohnort', async () => {
   // Wohnort im Profil setzen: landet als heim im Profil (Daten-Repo), oben gibt es keine Knöpfe zum Anlegen mehr
   const { seite, gh, fehler } = await appStarten({ breite: 1280 });
