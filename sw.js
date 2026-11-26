@@ -4,9 +4,13 @@
  * KI-Anfragen, Supabase (Bildschirmzeit). Bei jeder Änderung an index.html
  * oder js/ VERSION hochzählen.
  */
-const VERSION = 'v83';
+const VERSION = 'v84';
 const HUELLE = `bz-huelle-${VERSION}`;
 const DAUER = 'bz-dauer-v1'; // Karte, Schriften, Bibliotheken von CDNs (versioniert, ändern sich nicht)
+// PDFs, die die App gerade erstellt hat (js/plattform.js legt sie hier ab): unter …/ausgabe/<Kennung>/<Dateiname> haben
+// sie eine echte Adresse. Firefox auf Android öffnet sie so als normalen Link; mit dem download-Attribut zeigte die
+// installierte App dort nur about:blank. Kommt allein aus diesem Vorrat, nie aus dem Netz.
+const AUSGABE = 'bz-ausgabe-v1';
 const SHELL = ['./', 'index.html', 'js/plattform.js', 'js/bildschirmzeit.js', 'js/bildschirmzeit-start.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'datenschutz.html'];
 const CDN = ['cdnjs.cloudflare.com', 'cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
@@ -21,6 +25,11 @@ self.addEventListener('fetch', (e) => {
   if (r.method !== 'GET') return;
   const u = new URL(r.url);
   const eigen = u.origin === self.location.origin;
+  if (eigen && /\/ausgabe\/[^/]+\/[^/]+$/.test(u.pathname)) {
+    const fehlt = () => new Response('Diese Datei liegt nicht mehr vor. Öffne sie in der App noch einmal.', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+    e.respondWith(caches.open(AUSGABE).then((c) => c.match(u.origin + u.pathname, { ignoreSearch: true, ignoreVary: true })).then((x) => x || fehlt(), fehlt));
+    return;
+  }
   if (eigen && (r.mode === 'navigate' || SHELL.some((s) => u.pathname.endsWith('/' + s.replace('./', ''))))) {
     // Erst das Netz (damit Änderungen sofort da sind), ohne Netz die Hülle
     e.respondWith(fetch(r).then((res) => { if (res.ok) { const k = res.clone(); caches.open(HUELLE).then((c) => c.put(r, k)); } return res; })

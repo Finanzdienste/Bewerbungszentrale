@@ -15,7 +15,9 @@
  *              solche Adressen wird hier umgeleitet.
  *   sample     KI über den eigenen Schlüssel (Anthropic sk-ant-… oder Google
  *              AQ./AIza…), direkt vom Handy.
- *   downloads  Datei speichern über einen Download-Link.
+ *   downloads  Datei speichern über einen Download-Link. PDF in Firefox auf
+ *              Android stattdessen als normaler Link in einem neuen Fenster,
+ *              unter einer echten Adresse vom Service Worker (siehe unten).
  *   user       Wer die App öffnet, ist der Besitzer.
  *   mcp        gibt es nicht. Senden per Gmail geht stattdessen über
  *              bzPlattform.drive: Google Drive nur für Dateien, die die App selbst
@@ -537,20 +539,62 @@
   };
 
   /* ------------------------------------------------ Downloads */
-  // Wann zuletzt getippt wurde: navigator.userActivation allein reicht nicht – fehlt die Abfrage (oder meldet sie
-  // „frisch“, obwohl Firefox am Handy den Tipp schon verworfen hat), kam weiter about:blank (Tobi, 26.11.2026).
+  // Wann zuletzt getippt wurde: für den Knopf „PDF öffnen“ (v79, v82), wenn das Erstellen länger als eine Sekunde dauerte.
   const TIPP_MS = 1000;
   let letzterTipp = 0;
   for (const art of ['pointerdown', 'pointerup', 'click', 'keydown', 'touchend']) document.addEventListener(art, () => { letzterTipp = Date.now(); }, true);
   const tippFrisch = () => Date.now() - letzterTipp < TIPP_MS && (!navigator.userActivation || navigator.userActivation.isActive);
+
+  /*
+   * PDF in Firefox auf Android: nie mit dem download-Attribut.
+   * Firefox lädt PDFs dort nicht herunter, es zeigt sie im eigenen Betrachter. Trägt der Link „download“, verlegt es die
+   * Anzeige in einen neuen Tab und fordert ihn ohne Adresse an. Die installierte App hat keine Tabs: Firefox lädt die
+   * leere Adresse dann im App-Fenster selbst, es bleibt about:blank (Tobi, 25. und 26.11.2026; Mozilla-Fehler 1953287,
+   * offen). Mit der Tipp-Zeit hat das nichts zu tun, deshalb halfen v79 und v82 nicht – auch ihr Knopf trug „download“.
+   * Stattdessen bekommt die PDF über den Service Worker eine echte Adresse (sw.js, Vorrat AUSGABE) und geht als normaler
+   * Link in einem neuen Fenster auf: in der installierten App im kleinen Fenster mit ✕ wie die Portal-Links, die App
+   * bleibt dahinter offen. Geht ohne Netz. Ohne Service Worker (privates Fenster, allererster Start) derselbe Link auf
+   * die Blob-Adresse.
+   */
+  const firefoxHandy = () => /Android/i.test(navigator.userAgent) && /Firefox\//i.test(navigator.userAgent);
+  const AUSGABE = 'bz-ausgabe-v1', AUSGABE_BEHALTEN = 6;
+  /** Legt die Datei für den Service Worker ab und gibt ihre Adresse zurück; '' heißt: hier nicht möglich. */
+  async function echteAdresse(blob, name) {
+    try {
+      if (!navigator.serviceWorker?.controller || !window.caches) return '';
+      const id = Date.now().toString(36).padStart(9, '0') + '-' + Math.random().toString(36).slice(2, 8); // sortiert sich nach der Zeit
+      const url = new URL(`ausgabe/${id}/${encodeURIComponent(name)}`, location.href.split(/[?#]/)[0]).href;
+      const vorrat = await caches.open(AUSGABE);
+      await vorrat.put(url, new Response(blob, { headers: { 'Content-Type': blob.type || 'application/pdf', 'Content-Length': String(blob.size), 'X-Bz-Ausgabe': '1' } }));
+      // Liefert der Service Worker sie auch aus? Ein älterer (kurz nach einem Update) kennt die Adresse noch nicht.
+      const probe = await echtesFetch(url, { cache: 'no-store' }).catch(() => null);
+      const geht = !!probe?.ok && probe.headers.get('X-Bz-Ausgabe') === '1';
+      try { probe?.body?.cancel(); } catch { /* egal */ }
+      if (!geht) { vorrat.delete(url).catch(() => {}); return ''; }
+      const alle = (await vorrat.keys()).map((q) => q.url).sort();
+      for (const alt of alle.slice(0, -AUSGABE_BEHALTEN)) vorrat.delete(alt).catch(() => {}); // nur die neuesten behalten
+      return url;
+    } catch { return ''; }
+  }
+  async function pdfImFenster(blob, name) {
+    let url = await echteAdresse(blob, name);
+    if (!url) { url = URL.createObjectURL(blob); setTimeout(() => URL.revokeObjectURL(url), 600_000); }
+    // Ein neues Fenster lässt Firefox nur zu, solange der Tipp noch gilt (das meldet navigator.userActivation.isActive),
+    // sonst fragt es nach „Pop-up erlauben?“. Dann der Knopf: Ein Tipp auf einen normalen Link geht immer.
+    const tippGilt = navigator.userActivation ? navigator.userActivation.isActive === true : Date.now() - letzterTipp < TIPP_MS;
+    if (tippGilt) { try { window.open(url, '_blank', 'noopener'); return; } catch { /* dann der Knopf */ } }
+    if (typeof window.bzDateiAnbieten === 'function') window.bzDateiAnbieten({ url, name, fenster: true });
+    else location.assign(url);
+  }
   const downloads = {
     async save({ filename, data, mimeType }) {
       const bytes = data instanceof Uint8Array ? data : typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
       const typ = mimeType || (/\.pdf$/i.test(filename) ? 'application/pdf' : /\.csv$/i.test(filename) ? 'text/csv' : /\.txt$/i.test(filename) ? 'text/plain' : 'application/octet-stream');
-      const url = URL.createObjectURL(new Blob([bytes], { type: typ }));
-      // Firefox auf dem Handy öffnet die Datei nur, solange der Tipp noch frisch ist (wenige Sekunden). Dauerte das
-      // Erstellen länger (erste PDF, Schriften laden), kam bisher nur eine leere Seite (about:blank, Tobi 25.11.2026).
-      // Dann einen Knopf zum Öffnen anbieten: Der neue Tipp zählt wieder. Frisch heißt: vor weniger als einer Sekunde getippt.
+      const blob = new Blob([bytes], { type: typ });
+      if (typ === 'application/pdf' && firefoxHandy()) return pdfImFenster(blob, filename || 'datei.pdf');
+      const url = URL.createObjectURL(blob);
+      // Überall sonst lädt der Browser die Datei herunter. Dauerte das Erstellen länger als eine Sekunde, kommt seit v79
+      // ein Knopf, dessen Tipp sie lädt (gedacht war er für Firefox am Handy; die Ursache dort war eine andere, siehe oben).
       if (!tippFrisch() && typeof window.bzDateiAnbieten === 'function') {
         window.bzDateiAnbieten({ url, name: filename || 'datei' });
         setTimeout(() => URL.revokeObjectURL(url), 600_000);

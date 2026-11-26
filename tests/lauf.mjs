@@ -391,8 +391,8 @@ test('ki-fuer-widget-eintragen', async () => {
 });
 
 test('datei-anbieten', async () => {
-  // Dauert das Erstellen länger, ist der Tipp nicht mehr frisch: Firefox am Handy zeigte dann nur about:blank (25.11.2026).
-  // Dann kommt ein Knopf „PDF öffnen“, dessen Tipp die Datei öffnet. Ohne Netz.
+  // Dauert das Erstellen länger als eine Sekunde, kommt ein Knopf „PDF öffnen“, dessen Tipp die Datei lädt. Ohne Netz.
+  // (Gedacht war er für Firefox am Handy; die Ursache für about:blank dort war aber das download-Attribut, siehe „pdf-firefox-handy“.)
   const { seite, ctx, fehler } = await appStarten();
   await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
   await seite.evaluate(() => window.bzPlattform.abgleichen());
@@ -424,6 +424,109 @@ test('datei-anbieten', async () => {
   assert.match(d2.suggestedFilename(), /^Anschreiben_.*\.pdf$/);
   assert.equal(await seite.$('#dlOeffnen'), null);
   assert.deepEqual(fehler.filter((f) => !/internetdisconnected|Failed to fetch|NetworkError/i.test(f)), []);
+});
+
+test('pdf-firefox-handy', async () => {
+  // Firefox auf Android zeigt PDFs selbst an. Trägt der Link das download-Attribut, verlegt es die Anzeige in einen neuen Tab
+  // ohne Adresse; die installierte App zeigt dann nur about:blank (Tobi, 25. und 26.11.2026; Mozilla-Fehler 1953287).
+  // Dort öffnet die App die PDF deshalb als normalen Link in einem neuen Fenster, unter einer echten Adresse vom Service Worker.
+  const { seite, ctx, fehler } = await appStarten();
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.waitForSelector('#dash, #v-liste', { timeout: 20000 });
+  await zuAkte(seite, 'test-mail');
+  await seite.click('[data-tab="unterlagen"]');
+  await seite.waitForSelector('#pdfKarte [data-teil="brief"]', { timeout: 10000 });
+  await ctx.route('https://api.github.com/**', (r) => r.abort('internetdisconnected')); // ohne Netz zum Daten-Repo
+  const geladen = []; seite.on('download', (d) => geladen.push(d.suggestedFilename()));
+  // Firefox am Handy nachbilden. Service Worker und Vorrat gibt es in der Testumgebung nicht (kein https): beides nachbilden,
+  // die Antwort des Service Workers gibt die Route unten.
+  await seite.evaluate(() => {
+    Object.defineProperty(navigator, 'userAgent', { configurable: true, get: () => 'Mozilla/5.0 (Android 14; Mobile; rv:161.0) Gecko/161.0 Firefox/161.0' });
+    window.__offen = [];
+    window.open = (...a) => { window.__offen.push(a); return null; };
+    window.__vorrat = new Map();
+    const vorrat = { put: async (u, r) => { window.__vorrat.set(String(u), r); }, delete: async (u) => window.__vorrat.delete(String(u)), keys: async () => [...window.__vorrat.keys()].map((url) => ({ url })) };
+    Object.defineProperty(window, 'caches', { configurable: true, value: { open: async (n) => { window.__vorratName = n; return vorrat; } } });
+    Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: { controller: {} } });
+    window.__tipp = (gilt) => Object.defineProperty(navigator, 'userActivation', { configurable: true, value: { isActive: gilt, hasBeenActive: true } });
+  });
+  const ausgabe = /^http:\/\/app\.test\/Bewerbungszentrale\/ausgabe\/[0-9a-z]{9}-[0-9a-z]+\/Anschreiben_[A-Za-z0-9_-]+\.pdf$/;
+  const alsSw = (r) => r.fulfill({ status: 200, contentType: 'application/pdf', headers: { 'X-Bz-Ausgabe': '1' }, body: '%PDF-1.4 test' });
+  await seite.route('**/ausgabe/**', alsSw);
+
+  // 1) Der Tipp gilt noch: gleich ein neues Fenster mit der echten Adresse, kein Download-Link und kein Knopf
+  await seite.evaluate(() => window.__tipp(true));
+  await seite.click('#pdfKarte [data-teil="brief"]');
+  await seite.waitForFunction(() => window.__offen.length === 1, null, { timeout: 60000 });
+  const [adresse, ziel, art] = await seite.evaluate(() => window.__offen[0]);
+  assert.match(adresse, ausgabe, 'echte Adresse mit dem Dateinamen');
+  assert.equal(ziel, '_blank'); assert.equal(art, 'noopener');
+  assert.equal(await seite.$('#dlOeffnen'), null, 'kein Knopf nötig');
+  const abgelegt = await seite.evaluate(async (u) => { const r = window.__vorrat.get(u); const b = new Uint8Array(await r.clone().arrayBuffer()); return { name: window.__vorratName, typ: r.headers.get('Content-Type'), marke: r.headers.get('X-Bz-Ausgabe'), anfang: String.fromCharCode(...b.slice(0, 5)), groesse: b.length }; }, adresse);
+  assert.deepEqual({ name: abgelegt.name, typ: abgelegt.typ, marke: abgelegt.marke, anfang: abgelegt.anfang }, { name: 'bz-ausgabe-v1', typ: 'application/pdf', marke: '1', anfang: '%PDF-' }, 'die PDF liegt für den Service Worker bereit');
+  assert.ok(abgelegt.groesse > 1000);
+
+  // 2) Der Tipp gilt nicht mehr (Erstellen dauerte zu lange): Knopf mit normalem Link, ohne download-Attribut
+  await seite.evaluate(() => window.__tipp(false));
+  await seite.click('#pdfKarte [data-teil="brief"]');
+  await seite.waitForSelector('#dlOeffnen', { timeout: 60000 });
+  const knopf = await seite.$eval('#dlOeffnen', (a) => ({ href: a.href, ziel: a.target, laden: a.hasAttribute('download'), rel: a.rel, text: a.textContent }));
+  assert.match(knopf.href, ausgabe);
+  assert.deepEqual({ ziel: knopf.ziel, laden: knopf.laden, rel: knopf.rel, text: knopf.text }, { ziel: '_blank', laden: false, rel: 'noopener', text: 'PDF öffnen' });
+  assert.equal(await seite.evaluate(() => window.__offen.length), 1, 'ohne gültigen Tipp kein Versuch, selbst ein Fenster zu öffnen');
+  const [neu] = await Promise.all([ctx.waitForEvent('page', { timeout: 10000 }), seite.click('#dlOeffnen')]);
+  assert.ok(neu, 'der Tipp auf den Knopf öffnet ein neues Fenster');
+  await neu.close().catch(() => {});
+  await seite.waitForFunction(() => !document.querySelector('#mdl'), null, { timeout: 5000 });
+
+  // 3) Nur die neuesten sechs bleiben liegen
+  await seite.evaluate(async () => { window.__tipp(true); const d = await window.claude.use('downloads'); for (let i = 0; i < 8; i++) { window.__tipp(true); await d.save({ filename: `Probe_${i}.pdf`, data: new Uint8Array([37, 80, 68, 70]) }); await new Promise((r) => setTimeout(r, 5)); } });
+  const liegt = await seite.evaluate(() => [...window.__vorrat.keys()].sort().map((u) => u.split('/').pop()));
+  assert.deepEqual(liegt, ['Probe_2.pdf', 'Probe_3.pdf', 'Probe_4.pdf', 'Probe_5.pdf', 'Probe_6.pdf', 'Probe_7.pdf']);
+
+  // 4) Der Service Worker kennt die Adresse noch nicht (älterer Stand) oder es gibt keinen: derselbe Link auf die Blob-Adresse
+  await seite.unroute('**/ausgabe/**', alsSw);
+  const blob1 = await seite.evaluate(async () => { window.__tipp(true); const d = await window.claude.use('downloads'); await d.save({ filename: 'Alt.pdf', data: new Uint8Array([37, 80, 68, 70]) }); return window.__offen.at(-1); });
+  assert.match(blob1[0], /^blob:http:\/\/app\.test\//); assert.equal(blob1[2], 'noopener');
+  assert.equal(await seite.evaluate(() => [...window.__vorrat.keys()].some((u) => u.endsWith('/Alt.pdf'))), false, 'nichts bleibt liegen, was nicht ausgeliefert wird');
+  const blob2 = await seite.evaluate(async () => { Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: { controller: null } }); window.__tipp(false); const d = await window.claude.use('downloads'); await d.save({ filename: 'Ohne.pdf', data: new Uint8Array([37, 80, 68, 70]) }); const a = document.querySelector('#dlOeffnen'); return { href: a.href, ziel: a.target, laden: a.hasAttribute('download') }; });
+  assert.match(blob2.href, /^blob:http:\/\/app\.test\//); assert.deepEqual({ ziel: blob2.ziel, laden: blob2.laden }, { ziel: '_blank', laden: false });
+  await seite.click('#dlZu');
+
+  // 5) Was keine PDF ist, lädt auch dort wie bisher herunter; und kein einziger PDF-Download-Link bis hierher
+  assert.deepEqual(geladen, [], 'keine PDF über einen Download-Link');
+  const [csv] = await Promise.all([seite.waitForEvent('download', { timeout: 10000 }), seite.evaluate(async () => { window.__tipp(true); document.body.dispatchEvent(new Event('click', { bubbles: true })); const d = await window.claude.use('downloads'); await d.save({ filename: 'Liste.csv', data: 'a;b' }); })]);
+  assert.equal(csv.suggestedFilename(), 'Liste.csv');
+  assert.deepEqual(fehler.filter((f) => !/internetdisconnected|Failed to fetch|NetworkError/i.test(f)), []);
+});
+
+test('sw-ausgabe', async () => {
+  // Der Service Worker liefert die abgelegten PDFs unter ihrer echten Adresse aus: allein aus dem Vorrat, ohne Netz.
+  const quelle = fs.readFileSync(path.join(WURZEL, 'sw.js'), 'utf8');
+  const hoerer = {}, vorraete = new Map(), netz = [];
+  const vorrat = (n) => { if (!vorraete.has(n)) vorraete.set(n, new Map()); const m = vorraete.get(n); const schluessel = (u) => (typeof u === 'string' ? u : u.url); return { match: async (u) => m.get(schluessel(u))?.clone(), put: async (u, r) => { m.set(schluessel(u), r); }, addAll: async () => {} }; };
+  const welt = {
+    self: { location: new URL('https://app.test/Bewerbungszentrale/sw.js'), addEventListener: (art, f) => { hoerer[art] = f; }, skipWaiting: async () => {}, clients: { claim: async () => {} } },
+    caches: { open: async (n) => vorrat(n), match: async () => undefined, keys: async () => [...vorraete.keys()], delete: async (n) => vorraete.delete(n) },
+    fetch: async (r) => { netz.push(typeof r === 'string' ? r : r.url); throw new TypeError('kein Netz'); },
+  };
+  new Function(...Object.keys(welt), quelle)(...Object.values(welt));
+  const adresse = 'https://app.test/Bewerbungszentrale/ausgabe/0mabc1234-x1y2z3/Anschreiben_Test_Firma.pdf';
+  await (await welt.caches.open('bz-ausgabe-v1')).put(adresse, new Response(new Uint8Array([37, 80, 68, 70, 45]), { headers: { 'Content-Type': 'application/pdf', 'X-Bz-Ausgabe': '1' } }));
+  const holen = async (url, mode = 'navigate') => { let antwort = null; hoerer.fetch({ request: { method: 'GET', url, mode }, respondWith: (p) => { antwort = p; } }); return antwort && await antwort; };
+  for (const [url, mode] of [[adresse, 'navigate'], [adresse, 'cors'], [adresse + '?neu=1', 'navigate']]) { // neues Fenster, Probe der App, mit Anhängsel
+    const da = await holen(url, mode);
+    assert.equal(da.status, 200, url); assert.equal(da.headers.get('Content-Type'), 'application/pdf'); assert.equal(da.headers.get('X-Bz-Ausgabe'), '1');
+    assert.equal(Buffer.from(await da.arrayBuffer()).toString('latin1'), '%PDF-');
+  }
+  const weg = await holen('https://app.test/Bewerbungszentrale/ausgabe/0mabc0000-aaaaaa/Fehlt.pdf');
+  assert.equal(weg.status, 404, 'nicht mehr da: ein klarer Satz statt der Fehlerseite des Servers');
+  assert.match(await weg.text(), /liegt nicht mehr vor/);
+  assert.deepEqual(netz, [], 'für diese Adressen geht nichts ins Netz');
+  assert.equal(await holen('https://anderswo.test/Bewerbungszentrale/ausgabe/x/y.pdf'), null, 'fremde Adressen bleiben unberührt');
+  await holen('https://app.test/Bewerbungszentrale/'); // die App selbst: wie bisher erst das Netz
+  assert.deepEqual(netz, ['https://app.test/Bewerbungszentrale/']);
 });
 
 test('kontakte-nur-lesen', async () => {

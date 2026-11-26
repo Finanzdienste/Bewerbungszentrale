@@ -45,7 +45,7 @@ App fürs Handy, für Tobi.
   Versand die verschickte PDF, dazu Anschreiben, Motivationsschreiben, Lebenslauf, Zeugnisse,
   Anschreiben mit Zeugnissen (ohne Lebenslauf) und ganze Mappe als PDF, dazu Arbeits- und
   Abschlusszeugnisse getrennt, wenn es beide gibt (auch im Ordner „Allgemein“), alles davon auch in
-  jedem Drive-Ordner, Dateinamen höchstens 50 Zeichen, bei englischen Anzeigen englisch wie `CV_…`, `Cover_Letter_…`, in „Portal-Infos.txt“ dazu Berufserfahrung, Ausbildung, Sprachen und Kenntnisse in den Feldern von Workday & Co. zum Kopieren (weil Workday den Lebenslauf falsch ausliest), Anschreiben und Begleitmail zum Kopieren; dauert das Erstellen länger als eine Sekunde nach dem Tipp (die App misst das selbst, weil Firefox am Handy `navigator.userActivation` nicht verlässlich meldet), kommt ein Knopf „PDF öffnen“, weil Firefox am Handy sonst nur eine leere Seite zeigt) und „Verlauf“ (oben „Du bist dran“
+  jedem Drive-Ordner, Dateinamen höchstens 50 Zeichen, bei englischen Anzeigen englisch wie `CV_…`, `Cover_Letter_…`, in „Portal-Infos.txt“ dazu Berufserfahrung, Ausbildung, Sprachen und Kenntnisse in den Feldern von Workday & Co. zum Kopieren (weil Workday den Lebenslauf falsch ausliest), Anschreiben und Begleitmail zum Kopieren; dauert das Erstellen länger als eine Sekunde nach dem Tipp, kommt ein Knopf „PDF öffnen“; in Firefox auf Android geht eine PDF nie über einen Download-Link auf, sondern als normaler Link in einem neuen Fenster, unter einer echten Adresse `ausgabe/<Kennung>/<Dateiname>` vom Service Worker (v84; in der installierten App im kleinen Fenster mit ✕, die App bleibt dahinter offen, geht ohne Netz): Mit dem `download`-Attribut zeigt Firefox die PDF dort in einem neuen Tab ohne Adresse an, und die installierte App, die keine Tabs hat, zeigt dann nur about:blank (Mozilla-Fehler 1953287, Tobi 25. und 26.11.2026; an der Tipp-Zeit lag es nie, v79 und v82 halfen deshalb nicht; Tests `pdf-firefox-handy`, `sw-ausgabe`)) und „Verlauf“ (oben „Du bist dran“
   mit Antwortvorschlag oder Rückruf, darunter nur der Gesprächsverlauf mit den Mails im Wortlaut).
   Links zu Anzeigen und Portalen öffnen auf Android direkt in Firefox. Aus der in Firefox installierten App gehen sie im kleinen Fenster mit ✕ auf (⋮ → „In Firefox öffnen“ für einen richtigen Tab); ein Intent nach Firefox geht dort nicht, Firefox nimmt ihn still nicht an (v80, Tobi 26.11.2026: „passiert nichts“). In Chrome auf Android
   übergibt „In Firefox nutzen“ im Profil den Zugang per Link (nur im Anker) an Firefox.
@@ -85,7 +85,9 @@ App fürs Handy, für Tobi.
 - `karte/`: Kartenpakete (OpenStreetMap über Protomaps, Raum Hamburg) und
   Schriften für die Karte, als Base64-Text. `schrift/`: Inter und Source
   Serif 4 (beide SIL Open Font License) für die PDF-Unterlagen.
-- `sw.js`: App-Hülle offline, Karte und Schriften aus dem Zwischenspeicher.
+- `sw.js`: App-Hülle offline, Karte und Schriften aus dem Zwischenspeicher; gerade erstellte PDFs unter
+  `ausgabe/<Kennung>/<Dateiname>` (Vorrat `bz-ausgabe-v1`, nur die neuesten sechs), damit Firefox auf
+  Android sie als normalen Link öffnen kann.
 
 ## Zugang
 
