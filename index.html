@@ -3995,6 +3995,7 @@ function mailGmailModal(id) {
       const nach = cur.mail?.typ === 'nachfassen';
       cur.verlauf.push({id: uid(), datum: jetztISO(), typ: nach ? 'nachgefasst' : 'mail', text: `${nach ? 'Nachgefragt per Gmail' : 'Mail per Gmail gesendet'}: „${betreff}“ an ${an}`, mail: mailEintragNeu({an, betreff, text})});
       if (nach) cur.aufgaben = (cur.aufgaben || []).map(k => /nachfrag|nachfass/i.test(k.text) ? {...k, erledigt: true} : k);
+      cur.mail = {typ: 'nachfassen', text: ''}; // gesendet steht sie im Verlauf; sonst böte die Akte sie bei der nächsten Aufgabe noch einmal an
       saveApp(id, false); closeModal();
       if (state.openId === id) { renderDrawerHead(); renderDrawerBody(); }
       toast('Mail gesendet');

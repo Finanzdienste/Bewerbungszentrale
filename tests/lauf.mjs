@@ -1172,6 +1172,13 @@ test('mail-zwischenantwort', async () => {
   const erledigt = (id) => (json(gh, 'apps/test-mail.json').aufgaben || []).find((k) => k.id === id)?.erledigt;
   assert.ok(await bis(() => erledigt('zw1') === true, 15000), 'Zwischenantwort erledigt');
   assert.equal(erledigt('mo1'), false, 'die verbindliche Antwort bleibt offen');
+  assert.ok(await bis(() => !json(gh, 'apps/test-mail.json').mail?.text, 15000), 'der gesendete Vorschlag ist weg');
+  await seite.goto('http://app.test/Bewerbungszentrale/#akte/test-mail');
+  await seite.waitForSelector('[data-tab="verlauf"]', { timeout: 10000 });
+  await seite.click('[data-tab="verlauf"]');
+  await seite.waitForSelector('#duBistDran', { timeout: 10000 });
+  assert.match(await seite.textContent('#duBistDran'), /am Mo 30\.11\. Termin festmachen/);
+  assert.equal(await seite.locator('#mailKarte').count(), 0, 'keine schon gesendete Antwort zum erneuten Senden');
   await seite.goto('http://app.test/Bewerbungszentrale/#uebersicht');
   await seite.waitForSelector('#dash [data-bereich="antwort"] [data-open="test-mail"]', { state: 'attached', timeout: 10000 });
   assert.match(await seite.textContent('#dash [data-bereich="antwort"] [data-open="test-mail"]'), /am Mo 30\.11\. Termin festmachen/);
