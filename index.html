@@ -3986,7 +3986,12 @@ function mailGmailModal(id) {
       if (MCP) await MCP.callTool('Gmail', 'send_message', {to: [an], subject: betreff, body: text, ...(cur0.gmailThreadId ? {replyThreadId: cur0.gmailThreadId} : {})});
       else await GMAIL.senden({an, betreff, text, threadId: cur0.gmailThreadId || undefined});
       const cur = state.apps[id] || a;
-      if (cur.mail?.typ === 'antwort') cur.aufgaben = (cur.aufgaben || []).map(k => /antworten/i.test(k.text) && !k.erledigt ? {...k, erledigt: true} : k);
+      if (cur.mail?.typ === 'antwort') { // erledigt ist die Aufgabe zu dieser Antwort („Antwort liegt in der App bereit“); eine spätere Antwort,
+        // etwa die verbindliche nach einer Zwischenantwort, bleibt offen. Ältere Akten ohne diesen Hinweis: wie bisher jede Aufgabe „antworten“.
+        const zuDieser = k => !k.erledigt && /Antwort liegt in der App bereit/i.test(k.text || '');
+        const passt = (cur.aufgaben || []).some(zuDieser) ? zuDieser : k => !k.erledigt && /antworten/i.test(k.text || '');
+        cur.aufgaben = (cur.aufgaben || []).map(k => passt(k) ? {...k, erledigt: true} : k);
+      }
       const nach = cur.mail?.typ === 'nachfassen';
       cur.verlauf.push({id: uid(), datum: jetztISO(), typ: nach ? 'nachgefasst' : 'mail', text: `${nach ? 'Nachgefragt per Gmail' : 'Mail per Gmail gesendet'}: „${betreff}“ an ${an}`, mail: mailEintragNeu({an, betreff, text})});
       if (nach) cur.aufgaben = (cur.aufgaben || []).map(k => /nachfrag|nachfass/i.test(k.text) ? {...k, erledigt: true} : k);

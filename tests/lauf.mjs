@@ -1152,6 +1152,32 @@ test('mail-antwort', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('mail-zwischenantwort', async () => {
+  // Zwischenantwort senden: nur die Aufgabe zu dieser Antwort ist erledigt, die verbindliche Antwort später bleibt offen (und im Dashboard)
+  const { seite, gh, gmail, fehler } = await appStarten({ google: true });
+  const a = json(gh, 'apps/test-mail.json');
+  gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...a, status: 'interview', gmailThreadId: 'thread-alt',
+    mail: { typ: 'antwort', text: 'Betreff: Re: Einladung\n\nHallo Testteam,\n\nich bin gerade im Urlaub und melde mich am Montag.\n\nViele Grüße\nMax Muster' },
+    aufgaben: [...(a.aufgaben || []), { id: 'zw1', text: 'Testfirma antworten: kurz Bescheid geben, dass du im Urlaub bist (Antwort liegt in der App bereit)', faellig: '2026-11-27', erledigt: false },
+      { id: 'mo1', text: 'Testfirma antworten: am Mo 30.11. Termin festmachen', faellig: '2026-11-30', erledigt: false }] }, null, 1) + '\n'));
+  await seite.goto(`http://app.test/Bewerbungszentrale/#google=${GOOGLE_ID}`);
+  await seite.reload();
+  await zuAkte(seite, 'test-mail');
+  await seite.click('[data-tab="verlauf"]');
+  await seite.waitForSelector('[data-act="mail-gmail"]:not([hidden])', { timeout: 10000 });
+  await seite.click('[data-act="mail-gmail"]');
+  await seite.waitForSelector('#mg-send', { timeout: 5000 });
+  await seite.click('#mg-send');
+  assert.ok(await bis(() => gmail.length === 1, 30000), 'Mail gesendet');
+  const erledigt = (id) => (json(gh, 'apps/test-mail.json').aufgaben || []).find((k) => k.id === id)?.erledigt;
+  assert.ok(await bis(() => erledigt('zw1') === true, 15000), 'Zwischenantwort erledigt');
+  assert.equal(erledigt('mo1'), false, 'die verbindliche Antwort bleibt offen');
+  await seite.goto('http://app.test/Bewerbungszentrale/#uebersicht');
+  await seite.waitForSelector('#dash [data-bereich="antwort"] [data-open="test-mail"]', { state: 'attached', timeout: 10000 });
+  assert.match(await seite.textContent('#dash [data-bereich="antwort"] [data-open="test-mail"]'), /am Mo 30\.11\. Termin festmachen/);
+  assert.deepEqual(fehler, []);
+});
+
 test('ordner', async () => {
   // Portal-Mappen automatisch in einen Ordner: einmal wählen, dann je Stelle ein Ordner mit Score davor; Erledigtes räumt die App weg, Fremdes nicht
   const { seite, gh, fehler } = await appStarten();
