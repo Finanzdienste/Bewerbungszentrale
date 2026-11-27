@@ -746,11 +746,17 @@ test('firefox', async () => {
   const profil = async () => { if (await seite.isVisible('#drClose')) await seite.click('#drClose', { timeout: 3000 }).catch(() => {}); /* die Akte schließt sich beim Wechsel auch von selbst */ await seite.goto('http://app.test/Bewerbungszentrale/#profil'); await seite.waitForSelector('#wohnortPanel', { timeout: 10000 }); };
   await profil();
   assert.equal(await seite.evaluate(() => localStorage.getItem('bz-firefox-tab')), null, 'von Haus aus aus');
-  assert.match(await seite.textContent('#firefoxTabPanel'), /gehen im kleinen Fenster über der App auf.*In einem richtigen Firefox-Tab öffnen.*⋮ → „In Firefox öffnen“.*nur über deine Widget-App/s);
+  // Ein Schalter, der sagt, wie er steht, und den Tipp bestätigt (Tobi, 27.11.2026: „Hab geklickt ist nichts passiert“ – der Knopf hieß
+  // „In einem richtigen Firefox-Tab öffnen“ und sah aus, als öffne er selbst etwas)
+  assert.match(await seite.textContent('#firefoxTabPanel'), /Ausgeschaltet: gehen im kleinen Fenster über der App auf.*⋮ → „In Firefox öffnen“.*deine Widget-App/s);
+  assert.equal((await seite.textContent('[data-act="firefox-tab"]')).trim(), 'Einschalten');
   await seite.click('[data-act="firefox-tab"]');
-  await seite.waitForFunction(() => /Wieder im kleinen Fenster öffnen/.test(document.querySelector('#firefoxTabPanel')?.textContent || ''), null, { timeout: 5000 });
+  await seite.waitForFunction(() => document.querySelector('[data-act="firefox-tab"]')?.textContent.trim() === 'Ausschalten', null, { timeout: 5000 });
   assert.equal(await seite.evaluate(() => localStorage.getItem('bz-firefox-tab')), '1');
-  assert.match(await seite.textContent('#firefoxTabPanel'), /über die Widget-App in einem richtigen Tab auf.*„Links in Apps öffnen“ „Immer“/s);
+  assert.match(await seite.textContent('#firefoxTabPanel'), /Eingeschaltet: gehen in einem richtigen Firefox-Tab auf.*„Zur Anzeige“.*„Links in Apps öffnen“ „Immer“/s);
+  assert.equal(await seite.getAttribute('[data-act="firefox-tab"]', 'aria-pressed'), 'true');
+  assert.match(await seite.textContent('#toasts'), /Eingeschaltet\. „Zur Anzeige“ geht jetzt in einem richtigen Firefox-Tab auf\./, 'der Tipp wird bestätigt');
+  await seite.waitForFunction(() => !document.querySelector('#toasts .toast'), null, { timeout: 9000 });
   // eingeschaltet: Der Link geht an die Widget-App, kein neues Fenster
   await zuAkte(seite, 'test-portal');
   await seite.waitForSelector('#anzeigeOben a[data-ff]', { timeout: 10000 });
@@ -758,7 +764,7 @@ test('firefox', async () => {
   assert.deepEqual(await seite.evaluate(() => window.__ziel), [`bildschirmzeit://firefox?url=${encodeURIComponent(anzeige)}`]);
   // Tut sich nichts (die Widget-App kann es noch nicht): Der alte Weg bleibt einen Tipp entfernt
   await seite.waitForSelector('#toasts .toast button', { timeout: 5000 });
-  assert.match(await seite.textContent('#toasts .toast'), /Firefox geht nicht auf\?.*Hier öffnen/s);
+  assert.match(await seite.textContent('#toasts .toast:has(button)'), /Firefox geht nicht auf\?.*Hier öffnen/s);
   const [ersatz] = await Promise.all([ctx.waitForEvent('page', { timeout: 10000 }).catch(() => null), seite.click('#toasts .toast button')]);
   assert.ok(ersatz, '„Hier öffnen“ öffnet die Anzeige wie bisher');
   await ersatz.close();
@@ -779,8 +785,9 @@ test('firefox', async () => {
   await seite.evaluate(() => { window.__modus = 'standalone'; });
   await seite.goto('http://app.test/Bewerbungszentrale/#uebersicht'); await profil();
   await seite.click('[data-act="firefox-tab"]');
-  await seite.waitForFunction(() => /In einem richtigen Firefox-Tab öffnen/.test(document.querySelector('#firefoxTabPanel')?.textContent || ''), null, { timeout: 5000 });
+  await seite.waitForFunction(() => document.querySelector('[data-act="firefox-tab"]')?.textContent.trim() === 'Einschalten', null, { timeout: 5000 });
   assert.equal(await seite.evaluate(() => localStorage.getItem('bz-firefox-tab')), null);
+  assert.match(await seite.textContent('#toasts'), /Ausgeschaltet\. Anzeigen gehen wieder im kleinen Fenster auf\./);
   await zuAkte(seite, 'test-portal');
   await seite.waitForSelector('#anzeigeOben a[data-ff]', { timeout: 10000 });
   assert.equal(await auf(), true, 'ausgeschaltet: wieder ein neues Fenster');

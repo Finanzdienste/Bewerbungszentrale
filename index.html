@@ -2012,20 +2012,24 @@ function firefoxPanel() {
   </section>`;
 }
 /** Nur in der in Firefox auf Android installierten App: Anzeigen und Portale über Tobis Widget-App in einem richtigen Firefox-Tab öffnen
-    (anWidget). Je Gerät gemerkt, von Haus aus aus – die Widget-App muss den Einstieg bildschirmzeit://firefox kennen. */
+    (anWidget). Je Gerät gemerkt, von Haus aus aus – die Widget-App muss den Einstieg bildschirmzeit://firefox kennen (ab Fassung 1.32).
+    Ein Schalter, kein Knopf, der selbst etwas öffnet: Er hieß erst „In einem richtigen Firefox-Tab öffnen“, und nach dem Tipp sah es aus,
+    als sei nichts passiert (Tobi, 27.11.2026: „Hab geklickt ist nichts passiert“). Darum „Einschalten“/„Ausschalten“, der Zustand vorn
+    in der Zeile darunter und eine Bestätigung als Hinweis. */
 function firefoxTabPanel() {
   if (!firefoxApp()) return '';
   const an = firefoxTabAn();
-  return `<section class="panel" id="firefoxTabPanel"><div class="panel-head"><h2>Anzeigen in Firefox</h2><span class="sub">${an ? 'gehen über die Widget-App in einem richtigen Tab auf' : 'gehen im kleinen Fenster über der App auf'}</span></div>
-    <div class="ki-row" style="margin:0 0 8px"><button class="btn sm ${an ? '' : 'primary'}" type="button" data-act="firefox-tab" aria-pressed="${an}">${ic('ext')}${an ? 'Wieder im kleinen Fenster öffnen' : 'In einem richtigen Firefox-Tab öffnen'}</button></div>
+  return `<section class="panel" id="firefoxTabPanel"><div class="panel-head"><h2>Anzeigen in Firefox</h2><span class="sub">${an ? 'Eingeschaltet: gehen in einem richtigen Firefox-Tab auf' : 'Ausgeschaltet: gehen im kleinen Fenster über der App auf'}</span></div>
+    <div class="ki-row" style="margin:0 0 8px"><button class="btn sm ${an ? '' : 'primary'}" type="button" data-act="firefox-tab" aria-pressed="${an}">${an ? 'Ausschalten' : 'Einschalten'}</button></div>
     <p class="desc" style="margin:0">${an
-      ? 'Fragt Firefox bei jedem Link nach: in Firefox unter Einstellungen → „Links in Apps öffnen“ „Immer“ wählen. Tut sich nach dem Tipp nichts, kann deine Widget-App das noch nicht; dann hilft „Hier öffnen“ im Hinweis unten.'
-      : 'Aus der installierten App öffnet Firefox Links immer im kleinen Fenster mit ✕ (dort ⋮ → „In Firefox öffnen“). Von selbst in einen richtigen Tab geht es nur über deine Widget-App: Sie braucht dafür die neueste Fassung.'}</p>
+      ? 'Tippe in einer Akte auf „Zur Anzeige“: Deine Widget-App reicht den Link an Firefox weiter. Fragt Firefox dabei jedes Mal nach, dort unter Einstellungen → „Links in Apps öffnen“ „Immer“ wählen. Tut sich nach dem Tipp nichts, hilft „Hier öffnen“ im Hinweis unten.'
+      : 'Aus der installierten App öffnet Firefox Links immer im kleinen Fenster mit ✕ (dort ⋮ → „In Firefox öffnen“). Eingeschaltet reicht deine Widget-App (ab Fassung 1.32) sie an Firefox weiter, und sie gehen von selbst als richtiger Tab auf.'}</p>
   </section>`;
 }
 function firefoxTabUmschalten() {
   try { if (firefoxTabAn()) localStorage.removeItem(FF_TAB); else localStorage.setItem(FF_TAB, '1'); }
   catch { toast('Das lässt sich auf diesem Gerät nicht merken.'); return; }
+  toast(firefoxTabAn() ? 'Eingeschaltet. „Zur Anzeige“ geht jetzt in einem richtigen Firefox-Tab auf.' : 'Ausgeschaltet. Anzeigen gehen wieder im kleinen Fenster auf.');
   const alt = $('#firefoxTabPanel'); if (!alt) return; // nur den Abschnitt nachziehen, damit Eingaben im Profil bleiben
   const vorlage = document.createElement('template'); vorlage.innerHTML = firefoxTabPanel();
   const neu = vorlage.content.firstElementChild; if (neu) alt.replaceWith(neu);
