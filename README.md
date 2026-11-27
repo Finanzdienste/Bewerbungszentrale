@@ -13,7 +13,7 @@ App fürs Handy, für Tobi.
   Status, Notizen, Bürotage, Anschreiben und Antworten schreiben Morgenlauf, Postfach-Routine
   und Claude-Sitzungen ins Daten-Repo. Den Status setzt die App nur selbst, wenn sie eine Mail sendet.
 - **Dashboard:** Suche und rechts daneben „Alle“: die ganze Liste mit Filtern (Stellen,
-  Initiativ, Portal, Mail, Status) und Sortierung nach Score, Gehalt, Fahrzeit, Frist oder
+  Initiativ, Portal, Mail, Status) und Sortierung nach Score, Gehalt, Stundenlohn (mit Fahrweg wie im Score), Fahrzeit, Frist oder
   Neuheit, die Sortierung bleibt gemerkt. Darunter die Bereiche nach Stand, in jedem der höchste
   Score oben (bei Gleichstand Vorbereitete nach Frist, sonst das Neueste zuerst); Suchtreffer, die in
   keinem Bereich stehen, verlinkt ein Hinweis auf „Alle“.

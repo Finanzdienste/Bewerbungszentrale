@@ -4,7 +4,7 @@
  * KI-Anfragen, Supabase (Bildschirmzeit). Bei jeder Änderung an index.html
  * oder js/ VERSION hochzählen.
  */
-const VERSION = 'v95';
+const VERSION = 'v96';
 const HUELLE = `bz-huelle-${VERSION}`;
 const DAUER = 'bz-dauer-v1'; // Karte, Schriften, Bibliotheken von CDNs (versioniert, ändern sich nicht)
 // PDFs, die die App gerade erstellt hat (js/plattform.js legt sie hier ab): unter …/ausgabe/<Kennung>/<Dateiname> haben

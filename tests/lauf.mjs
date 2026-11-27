@@ -219,7 +219,7 @@ test('alle-filter', async () => {
   const { seite, ctx, gh, fehler } = await appStarten();
   const setze = (id, f) => gh.dateien.set(`apps/${id}.json`, Buffer.from(JSON.stringify({ ...json(gh, `apps/${id}.json`), ...f }, null, 1) + '\n'));
   setze('test-mail', { gehaltWunsch: 72000, anfahrt: { min: 20 } });
-  setze('test-portal', { gehaltMin: 55000, gehaltMax: 65000, anfahrt: { min: 45 } });
+  setze('test-portal', { gehaltMin: 55000, gehaltMax: 65000, anfahrt: { min: 45 }, gehaltErwartet: { wert: 70000, quelle: 'schaetzung', grund: 'erfunden' }, wochenstunden: 35 });
   await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
   await seite.evaluate(() => window.bzPlattform.abgleichen());
   await seite.waitForSelector('#dash', { timeout: 20000 });
@@ -238,6 +238,11 @@ test('alle-filter', async () => {
   await seite.waitForFunction(() => document.querySelector('#v-liste .radar-list [data-open]')?.dataset.open === 'test-mail', null, { timeout: 5000 });
   assert.deepEqual(await reihe(), ['test-mail', 'test-portal', 'test-leer'], 'Gehalt: 72k, dann Spanne 55–65k, ohne Angabe am Ende');
   assert.match(await seite.textContent('#v-liste [data-open="test-mail"]'), /ca\. 72k €/);
+  // Stundenlohn mit Fahrweg wie im Score: 70.000 € bei 35 Std. (38,46 €) vor 72.000 € bei 40 Std. (34,62 €), ohne Gehalt am Ende
+  await seite.selectOption('#listSortier', 'stundenlohn');
+  await seite.waitForFunction(() => document.querySelector('#v-liste .radar-list [data-open]')?.dataset.open === 'test-portal', null, { timeout: 5000 });
+  assert.deepEqual(await reihe(), ['test-portal', 'test-mail', 'test-leer'], 'Stundenlohn');
+  assert.match(await seite.textContent('#v-liste [data-open="test-portal"]'), /38,46 € pro Std\./);
   await seite.selectOption('#listSortier', 'fahrt');
   await seite.waitForFunction(() => document.querySelector('#v-liste .radar-list [data-open]')?.dataset.open === 'test-mail', null, { timeout: 5000 });
   assert.deepEqual(await reihe(), ['test-mail', 'test-portal', 'test-leer']);
