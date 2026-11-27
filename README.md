@@ -198,7 +198,8 @@ die öffnet ihn in Firefox.
 - Stand 27.11.2026: Die Widget-App kennt den Einstieg seit Release v32
   (Fassung 1.32; Repo Bildschirmzeit, README „Links in einem richtigen
   Firefox-Tab“). Sie holt sich das Update selbst; danach im Profil
-  „Anzeigen in Firefox“ einschalten.
+  „Anzeigen in Firefox“ einschalten. Von Tobi am 27.11.2026 am Handy
+  bestätigt: „Zur Anzeige“ geht so als richtiger Tab in Firefox auf.
 - Geprüft von `node tests/lauf.mjs firefox`.
 
 ## Läufe
