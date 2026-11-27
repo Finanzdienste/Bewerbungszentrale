@@ -195,8 +195,10 @@ die öffnet ihn in Firefox.
 - Firefox fragt vor jedem Sprung in eine App nach, außer unter Einstellungen →
   „Links in Apps öffnen“ steht „Immer“ (dann gehen auch andere Links ohne
   Nachfrage in ihre Apps).
-- Stand 27.11.2026: Die Widget-App kennt den Einstieg noch nicht (eigener
-  Chat im Repo Bildschirmzeit). Bis dahin bleibt der Schalter aus.
+- Stand 27.11.2026: Die Widget-App kennt den Einstieg seit Release v32
+  (Fassung 1.32; Repo Bildschirmzeit, README „Links in einem richtigen
+  Firefox-Tab“). Sie holt sich das Update selbst; danach im Profil
+  „Anzeigen in Firefox“ einschalten.
 - Geprüft von `node tests/lauf.mjs firefox`.
 
 ## Läufe
