@@ -136,6 +136,29 @@ entstehen erst beim Senden. Ist unklar, ob eine Mail raus ist, wird sie nie ein
 zweites Mal geschickt und die App hält an. Tests: `postausgang-tipp`,
 `postausgang-selbst`, `postausgang-erledigt`.
 
+**Googles Anmeldefenster in der Firefox-App (v94)** – Tobi, 27.11.2026: Nach dem
+Senden stand ein leeres Fenster „Sign In – Google Accounts“ über der App.
+Ursache (Firefox 161, im Quelltext nachgelesen): `window.open(https://…)` macht
+in der in Firefox installierten App **zwei** Fenster. Das echte, mit der App
+verbundene bekommt eine Sitzung, die niemand anzeigt
+(`GeckoEngineSession.onNewSession`); dazu startet `CustomTabWindowFeature`
+dieselbe Adresse noch einmal als kleines Fenster mit ✕, ohne Verbindung zur App.
+Googles Anmeldung lief deshalb unsichtbar durch (die Mail ging raus), und das
+sichtbare Doppel blieb auf Googles leerer Ergebnisseite stehen – es kann nichts
+übergeben und sich nicht schließen. Abhilfe in `googleZugriff`
+(`js/plattform.js`), nur in der installierten App in Firefox auf Android: das
+Fenster mit `javascript:void 0` öffnen und erst dann zu Google schicken. Für
+diese Adresse gibt es kein kleines Fenster, und in die App lädt Firefox sie
+nicht (`loadUrl` bricht bei `javascript:` ab); eine leere Adresse oder
+`about:blank` würde Firefox dagegen ins App-Fenster laden. Braucht Google eine
+Eingabe, sieht man sie im unsichtbaren Fenster nicht: Nach 12 Sekunden sagt die
+App „Tipp noch einmal“, der nächste Tipp öffnet das Fenster wie früher sichtbar,
+und zurück aus ihm reicht ein letzter Tipp. Kommt Googles Antwort nur zu spät
+(langsames Netz), gilt der Zugriff trotzdem, und der nächste Tipp geht sofort.
+Scheitert der stille Weg zweimal in Folge, bleibt es auf dem Gerät eine Woche
+beim alten (`bewerbungszentrale.google.still`). Am Handy noch nicht bestätigt
+(Stand 27.11.2026). Test: `google-fenster`.
+
 ## Bildschirmzeit für Tobis Widget
 
 Android zählt die App als „Chrome“. Tobis Widget-App (Repo

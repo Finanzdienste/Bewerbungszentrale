@@ -666,6 +666,75 @@
     return ki;
   }
 
+  /* ------------------------------------------------ Googles Anmeldefenster in der in Firefox installierten App
+   * Tobi, 27.11.2026: Nach dem Senden einer Mail stand ein leeres Fenster „Sign In – Google Accounts“ über der App.
+   * Ursache (Firefox 161, im Quelltext nachgelesen): Ruft eine Seite dort window.open(https://…) auf, entstehen ZWEI Fenster.
+   * Das echte, das mit der App verbunden ist, bekommt eine Sitzung, die niemand anzeigt (GeckoEngineSession.onNewSession gibt
+   * sie an Gecko zurück, GeckoSession öffnet sie). Zusätzlich startet CustomTabWindowFeature dieselbe Adresse noch einmal als
+   * kleines Fenster mit ✕ – ohne Verbindung zur App. Googles Anmeldung läuft deshalb unsichtbar durch (ihr Ergebnis kommt als
+   * Nachricht vom echten Fenster, die Mail geht raus), und das sichtbare Doppel bleibt auf Googles leerer Ergebnisseite stehen:
+   * Es kann nichts übergeben und sich nicht schließen (das kleine Fenster beachtet window.close() nicht).
+   * Abhilfe: Das Fenster mit javascript:void 0 öffnen und erst dann zu Google schicken. Für diese Adresse gibt es kein kleines
+   * Fenster (ActivityNotFoundException), und in die App lädt Firefox sie auch nicht (GeckoEngineSession.loadUrl bricht bei
+   * javascript: ab) – übrig bleibt das unsichtbare echte Fenster. Eine leere Adresse oder about:blank gingen NICHT: Die lädt
+   * Firefox dann ins App-Fenster selbst (so entstand das about:blank bei den PDFs).
+   * Braucht Google eine Eingabe (neu anmelden, erste Erlaubnis), sieht man im unsichtbaren Fenster nichts. Darum eine Frist:
+   * Danach kommt eine Meldung, und der nächste Tipp öffnet das Fenster wie früher sichtbar. Das sichtbare kann der App nichts
+   * übergeben; kommt man ohne Zugriff aus ihm zurück, bittet die App um einen letzten Tipp, der wieder still läuft. Scheitert
+   * der stille Weg zweimal in Folge, bleibt es auf diesem Gerät eine Woche beim alten Weg.
+   */
+  const firefoxApp = () => { try { return firefoxHandy() && !matchMedia('(display-mode: browser)').matches; } catch { return false; } };
+  const GOOGLE_STILL = 'bewerbungszentrale.google.still'; // { fehl: stille Versuche ohne Antwort in Folge, wann, sichtbar: der nächste Versuch mit Fenster }
+  const googleFrist = () => Number(window.bzGoogleFrist) || 12_000; // window.bzGoogleFrist: für Tests
+  /** Holt bei Google einen Zugriff. Löst mit Googles Antwort auf; lehnt mit { type } ab wie Google, dazu 'eingabe' und 'nochmal'.
+      spaet(antwort): Googles Antwort kam erst nach der Frist (langsames Netz) – der Zugriff soll trotzdem gelten, dann geht der nächste Tipp sofort. */
+  function googleZugriff(o, opt, spaet) {
+    return new Promise((res, rej) => {
+      const inApp = firefoxApp(), stand = (inApp && lies(GOOGLE_STILL)) || {};
+      const gesperrt = (stand.fehl || 0) >= 2 && Date.now() - (stand.wann || 0) < 7 * 864e5;
+      const still = inApp && !stand.sichtbar && !gesperrt;
+      if (inApp && stand.sichtbar) schreib(GOOGLE_STILL, { ...stand, sichtbar: false });
+      let fertig = false, frist = 0, sicht = null, fenster = null;
+      const ende = (f, x) => {
+        if (fertig) return;
+        fertig = true; clearTimeout(frist);
+        if (sicht) document.removeEventListener('visibilitychange', sicht);
+        try { fenster?.close(); } catch { /* egal */ }
+        f(x);
+      };
+      const client = o.initTokenClient({
+        ...opt,
+        callback: (r) => {
+          if (still) schreib(GOOGLE_STILL, { fehl: 0, wann: Date.now(), sichtbar: false }); // der stille Weg geht, auch wenn er diesmal zu langsam war
+          if (fertig) spaet?.(r); else ende(res, r);
+        },
+        error_callback: (e) => ende(rej, e),
+      });
+      if (!still) {
+        client.requestAccessToken();
+        if (!inApp) return;
+        let warWeg = false; // zurück aus dem sichtbaren Fenster und noch kein Zugriff: Es konnte ihn nicht übergeben
+        sicht = () => { if (document.visibilityState !== 'visible') warWeg = true; else if (warWeg) setTimeout(() => ende(rej, { type: 'nochmal' }), 1500); };
+        document.addEventListener('visibilitychange', sicht);
+        return;
+      }
+      const echt = window.open; let rief = false;
+      window.open = function (url, ...rest) {
+        window.open = echt; rief = true;
+        try { fenster = echt.call(window, 'javascript:void 0', ...rest); } catch { fenster = null; }
+        if (!fenster) return echt.call(window, url, ...rest); // geht das stille Fenster nicht auf: wie früher
+        try { fenster.location.replace(url); } catch { /* dann greift die Frist */ }
+        return fenster;
+      };
+      try { client.requestAccessToken(); } finally { if (!rief) window.open = echt; }
+      frist = setTimeout(() => { schreib(GOOGLE_STILL, { fehl: (stand.fehl || 0) + 1, wann: Date.now(), sichtbar: true }); ende(rej, { type: 'eingabe' }); }, googleFrist());
+    });
+  }
+  const GOOGLE_TEXT = { eingabe: 'Google hat nicht geantwortet, vielleicht braucht es eine Bestätigung von dir. Tipp noch einmal, dann öffnet sich das Google-Fenster.',
+    nochmal: 'Wenn du bei Google bestätigt hast: Tipp jetzt noch einmal.' };
+  /** Googles Ablehnung als Fehler der App: abgebrochen, google_eingabe, google_nochmal, sonst consent_required. */
+  const googleFehler = (e) => fehler(e?.type === 'popup_closed' ? 'abgebrochen' : GOOGLE_TEXT[e?.type] ? 'google_' + e.type : 'consent_required', GOOGLE_TEXT[e?.type] || e?.message || 'Anmeldung abgebrochen');
+
   /* ------------------------------------------------ Gmail: senden über die Gmail-API, nur auf Knopfdruck */
   const gmail = (() => {
     const SCOPE = 'https://www.googleapis.com/auth/gmail.send';
@@ -684,16 +753,13 @@
       if (angemeldet()) return Promise.resolve();
       const o = window.google?.accounts?.oauth2;
       if (!o || !clientId()) return Promise.reject(fehler('unavailable', 'Die Google-Anmeldung ist nicht bereit.'));
-      return new Promise((res, rej) => {
-        o.initTokenClient({
-          client_id: clientId(), scope: SCOPE, prompt: '', ...(/@/.test(konto) ? { hint: konto } : {}), // prompt '': nur beim ersten Mal fragen, danach schließt sich das Fenster von selbst
-          callback: (r) => {
-            if (r?.access_token && (!o.hasGrantedAllScopes || o.hasGrantedAllScopes(r, SCOPE))) { zugriff = { token: r.access_token, bis: Date.now() + (Number(r.expires_in) || 3600) * 1000 }; schreib(MERKEN, zugriff); res(); }
-            else rej(fehler('consent_required', 'Ohne die Erlaubnis zum Senden geht es nicht.'));
-          },
-          error_callback: (e) => rej(fehler(e?.type === 'popup_closed' ? 'abgebrochen' : 'consent_required', e?.message || 'Anmeldung abgebrochen')),
-        }).requestAccessToken();
-      });
+      const nimm = (r) => {
+        if (!r?.access_token || (o.hasGrantedAllScopes && !o.hasGrantedAllScopes(r, SCOPE))) return false;
+        zugriff = { token: r.access_token, bis: Date.now() + (Number(r.expires_in) || 3600) * 1000 }; schreib(MERKEN, zugriff); return true;
+      };
+      // prompt '': nur beim ersten Mal fragen, danach schließt sich das Fenster von selbst (in der Firefox-App bleibt es unsichtbar: googleZugriff)
+      return googleZugriff(o, { client_id: clientId(), scope: SCOPE, prompt: '', ...(/@/.test(konto) ? { hint: konto } : {}) }, nimm)
+        .then((r) => { if (!nimm(r)) throw fehler('consent_required', 'Ohne die Erlaubnis zum Senden geht es nicht.'); }, (e) => { throw googleFehler(e); });
     }
     const utf8 = (t) => new TextEncoder().encode(t);
     const b64 = (by) => { let t = ''; for (let i = 0; i < by.length; i += 0x8000) t += String.fromCharCode.apply(null, by.subarray(i, i + 0x8000)); return btoa(t); };
@@ -746,16 +812,12 @@
       if (angemeldet()) return Promise.resolve();
       const o = window.google?.accounts?.oauth2;
       if (!o || !clientId()) return Promise.reject(fehler('unavailable', 'Die Google-Anmeldung ist nicht bereit.'));
-      return new Promise((res, rej) => {
-        o.initTokenClient({
-          client_id: clientId(), scope: SCOPE, prompt: '', ...(/@/.test(konto) ? { hint: konto } : {}),
-          callback: (r) => {
-            if (r?.access_token && (!o.hasGrantedAllScopes || o.hasGrantedAllScopes(r, SCOPE))) { zugriff = { token: r.access_token, bis: Date.now() + (Number(r.expires_in) || 3600) * 1000 }; schreib(MERKEN, zugriff); schreib(AN, { an: true }); res(); }
-            else rej(fehler('consent_required', 'Ohne die Erlaubnis für Google Drive geht es nicht.'));
-          },
-          error_callback: (e) => rej(fehler(e?.type === 'popup_closed' ? 'abgebrochen' : 'consent_required', e?.message || 'Anmeldung abgebrochen')),
-        }).requestAccessToken();
-      });
+      const nimm = (r) => {
+        if (!r?.access_token || (o.hasGrantedAllScopes && !o.hasGrantedAllScopes(r, SCOPE))) return false;
+        zugriff = { token: r.access_token, bis: Date.now() + (Number(r.expires_in) || 3600) * 1000 }; schreib(MERKEN, zugriff); schreib(AN, { an: true }); return true;
+      };
+      return googleZugriff(o, { client_id: clientId(), scope: SCOPE, prompt: '', ...(/@/.test(konto) ? { hint: konto } : {}) }, nimm)
+        .then((r) => { if (!nimm(r)) throw fehler('consent_required', 'Ohne die Erlaubnis für Google Drive geht es nicht.'); }, (e) => { throw googleFehler(e); });
     }
     async function api(pfad, { method = 'GET', query = {}, json, body, typ, upload = false } = {}) {
       if (!angemeldet()) throw fehler('needs_reauth', 'Bitte neu bei Google anmelden.');

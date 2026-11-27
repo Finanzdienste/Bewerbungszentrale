@@ -2525,6 +2525,11 @@ async function driveAbgleich(plan, dateien, allgemein) { // Google Drive: Ordner
 const GMAIL = window.bzPlattform?.gmail || null;
 const GMAIL_FEHLER = {needs_reauth: 'Die Google-Anmeldung ist abgelaufen. Tipp noch einmal auf „Senden“.', forbidden: 'Google lässt den Versand nicht zu. Ist im Google-Cloud-Projekt die Gmail-API eingeschaltet?',
   rate_limited: 'Gmail bremst gerade. Versuch es in ein paar Minuten noch einmal.', unavailable: 'Keine Verbindung zu Google.', 'pdf-lib': 'Das PDF-Werkzeug konnte nicht geladen werden.'};
+/* In der in Firefox installierten App läuft Googles Anmeldung unsichtbar (js/plattform.js googleZugriff). Braucht Google doch eine
+   Eingabe, kommen von dort zwei Fehler, die ihren Text selbst mitbringen: google_eingabe („Tipp noch einmal, dann öffnet sich das
+   Google-Fenster“) und google_nochmal („Wenn du bei Google bestätigt hast: Tipp jetzt noch einmal“). */
+const googleHinweis = e => /^google_/.test(e?.code || '') ? String(e.message || '') : '';
+const anmeldeFehler = e => e?.code === 'abgebrochen' ? 'Anmeldung abgebrochen.' : googleHinweis(e) || 'Ohne die Google-Anmeldung kann die App nicht senden.';
 const mailBereit = () => { const belegt = firmenMitVersand(); return list().filter(a => istBereit(a) && a.bewerbungsweg === 'email' && (a.kontakt?.email || '').trim() && !belegt.has(firmaGruppe(a.firma)) && !vorgemerkt(a.id)); };
 
 /* ---------- Postausgang: ohne Netz vorgemerkte Mail-Bewerbungen ----------
@@ -2620,7 +2625,7 @@ async function postausgangAbarbeiten({tipp = false} = {}) {
       if (!['ok', 'uebersprungen'].includes(erg)) { PA.hinweis = GMAIL_FEHLER[erg] && erg !== 'needs_reauth' ? GMAIL_FEHLER[erg] : ''; break; } // bleibt vorgemerkt
     }
   } catch (e) {
-    PA.hinweis = e?.code === 'abgebrochen' ? 'Anmeldung abgebrochen.' : e?.code === 'consent_required' ? 'Ohne die Google-Anmeldung kann die App nicht senden.' : (GMAIL_FEHLER[e?.code] || 'Die Google-Anmeldung lädt gerade nicht.');
+    PA.hinweis = e?.code === 'abgebrochen' ? 'Anmeldung abgebrochen.' : e?.code === 'consent_required' ? 'Ohne die Google-Anmeldung kann die App nicht senden.' : (googleHinweis(e) || GMAIL_FEHLER[e?.code] || 'Die Google-Anmeldung lädt gerade nicht.');
   } finally {
     PA.laeuft = false; renderBanners(); renderSoon(); if (state.openId) { renderDrawerHead(); renderDrawerBody(); }
   }
@@ -2702,7 +2707,7 @@ function sammelMailModal(ids) {
       await GMAIL.senden({an, betreff: '[Probe] ' + betreffFuer(a), text: `Probe aus der Bewerbungszentrale. So käme die Mail bei ${a.firma || 'der Firma'} an (${(a.kontakt?.email || '').trim()}):\n\n${mailtextFuer(a)}`, anhang: {name: mappe.filename, bytes: mappe.bytes, typ: 'application/pdf'}});
       st.textContent = `Probe an ${an} gesendet. Schau in dein Postfach, die Bewerbung selbst ist noch nicht raus.`;
     } catch (e) {
-      st.innerHTML = e?.code === 'abgebrochen' ? 'Anmeldung abgebrochen.' : `Probe nicht gesendet. ${esc(GMAIL_FEHLER[e?.code] || GMAIL_FEHLER[e?.message] || '')}${e?.message && e.message !== GMAIL_FEHLER[e?.code] ? `<details style="margin-top:4px;font-size:var(--t-xs)"><summary>Meldung von Google</summary><code style="white-space:pre-wrap;word-break:break-word">${esc(e.message)}</code></details>` : ''}`; st.classList.add('err');
+      st.innerHTML = e?.code === 'abgebrochen' ? 'Anmeldung abgebrochen.' : googleHinweis(e) ? esc(googleHinweis(e)) : `Probe nicht gesendet. ${esc(GMAIL_FEHLER[e?.code] || GMAIL_FEHLER[e?.message] || '')}${e?.message && e.message !== GMAIL_FEHLER[e?.code] ? `<details style="margin-top:4px;font-size:var(--t-xs)"><summary>Meldung von Google</summary><code style="white-space:pre-wrap;word-break:break-word">${esc(e.message)}</code></details>` : ''}`; st.classList.add('err');
     }
     probe.disabled = false; los.disabled = !knopf(); zu.forEach(b => b.disabled = false);
   };
@@ -2711,7 +2716,7 @@ function sammelMailModal(ids) {
     if (merken || ohneNetz()) { closeModal(); return vormerken(auswahl.map(z => z.a.id)); }
     los.disabled = true; if (probe) probe.disabled = true; zu.forEach(b => b.disabled = true); st.classList.remove('err');
     try { await GMAIL.anmelden(P().gmailKonto || ''); } // im Klick, sonst blockiert der Browser das Anmeldefenster
-    catch (e) { st.textContent = e?.code === 'abgebrochen' ? 'Anmeldung abgebrochen.' : 'Ohne die Google-Anmeldung kann die App nicht senden.'; st.classList.add('err'); los.disabled = false; if (probe) probe.disabled = false; zu.forEach(b => b.disabled = false); return; }
+    catch (e) { st.textContent = anmeldeFehler(e); st.classList.add('err'); los.disabled = false; if (probe) probe.disabled = false; zu.forEach(b => b.disabled = false); return; }
     let ok = 0, halt = '';
     for (const z of auswahl) {
       const id = z.a.id, a = state.apps[id];
@@ -3978,7 +3983,7 @@ function mailGmailModal(id) {
     const btn = $('#mg-send', m); btn.disabled = true; $$('[data-mclose]', m).forEach(b => b.disabled = true);
     if (!MCP) { // eigener Gmail-Zugang der App: Anmeldung direkt im Klick
       try { await GMAIL.anmelden(P().gmailKonto || ''); }
-      catch (e) { $('#mg-st', m).textContent = e?.code === 'abgebrochen' ? 'Anmeldung abgebrochen.' : 'Ohne die Google-Anmeldung kann die App nicht senden.'; $('#mg-st', m).classList.add('err'); btn.disabled = false; $$('[data-mclose]', m).forEach(b => b.disabled = false); return; }
+      catch (e) { $('#mg-st', m).textContent = anmeldeFehler(e); $('#mg-st', m).classList.add('err'); btn.disabled = false; $$('[data-mclose]', m).forEach(b => b.disabled = false); return; }
     }
     $('#mg-st', m).innerHTML = '<span class="pulse"></span>Wird gesendet …';
     try {

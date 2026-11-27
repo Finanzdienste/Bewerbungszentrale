@@ -1557,6 +1557,129 @@ test('gmail-merken', async () => {
   assert.deepEqual(fehler, []);
 });
 
+test('google-fenster', async () => {
+  // In der in Firefox installierten App macht Firefox aus window.open(https://…) zwei Fenster: das echte, mit der App verbundene bleibt
+  // unsichtbar, dazu kommt ein sichtbares Doppel ohne Verbindung. Googles Anmeldung lief deshalb unsichtbar durch, und das Doppel blieb
+  // leer stehen (Tobi, 27.11.2026: „Wenn ich ne mail geschickt hab kommt das“ – „Sign In – Google Accounts“, leere Seite). Darum öffnet
+  // die App das Fenster dort mit javascript:void 0 (kein Doppel) und schickt es erst dann zu Google. Braucht Google eine Eingabe, kommt
+  // nach einer Frist eine Meldung, und der nächste Tipp öffnet das Fenster wie früher sichtbar.
+  const { seite, ctx, gmail, fehler } = await appStarten({ google: true });
+  await seite.goto(`http://app.test/Bewerbungszentrale/#google=${GOOGLE_ID}`);
+  await ctx.addInitScript(() => {
+    const st = (k, d) => sessionStorage.getItem(k) ?? d;
+    Object.defineProperty(navigator, 'userAgent', { configurable: true, get: () => 'Mozilla/5.0 (Android 14; Mobile; rv:161.0) Gecko/161.0 Firefox/161.0' });
+    const mm = window.matchMedia.bind(window);
+    window.matchMedia = (q) => /display-mode/.test(q) ? { matches: q.includes(st('t-modus', 'standalone')), media: q, addEventListener() {}, removeEventListener() {} } : mm(q);
+    window.bzGoogleFrist = 400;
+    window.__offen = []; window.__ziel = []; window.__zu = 0;
+    window.__testOpen = window.open = (...a) => {
+      window.__offen.push(a);
+      if (st('t-blockt', '') && /^javascript:/.test(a[0])) return null;
+      return { closed: false, focus() {}, close() { window.__zu++; }, location: { replace: (u) => window.__ziel.push(u) } };
+    };
+    // Google wie in echt (accounts.google.com/gsi/client): requestAccessToken ruft window.open(Adresse, Name, Merkmale) und prüft das Fenster
+    window.google = { accounts: { oauth2: { hasGrantedAllScopes: () => true, initTokenClient: (c) => ({ requestAccessToken: () => {
+      const w = window.open('https://accounts.google.com/o/oauth2/v2/auth?client_id=' + encodeURIComponent(c.client_id), 'g_auth_token_window_1', 'popup,width=500');
+      if (!w || w.closed || typeof w.closed === 'undefined') return c.error_callback?.({ type: 'popup_failed_to_open', message: 'Failed to open popup window' });
+      w.focus();
+      if (st('t-google', 'antwortet') !== 'schweigt') setTimeout(() => c.callback({ access_token: 'ya29.test-token', expires_in: 3599 }), st('t-google', 'antwortet') === 'spaet' ? 900 : 30);
+    } }) } } };
+  });
+  const STILL = 'bewerbungszentrale.google.still', GOOGLE = /^https:\/\/accounts\.google\.com\/o\/oauth2\/v2\/auth\?client_id=/;
+  const neu = async (schalter = {}, still = null) => {
+    await seite.evaluate(([s, still, STILL]) => {
+      for (const [k, v] of Object.entries(s)) sessionStorage.setItem(k, v);
+      localStorage.removeItem('bewerbungszentrale.gmail.v1');
+      if (still) localStorage.setItem(STILL, JSON.stringify(still)); else localStorage.removeItem(STILL);
+    }, [schalter, still, STILL]);
+    await seite.reload();
+    await seite.waitForFunction(() => !!window.bzPlattform?.gmail, null, { timeout: 20000 });
+    await seite.evaluate(() => window.bzPlattform.gmail.vorbereiten());
+  };
+  const anmelden = () => seite.evaluate(() => window.bzPlattform.gmail.anmelden('').then(() => 'ok', (e) => `${e.code}: ${e.message}`));
+  const stand = () => seite.evaluate((STILL) => { const s = JSON.parse(localStorage.getItem(STILL) || 'null'); return { offen: window.__offen.map((a) => [...a]), ziel: [...window.__ziel], zu: window.__zu, still: s && { fehl: s.fehl, sichtbar: s.sichtbar }, alt: window.open === window.__testOpen }; }, STILL);
+  const leeren = () => seite.evaluate(() => { window.__offen.length = 0; window.__ziel.length = 0; window.__zu = 0; });
+
+  // 1) Der Normalfall: nur ein Fenster mit javascript:void 0 (dafür gibt es kein sichtbares Doppel), erst danach Googles Adresse
+  await neu();
+  assert.equal(await anmelden(), 'ok');
+  let s = await stand();
+  assert.deepEqual(s.offen, [['javascript:void 0', 'g_auth_token_window_1', 'popup,width=500']], 'Googles Adresse geht nie an window.open');
+  assert.equal(s.ziel.length, 1); assert.match(s.ziel[0], GOOGLE);
+  assert.equal(s.alt, true, 'window.open ist danach wieder das alte');
+  assert.equal(s.zu, 1, 'das stille Fenster wird am Ende geschlossen');
+  assert.deepEqual(s.still, { fehl: 0, sichtbar: false });
+
+  // 2) Google braucht eine Eingabe, im unsichtbaren Fenster sieht sie niemand: Frist, Meldung, der nächste Tipp sichtbar wie früher
+  await neu({ 't-google': 'schweigt' });
+  assert.equal(await anmelden(), 'google_eingabe: Google hat nicht geantwortet, vielleicht braucht es eine Bestätigung von dir. Tipp noch einmal, dann öffnet sich das Google-Fenster.');
+  s = await stand();
+  assert.equal(s.offen[0][0], 'javascript:void 0'); assert.deepEqual(s.still, { fehl: 1, sichtbar: true });
+  await leeren();
+  // … das sichtbare Fenster kann der App nichts übergeben: zurück aus ihm ohne Zugriff bittet die App um einen letzten Tipp
+  const zurueck = await seite.evaluate(() => {
+    const p = window.bzPlattform.gmail.anmelden('').then(() => 'ok', (e) => `${e.code}: ${e.message}`);
+    const sicht = (v) => { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => v }); document.dispatchEvent(new Event('visibilitychange')); };
+    sicht('hidden'); sicht('visible');
+    return p;
+  });
+  assert.equal(zurueck, 'google_nochmal: Wenn du bei Google bestätigt hast: Tipp jetzt noch einmal.');
+  s = await stand();
+  assert.equal(s.offen.length, 1); assert.match(s.offen[0][0], GOOGLE, 'sichtbar: Googles Adresse direkt, wie früher');
+  assert.deepEqual(s.still, { fehl: 1, sichtbar: false });
+  await leeren(); await seite.evaluate(() => sessionStorage.setItem('t-google', 'antwortet'));
+  assert.equal(await anmelden(), 'ok', 'der letzte Tipp läuft wieder still');
+  s = await stand();
+  assert.equal(s.offen[0][0], 'javascript:void 0'); assert.deepEqual(s.still, { fehl: 0, sichtbar: false });
+
+  // … und kommt Googles Antwort nur zu spät (langsames Netz), gilt der Zugriff trotzdem: Der nächste Tipp geht sofort, ohne neues Fenster
+  await neu({ 't-google': 'spaet' });
+  assert.match(await anmelden(), /^google_eingabe: /);
+  await warte(900);
+  await leeren();
+  assert.equal(await anmelden(), 'ok');
+  s = await stand();
+  assert.deepEqual(s.offen, [], 'kein weiteres Fenster'); assert.deepEqual(s.still, { fehl: 0, sichtbar: false }, 'der stille Weg bleibt an');
+
+  // 3) Zweimal in Folge keine Antwort auf dem stillen Weg: eine Woche lang wie früher, danach ein neuer Versuch
+  await neu({ 't-google': 'antwortet' }, { fehl: 2, wann: Date.now(), sichtbar: false });
+  assert.equal(await anmelden(), 'ok');
+  s = await stand();
+  assert.equal(s.offen.length, 1); assert.match(s.offen[0][0], GOOGLE); assert.deepEqual(s.still, { fehl: 2, sichtbar: false });
+  await neu({}, { fehl: 2, wann: Date.now() - 8 * 864e5, sichtbar: false });
+  assert.equal(await anmelden(), 'ok');
+  s = await stand();
+  assert.equal(s.offen[0][0], 'javascript:void 0'); assert.deepEqual(s.still, { fehl: 0, sichtbar: false });
+
+  // 4) Lässt der Browser das stille Fenster nicht zu, geht es im selben Tipp wie früher
+  await neu({ 't-blockt': '1' });
+  assert.equal(await anmelden(), 'ok');
+  s = await stand();
+  assert.deepEqual(s.offen.map((a) => a[0].split('?')[0]), ['javascript:void 0', 'https://accounts.google.com/o/oauth2/v2/auth']);
+  assert.equal(s.ziel.length, 0);
+
+  // 5) Firefox im Browser-Tab (und jeder andere Browser): unverändert, dort schließt sich Googles Fenster von selbst
+  await neu({ 't-blockt': '', 't-modus': 'browser' });
+  assert.equal(await anmelden(), 'ok');
+  s = await stand();
+  assert.equal(s.offen.length, 1); assert.match(s.offen[0][0], GOOGLE); assert.equal(s.still, null); assert.equal(s.zu, 0);
+
+  // 6) In der App selbst: Die Meldung steht im Sendefenster, der Knopf geht wieder, und der nächste Tipp sendet
+  await neu({ 't-modus': 'standalone', 't-google': 'schweigt' });
+  await zuAkte(seite, 'test-mail');
+  await seite.click('[data-act="gmail-api"]');
+  await seite.waitForSelector('#sm-los:not([disabled])', { timeout: 5000 });
+  await seite.click('#sm-los');
+  await seite.waitForFunction(() => /Google hat nicht geantwortet.*Tipp noch einmal, dann öffnet sich das Google-Fenster/.test(document.querySelector('#sm-st')?.textContent || ''), null, { timeout: 5000 });
+  assert.equal(await seite.isDisabled('#sm-los'), false);
+  assert.equal(gmail.length, 0, 'noch nichts gesendet');
+  await seite.evaluate(() => sessionStorage.setItem('t-google', 'antwortet'));
+  await seite.click('#sm-los');
+  await seite.waitForFunction(() => /1 von 1 gesendet/.test(document.querySelector('#sm-st')?.textContent || ''), null, { timeout: 60000 });
+  assert.equal(gmail.length, 1);
+  assert.deepEqual(fehler, []);
+});
+
 // Ohne Netz: vormerken, mit Netz geht sie raus – ohne Anmeldung nach einem Tipp, mit Anmeldung von selbst
 async function vormerkenOhneNetz(seite, ctx) {
   await zuAkte(seite, 'test-mail');
