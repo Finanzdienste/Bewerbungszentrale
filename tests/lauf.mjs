@@ -38,6 +38,51 @@ test('zugang-link', async () => {
   assert.ok(!/zugang=/.test(await seite.evaluate(() => location.href)), 'Schlüssel bleibt nicht in der Adresse');
 });
 
+test('zugang-sichern', async () => {
+  // Zugang sichern (Tobi, 27.11.2026): Link mit Schlüssel im Profil kopieren, auch ohne Netz; fehlt der Zugang, bringt der eingefügte Link alles zurück
+  const { seite, ctx, gh, fehler } = await appStarten();
+  await seite.addInitScript(() => {
+    window.__persist = { gefragt: 0, an: false };
+    if (!sessionStorage.getItem('__ersterStart')) { sessionStorage.setItem('__ersterStart', '1'); localStorage.removeItem('bewerbungszentrale.dauerhaft.v1'); } // wie der erste Start auf einem Gerät
+    const echt = Object.getOwnPropertyDescriptor(Navigator.prototype, 'storage')?.get; // auf http://app.test gibt es navigator.storage sonst nicht
+    Object.defineProperty(Navigator.prototype, 'storage', { configurable: true, get() {
+      const s = (echt && echt.call(this)) || {};
+      return new Proxy(s, { get(t, k) {
+        if (k === 'persisted') return async () => window.__persist.an;
+        if (k === 'persist') return async () => { window.__persist.gefragt++; window.__persist.an = true; return true; };
+        const v = t[k]; return typeof v === 'function' ? v.bind(t) : v;
+      } });
+    } });
+  });
+  await seite.goto(`http://app.test/Bewerbungszentrale/#google=${GOOGLE_ID}`);
+  await seite.reload();
+  await seite.goto('http://app.test/Bewerbungszentrale/#profil');
+  await seite.waitForSelector('#zugangPanel [data-act="zugang-sichern"]', { timeout: 20000 });
+  assert.ok(await seite.evaluate(() => window.__persist.gefragt) >= 1, 'beim Start einmal um dauerhaftes Aufheben gebeten');
+  await seite.waitForFunction(() => /dauerhaft auf/.test(document.querySelector('#zugangDauer')?.textContent || ''), null, { timeout: 5000 });
+  const ohneNetz = (r) => (new URL(r.request().url()).hostname === 'app.test' ? r.fallback() : r.abort('internetdisconnected'));
+  await ctx.route('**/*', ohneNetz); // Kopieren geht ohne Netz
+  await seite.click('#zugangPanel [data-act="zugang-sichern"]');
+  await seite.waitForFunction(() => /Kopiert/.test(document.querySelector('#zugangSt')?.textContent || ''), null, { timeout: 5000 });
+  const link = await seite.evaluate(() => navigator.clipboard.readText());
+  assert.match(link, /^http:\/\/app\.test\/Bewerbungszentrale\/#zugang=/);
+  assert.ok(link.includes(encodeURIComponent(gh.token)) && /google=/.test(link), 'Schlüssel und Google-Client-ID stecken im Link');
+  await ctx.unroute('**/*', ohneNetz);
+  // Browser hat die Daten gelöscht: der eingefügte Link stellt alles wieder her
+  await seite.evaluate(() => localStorage.clear());
+  await seite.goto('http://app.test/Bewerbungszentrale/#liste');
+  await seite.reload();
+  await seite.waitForSelector('#bz-einrichten', { timeout: 10000 });
+  assert.match(await seite.textContent('#bz-e-sicherung'), /ganzen Link/);
+  await seite.fill('#bz-e-token', link);
+  await seite.click('#bz-e-los');
+  await seite.waitForSelector('#bz-einrichten', { state: 'detached', timeout: 10000 });
+  const z = await seite.evaluate(() => [JSON.parse(localStorage.getItem('bewerbungszentrale.zugang.v1') || '{}').token, Object.keys(localStorage).some((k) => /google/i.test(k) && /apps\.googleusercontent\.com/.test(localStorage.getItem(k)))]);
+  assert.equal(z[0], gh.token, 'Schlüssel wieder da');
+  assert.ok(z[1], 'Google-Client-ID wieder da');
+  assert.deepEqual(fehler.filter((f) => !/Failed to fetch|NetworkError|internetdisconnected|ERR_INTERNET/i.test(f)), []);
+});
+
 test('laden', async () => {
   const { seite, fehler } = await appStarten();
   await seite.goto('http://app.test/Bewerbungszentrale/#liste');

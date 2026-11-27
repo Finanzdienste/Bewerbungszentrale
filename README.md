@@ -114,6 +114,16 @@ Aufs Handy kommt er über das Einrichten-Fenster beim ersten Start oder per
 Link `…/Bewerbungszentrale/#zugang=<Token>&ki=<KI-Schlüssel>`. Später ändern:
 `…/Bewerbungszentrale/#einrichten`.
 
+**Zugang sichern** (Tobi, 27.11.2026, nachdem Firefox die Daten der App samt Schlüssel und
+Startbildschirm-Symbol gelöscht hatte): Profil → „Zugang sichern“ → „Zugang kopieren“ legt den
+Übergabe-Link (`#zugang=…&ki=…&google=…`, nur im Anker, geht an keinen Server) in die
+Zwischenablage, auch ohne Netz. Tobi speichert ihn im Google-Passwortmanager als Notiz. Fragt die
+App wieder nach dem Schlüssel, kommt der ganze Link ins Schlüsselfeld, und GitHub-Schlüssel,
+KI-Schlüssel und Google-Client-ID sind auf einmal zurück. Dazu bittet die App den Browser, ihre
+Daten dauerhaft aufzuheben (`navigator.storage.persist()`): beim ersten Start je Gerät, nach
+„Verbinden“ und beim Kopieren. Gegen Löschen von Hand oder „Browserdaten beim Beenden löschen“
+hilft das nicht, gegen Aufräumen bei Platzmangel schon. Geprüft von `node tests/lauf.mjs zugang-sichern`.
+
 Senden per Gmail: eine eigene Google-Cloud-App (Gmail API an, OAuth-Client
 „Webanwendung“ mit der Pages-Adresse als JavaScript-Quelle, die Person als
 Testnutzer). Die Client-ID kommt per Link `…/#google=<Client-ID>` oder über

@@ -1999,9 +1999,35 @@ function renderProfil(force) {
     <span class="ki-status" id="wohnortSt" style="margin-top:8px">${p.heim ? `Gespeichert: ${Number(p.heim.lat).toFixed(4)}, ${Number(p.heim.lon).toFixed(4)}${p.heimStand ? `, geändert am ${fmtD(p.heimStand)}` : ''}` : 'Noch kein Wohnort gespeichert.'}</span>
   </section>
   ${(() => { const z = ordnerZeile(list().filter(istBereit)); return z ? `<section class="panel" id="mappenPanel"><div class="panel-head"><h2>Bewerbungsmappen</h2><span class="sub">als Ordner auf dem PC und in Google Drive</span></div>${z}</section>` : ''; })()}
-  ${firefoxPanel()}${firefoxTabPanel()}
+  ${firefoxPanel()}${firefoxTabPanel()}${zugangPanel()}
   <div class="profil-rest">${cvPanel()}${linkedinPanel()}${bildschirmzeitPanel()}</div>`;
-  wohnortKarte();
+  wohnortKarte(); zugangDauerZeigen();
+}
+/** Zugang sichern (Tobi, 27.11.2026: „Können wir das nicht iwie für die Zukunft abspeichern?“): Firefox hatte die gespeicherten Daten
+    der App gelöscht, samt GitHub-Schlüssel. Der Knopf kopiert den Übergabe-Link (Schlüssel, KI-Schlüssel und Google-Client-ID, nur im
+    Anker #…, geht an keinen Server). Tobi legt ihn im Passwort-Manager ab und fügt ihn bei Bedarf im Einrichten-Fenster ein.
+    Dazu bittet die App den Browser, ihre Daten dauerhaft aufzuheben. Geht ohne Netz. */
+function zugangPanel() {
+  if (!window.bzPlattform?.uebergabeLink?.()) return '';
+  return `<section class="panel" id="zugangPanel"><div class="panel-head"><h2>Zugang sichern</h2><span class="sub">falls der Browser die Daten der App einmal löscht</span></div>
+    <div class="ki-row" style="margin:0 0 8px"><button class="btn sm primary" type="button" data-act="zugang-sichern">${ic('copy')}Zugang kopieren</button></div>
+    <p class="desc" id="zugangSt" style="margin:0">Kopiert einen Link mit deinem GitHub-Schlüssel, dem KI-Schlüssel und der Google-Client-ID. Speichere ihn im Google-Passwortmanager als Notiz, nicht im Chat. Fragt die App wieder nach dem Schlüssel, fügst du den ganzen Link dort ins Feld ein.</p>
+    <p class="desc" id="zugangDauer" style="margin:6px 0 0"></p>
+  </section>`;
+}
+async function zugangDauerZeigen() {
+  const p = await window.bzPlattform?.speicherDauerhaft?.(), el = $('#zugangDauer'); if (!el) return;
+  el.textContent = p === true ? 'Der Browser hebt die Daten der App dauerhaft auf.' : p === false ? 'Noch darf der Browser die Daten der App bei Platzmangel löschen. Beim Kopieren bittet die App ihn, sie dauerhaft aufzuheben.' : '';
+}
+async function zugangSichern() {
+  const link = window.bzPlattform?.uebergabeLink?.() || '', st = $('#zugangSt');
+  if (!link) { if (st) st.textContent = 'Auf diesem Gerät ist kein Zugang gespeichert.'; return; }
+  const dauer = window.bzPlattform?.speicherBehalten?.(); // gleich im Tipp, damit der Browser nachfragen darf
+  try { await navigator.clipboard.writeText(link); }
+  catch { if (st) st.textContent = 'Kopieren ging hier nicht. Bitte noch einmal tippen.'; return; }
+  if (st) st.textContent = 'Kopiert. Jetzt im Google-Passwortmanager als Notiz speichern (nicht im Chat). Fragt die App einmal wieder nach dem Schlüssel, den ganzen Link dort einfügen.';
+  toast('Zugang kopiert');
+  await dauer; zugangDauerZeigen();
 }
 /** Nur in Chrome auf Android: die App mit Zugang an Firefox übergeben, damit Links dort ohne Nachfrage aufgehen. */
 function firefoxPanel() {
@@ -4692,6 +4718,7 @@ document.addEventListener('click', async e => {
     if (act === 'ordner-waehlen') return ordnerWaehlen();
     if (act === 'wohnort-gps') return wohnortGps();
     if (act === 'nach-firefox') return nachFirefox();
+    if (act === 'zugang-sichern') return zugangSichern();
     if (act === 'firefox-tab') return firefoxTabUmschalten();
     if (act === 'drive-verbinden') return driveVerbinden();
     if (act === 'zurueckholen') { const rid = t.closest('[data-rid]')?.dataset.rid; if (rid) zurueckholen(rid); return; }

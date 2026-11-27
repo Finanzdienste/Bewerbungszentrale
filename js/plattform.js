@@ -110,6 +110,19 @@
     } catch { return 'netz'; } finally { token = alt; }
   }
 
+  /* ------------------------------------------------ Daten dauerhaft aufheben
+     Tobi, 27.11.2026: Firefox hatte die gespeicherten Daten der App gelöscht, samt GitHub-Schlüssel. Ohne diese Bitte
+     darf der Browser sie bei Platzmangel von selbst löschen; gegen Löschen von Hand hilft nur die Sicherung (Profil). */
+  async function speicherDauerhaft() { try { return navigator.storage?.persisted ? await navigator.storage.persisted() : null; } catch { return null; } }
+  async function speicherBehalten() {
+    try { if (!navigator.storage?.persist) return null; if (await navigator.storage.persisted()) return true; return await navigator.storage.persist(); } catch { return null; }
+  }
+  const PERSIST_GEFRAGT = 'bewerbungszentrale.dauerhaft.v1';
+  function speicherEinmalBehalten() { // beim Start nur einmal je Gerät fragen, sonst bei jedem Öffnen eine Nachfrage
+    try { if (localStorage.getItem(PERSIST_GEFRAGT)) return; localStorage.setItem(PERSIST_GEFRAGT, new Date().toISOString()); } catch { return; }
+    speicherBehalten();
+  }
+
   /* ------------------------------------------------ Einrichten-Fenster */
   let fertigMelden = null, gestartet = false;
   const bereit = new Promise((res) => { fertigMelden = (x) => { gestartet = true; res(x); }; });
@@ -134,6 +147,7 @@
       <h1 id="bz-e-titel">Bewerbungszentrale einrichten</h1>
       <p>Deine Bewerbungen liegen im privaten Repo <b>${DATEN.owner}/${DATEN.repo}</b>. Die App braucht einmal einen Schlüssel dafür. Er bleibt nur auf diesem Handy.</p>
       <p class="fehler" id="bz-e-fehler">${grund || ''}</p>
+      <p class="hinweis" id="bz-e-sicherung">Hast du den Zugang im Profil gesichert („Zugang kopieren“), füge den ganzen Link aus deinem Passwort-Manager hier ein. Dann sind GitHub-Schlüssel, KI-Schlüssel und Google-Zugang auf einmal zurück.</p>
       <label for="bz-e-token">GitHub-Schlüssel (Fine-grained Token)</label>
       <input id="bz-e-token" type="password" autocomplete="new-password" spellcheck="false" placeholder="github_pat_…">
       <ol>
@@ -163,6 +177,7 @@
       nurLesen = r === 'nur-lesen';
       if (k) schreib(KI, { schluessel: k, stand: new Date().toISOString() });
       if (gestartet) { location.reload(); return; } // Schlüssel geändert: neu starten, damit KI und Daten ihn nehmen
+      speicherBehalten(); // nach einem Tipp: darf der Browser nachfragen
       token = t; d.remove(); fertigMelden(true);
     };
   }
@@ -170,7 +185,7 @@
     for (const [t, eigen] of [[eigenerToken(), true], [boxToken(), false]]) {
       if (!t) continue;
       const r = await tokenPruefen(t);
-      if (r === 'ok') { token = t; if (!eigen) schreib(ZUGANG, { token: t, stand: new Date().toISOString(), ausBoxenstopp: true }); else if (lies(ZUGANG)?.lesen) schreib(ZUGANG, { ...lies(ZUGANG), lesen: false }); fertigMelden(true); return; }
+      if (r === 'ok') { speicherEinmalBehalten(); token = t; if (!eigen) schreib(ZUGANG, { token: t, stand: new Date().toISOString(), ausBoxenstopp: true }); else if (lies(ZUGANG)?.lesen) schreib(ZUGANG, { ...lies(ZUGANG), lesen: false }); fertigMelden(true); return; }
       if (r === 'nur-lesen' && eigen) { token = t; nurLesen = true; schreib(ZUGANG, { ...lies(ZUGANG), lesen: true }); fertigMelden(true); return; } // Lesemodus
       if (r === 'netz' && eigen) { token = t; nurLesen = !!lies(ZUGANG)?.lesen; fertigMelden(true); return; } // offline: mit dem Zwischenspeicher arbeiten
     }
@@ -879,7 +894,7 @@
   }
   /** Einen Claude-Schlüssel hier merken (Dialog für die Widget-App, wenn noch keiner da ist); nur sk-ant-…, nie im Nur-Lesen-Link. */
   const kiSetzen = (k) => { k = String(k || '').trim(); return !nurLesen && k.startsWith('sk-ant-') && KI_MUSTER.test(k) && schreib(KI, { schluessel: k, stand: new Date().toISOString() }); };
-  window.bzPlattform = { kiFuerWidget, kiAnWidget, kiSetzen, uebergabeLink, abgleichen: () => abgleichen(), einrichten: () => einrichtenZeigen(''), offen: () => warteschlange.size + (nurLesen ? 0 : lokal.size), speichern: () => sofortSchreiben(), kiDa: () => !!kiSchluessel(), nurLesen: () => nurLesen, gmail, drive };
+  window.bzPlattform = { kiFuerWidget, kiAnWidget, kiSetzen, uebergabeLink, speicherBehalten, speicherDauerhaft, abgleichen: () => abgleichen(), einrichten: () => einrichtenZeigen(''), offen: () => warteschlange.size + (nurLesen ? 0 : lokal.size), speichern: () => sofortSchreiben(), kiDa: () => !!kiSchluessel(), nurLesen: () => nurLesen, gmail, drive };
 
   zugangHerstellen();
   start();
