@@ -1588,6 +1588,80 @@ test('gehalt-tarif', async () => {
   assert.deepEqual(fehler.filter((f) => !/Failed to fetch|NetworkError|internetdisconnected|ERR_INTERNET/i.test(f)), []);
 });
 
+test('ansicht-merken', async () => {
+  // Tobi, 28.11.2026: Nach dem Verlassen startet die App auf dem Handy neu, die gesetzten Filter waren weg. Und nach einem Tipp auf einen
+  // Statusfilter sprang die seitlich verschobene Filterzeile nach links zurück. Beides ohne Netz geprüft.
+  const { seite, ctx, gh, fehler } = await appStarten();
+  const setze = (id, f) => gh.dateien.set(`apps/${id}.json`, Buffer.from(JSON.stringify({ ...json(gh, `apps/${id}.json`), ...f }, null, 1) + '\n'));
+  setze('test-mail', { status: 'beworben', beworbenAm: '2026-11-20' }); // zwei Stufen, damit es die Statuszeile gibt
+  await seite.setViewportSize({ width: 300, height: 700 });
+  await seite.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { const st = document.createElement('style'); st.textContent = '#v-liste .filters.scroll{max-width:120px;overflow-x:auto;flex-wrap:nowrap}'; document.head.appendChild(st); })); // schmal: die Statuszeile ist breiter als ihr Platz
+  await seite.reload();
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.goto('http://app.test/Bewerbungszentrale/#liste');
+  await seite.waitForSelector('#v-liste .filters.scroll [data-filter="beworben"]', { timeout: 20000 });
+  await ctx.route('**/*', (r) => (new URL(r.request().url()).hostname === 'app.test' ? r.fallback() : r.abort('internetdisconnected'))); // ab hier kein Netz
+  // Filterzeile nach rechts schieben, Filter antippen: sie bleibt, wo sie war
+  const links = async () => seite.$eval('#v-liste .filters.scroll', (x) => x.scrollLeft);
+  await seite.$eval('#v-liste .filters.scroll', (x) => { x.scrollLeft = 60; });
+  const vorher = await links();
+  assert.ok(vorher > 0, 'die Statuszeile lässt sich im schmalen Fenster schieben');
+  await seite.$eval('#v-liste [data-filter="beworben"]', (x) => x.click()); // ohne das Hinscrollen von Playwright, das die Zeile selbst verschiebt
+  await seite.waitForSelector('#v-liste [data-filter="beworben"][aria-pressed="true"]', { timeout: 5000 });
+  assert.equal(await links(), vorher, 'die Filterzeile springt nicht nach links');
+  await seite.$eval('#v-liste [data-lweg="mail"]', (x) => x.click());
+  await seite.fill('#q', 'Klima');
+  await seite.waitForSelector('#v-liste [data-lweg="mail"][aria-pressed="true"]', { timeout: 5000 });
+  const reihe = () => seite.$$eval('#v-liste .radar-list [data-open]', (xs) => xs.map((x) => x.dataset.open));
+  const gefiltert = await reihe();
+  assert.deepEqual(gefiltert, ['test-mail'], 'Suche und Filter lassen eine Bewerbung übrig');
+  // App verlassen und neu starten wie vom Startbildschirm (ohne Zusatz in der Adresse): Ansicht, Suche und Filter sind wieder da
+  await seite.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  await seite.goto('http://app.test/Bewerbungszentrale/datenschutz.html'); // die App verlassen
+  await seite.goto('http://app.test/Bewerbungszentrale/');
+  await seite.waitForSelector('#v-liste [data-filter="beworben"][aria-pressed="true"]', { timeout: 20000 });
+  assert.equal(await seite.evaluate(() => location.hash), '#liste', 'wieder in der Liste');
+  assert.equal(await seite.getAttribute('#v-liste [data-lweg="mail"]', 'aria-pressed'), 'true', 'Weg-Filter ist wieder gesetzt');
+  assert.equal(await seite.$eval('#q', (x) => x.value), 'Klima', 'die Suche steht wieder im Feld');
+  assert.deepEqual(await reihe(), gefiltert, 'dieselbe gefilterte Liste');
+  assert.ok(await links() > 0, 'auch die Filterzeile steht wieder, wo sie war');
+  // Ein gezielter Einstieg geht vor: der Link ins Profil landet im Profil
+  await seite.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  await seite.goto('http://app.test/Bewerbungszentrale/datenschutz.html'); // die App verlassen
+  await seite.goto('http://app.test/Bewerbungszentrale/#profil');
+  await seite.waitForFunction(() => !document.querySelector('[data-view="profil"]')?.hidden, null, { timeout: 10000 });
+  assert.equal(await seite.evaluate(() => location.hash), '#profil');
+  // Nach 12 Stunden beginnt die App wieder vorn
+  await seite.addInitScript(() => { // vor dem Start der App: den gemerkten Stand 13 Stunden alt machen
+    if (!localStorage.getItem('__altern')) return; localStorage.removeItem('__altern');
+    const m = JSON.parse(localStorage.getItem('bz-ansicht-v1') || 'null'); if (!m) return;
+    m.zeit -= 13 * 3600e3; m.view = 'liste'; m.hash = '#liste'; localStorage.setItem('bz-ansicht-v1', JSON.stringify(m));
+  });
+  await seite.evaluate(() => localStorage.setItem('__altern', '1'));
+  await seite.goto('http://app.test/Bewerbungszentrale/datenschutz.html'); // die App verlassen
+  await seite.goto('http://app.test/Bewerbungszentrale/');
+  await seite.waitForFunction(() => !document.querySelector('[data-view="uebersicht"]')?.hidden, null, { timeout: 10000 });
+  assert.ok(!(await seite.evaluate(() => location.hash)).includes('liste'), 'alter Stand wird nicht mehr geholt');
+  assert.deepEqual(fehler.filter((f) => !/Failed to fetch|NetworkError|internetdisconnected|ERR_INTERNET/i.test(f)), []);
+});
+
+test('wartet-auf-firma', async () => {
+  // Fertige Bewerbung, aber die Firma muss erst etwas tun (gesperrtes Portal-Konto): steht unter „Warten auf deren Rückmeldung“, nicht unter „Vorbereitet“
+  const { seite, ctx, gh, fehler } = await appStarten();
+  const a = json(gh, 'apps/test-portal.json');
+  gh.dateien.set('apps/test-portal.json', Buffer.from(JSON.stringify({ ...a, wartetAufFirma: { seit: '2026-11-26', grund: 'Portal-Support muss das Konto freischalten' } }, null, 1) + '\n'));
+  await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
+  await seite.evaluate(() => window.bzPlattform.abgleichen());
+  await seite.waitForSelector('#dash [data-bereich="rueckmeldung"] [data-open="test-portal"]', { state: 'attached', timeout: 20000 });
+  assert.equal(await seite.locator('#dash [data-bereich="bereit"] [data-open="test-portal"]').count(), 0, 'nicht mehr unter Vorbereitet');
+  assert.match(await seite.textContent('#dash [data-bereich="rueckmeldung"] [data-open="test-portal"]'), /Portal-Support muss das Konto freischalten/);
+  await ctx.route('**/*', (r) => (new URL(r.request().url()).hostname === 'app.test' ? r.fallback() : r.abort('internetdisconnected'))); // ohne Netz dasselbe
+  await seite.reload();
+  await seite.waitForSelector('#dash [data-bereich="rueckmeldung"] [data-open="test-portal"]', { state: 'attached', timeout: 20000 });
+  assert.deepEqual(fehler.filter((f) => !/Failed to fetch|NetworkError|internetdisconnected|ERR_INTERNET/i.test(f)), []);
+});
+
 test('remote-anzeige', async () => {
   // Komplett remote: kein Arbeitsweg, auch wenn im Datensatz noch eine Autozeit zum fernen Firmensitz steht
   const { seite, gh, fehler } = await appStarten();

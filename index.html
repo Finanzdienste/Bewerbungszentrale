@@ -1144,10 +1144,13 @@ function dashBereicheHTML() {
   const alle = list().filter(a => !a.beispiel), belegt = firmenMitVersand(), q = (state.dashSuche || '').trim();
   const bereitSet = new Set(alle.filter(a => istBereit(a) && !belegt.has(firmaGruppe(a.firma))).map(a => a.id));
   const sc = a => wertungVon(a).wert ?? 0;
-  const gehoert = {antwort: wartetAufDich, bereit: a => bereitSet.has(a.id), vorbereitung: a => a.status === 'gemerkt' && !bereitSet.has(a.id), absage: a => a.status === 'absage' || a.status === 'zurueckgezogen', alle: () => true};
+  // wartetAufFirma {seit, grund}: fertig, aber die Firma muss erst etwas tun (etwa ein gesperrtes Portal-Konto freischalten). Setzt Claude im Daten-Repo;
+  // steht dann unter „Warten auf deren Rückmeldung“ statt unter „Vorbereitet“ (Tobi, 28.11.2026).
+  const blockiert = a => a.status === 'gemerkt' && !!a.wartetAufFirma && !a.verworfen;
+  const gehoert = {antwort: wartetAufDich, bereit: a => bereitSet.has(a.id) && !blockiert(a), rueckmeldung: a => a.status === 'rueckmeldung' || blockiert(a), vorbereitung: a => a.status === 'gemerkt' && !bereitSet.has(a.id), absage: a => a.status === 'absage' || a.status === 'zurueckgezogen', alle: () => true};
   const passt = a => !q || matches(a, q);
   const zeile = (a, k) => { const w = wertungVon(a), an = a.anfahrt || {}, nt = naechsterTermin(a);
-    const d = [a.ort, fahrtKurz(a), a.status === 'gemerkt' ? (istPortal(a) ? 'über Portal' : 'per Mail') : '', a.fristBis && a.status === 'gemerkt' ? `Frist ${fmtDs(a.fristBis)}` : '', nt ? `${WT[nt.d.getDay()]} ${fmtDs(isoDate(nt.d))}, ${fmtT(nt.d)}` : '', a.eingangAm && a.status === 'beworben' ? 'Eingang bestätigt' : '', a.status !== 'gemerkt' && a.beworbenAm ? `beworben ${relTage(a.beworbenAm)}` : ''].filter(Boolean).join(' · ');
+    const d = [a.ort, fahrtKurz(a), a.status === 'gemerkt' ? (istPortal(a) ? 'über Portal' : 'per Mail') : '', a.fristBis && a.status === 'gemerkt' ? `Frist ${fmtDs(a.fristBis)}` : '', k === 'rueckmeldung' && a.wartetAufFirma?.grund ? a.wartetAufFirma.grund : '', nt ? `${WT[nt.d.getDay()]} ${fmtDs(isoDate(nt.d))}, ${fmtT(nt.d)}` : '', a.eingangAm && a.status === 'beworben' ? 'Eingang bestätigt' : '', a.status !== 'gemerkt' && a.beworbenAm ? `beworben ${relTage(a.beworbenAm)}` : ''].filter(Boolean).join(' · ');
     const auf = k === 'antwort' ? (a.aufgaben || []).find(x => !x.erledigt && /(?:^|\s)(?:antworten|zurückrufen|rückruf)\b/i.test(x.text || '')) : null;
     return `<li data-open="${a.id}" tabindex="0" style="--tone:${w.wert != null ? ringColor(w.wert) : 'var(--muted)'}"><span class="ico" style="font-family:var(--f-mono);font-size:12px;font-weight:600">${w.wert != null ? (w.geschaetzt ? '≈' : '') + w.wert : '–'}</span><span style="min-width:0"><div class="t">${esc(a.position || 'Position fehlt')} · ${esc(a.firma || 'Ohne Firma')}</div><div class="d">${esc(auf ? auf.text.replace(/\s*\((?:Antwort liegt in der App bereit)\)/, '') : d)}</div></span></li>`; };
   const gezeigt = new Set(); // bei der Suche klappt „Alle“ nur auf, wenn ein Treffer in keinem anderen Bereich steht
@@ -1546,6 +1549,8 @@ function renderListe() {
     </article>`;
   };
   const wegChip = (k, l, n) => `<button type="button" class="fchip" data-lweg="${k}" aria-pressed="${state.listWeg === k}">${l}<span class="c">${n}</span></button>`;
+  // Die Statuszeile lässt sich seitlich schieben. Beim Neuzeichnen bleibt sie, wo sie war (Tobi, 28.11.2026: „springt er wieder nach links“).
+  const filterLinks = el.querySelector('.filters.scroll')?.scrollLeft || state.listFilterLinks || 0;
   el.innerHTML = `<div class="filters">${chip('', 'Alle', nSt + nIni)}${chip('stelle', 'Stellen', nSt)}${chip('initiativ', 'Initiativ', nIni)}${wegChip('portal', 'Portal', nPortal)}${wegChip('mail', 'Mail', nMail)}</div>
     <div class="radar-opts"><select class="in sm" id="listSortier" aria-label="Sortierung"><option value="score" ${sortier === 'score' ? 'selected' : ''}>Nach Score</option><option value="gehalt" ${sortier === 'gehalt' ? 'selected' : ''}>Nach Gehalt</option><option value="stundenlohn" ${sortier === 'stundenlohn' ? 'selected' : ''}>Nach Stundenlohn</option><option value="fahrt" ${sortier === 'fahrt' ? 'selected' : ''}>Nach Fahrzeit</option><option value="frist" ${sortier === 'frist' ? 'selected' : ''}>Nach Frist</option><option value="neu" ${sortier === 'neu' ? 'selected' : ''}>Neueste zuerst</option><option value="status" ${sortier === 'status' ? 'selected' : ''}>Nach Status</option><option value="firma" ${sortier === 'firma' ? 'selected' : ''}>Firma A–Z</option></select>
       ${counts.absage || counts.zurueckgezogen ? `<label class="toggle" for="hideClosed"><input type="checkbox" class="cb" id="hideClosed" ${state.hideClosed ? 'checked' : ''}>Absagen ausblenden</label>` : ''}
@@ -1555,6 +1560,7 @@ function renderListe() {
       <h2 class="rang-h">Initiativbewerbungen<span>${rows.filter(istIni).length} · nach Firmenwertung</span></h2><div class="radar-list">${rows.filter(istIni).map(item).join('')}</div>` : `<div class="radar-list">${rows.map(item).join('')}</div>`}
     <details class="erklaer"><summary>Was die Zahlen bedeuten</summary><p>Der Kreis zeigt die Gesamtwertung: Reiz 50 % (wie gut der Job für dich wäre: Themen, Gehalt, Konditionen), Eignung 30 % (wie gut dein Profil passt) und Firma 20 %. Stellen und Initiativbewerbungen stehen in einer Rangliste. Bei Initiativbewerbungen gibt es keine Anzeige: Die Konditionen im Reiz (Tarif, Befristung, Homeoffice, Gehälter) stammen aus denselben Firmendaten wie die Firmenwertung. Damit die Firma nicht doppelt zählt, gilt dort 70 % Reiz und 30 % Eignung. Die Eignung ist mit 50 angesetzt („offen“), weil es keine Anforderungen gibt. Hat die Firma gerade keine Stellen ausgeschrieben, kennt die App nur die Branche, der Reiz ist dann grob geschätzt. Große Unternehmen (Konzerne, große öffentliche Arbeitgeber oder Firmen mit vielen offenen Stellen) bekommen 5 Punkte dazu, weil du dort gern arbeiten würdest. Die Fahrzeit zählt mit: der Weg ab deiner Wohnung mit ÖPNV und Rad hin und zurück, mal die Bürotage laut Anzeige. Die Autozeit steht in der Akte nur zur Info. Bis 2,5 Stunden pro Woche gibt es keinen Abzug, darüber 2 Punkte je Stunde, höchstens 15. Nennt die Anzeige keine Bürotage, sind sie geschätzt (≈), dann kannst du sie in der Akte eintragen.</p></details>`
     : `<div class="panel"><div class="empty-mini">${allL.length ? 'Keine Bewerbung passt zu Suche und Filter.' : 'Noch keine Bewerbungen. Leg oben rechts die erste an.'}</div></div>`}${aussortiertHTML()}`;
+  const fz = el.querySelector('.filters.scroll'); if (fz && filterLinks) { fz.scrollLeft = filterLinks; state.listFilterLinks = 0; }
 }
 const RAUS_ART = {ort: 'Ort', anue: 'Zeitarbeit', gehalt: 'Gehalt', niveau: 'Niveau unter dem Abschluss', befristet: 'Befristung', fach: 'Fachlich zu weit weg', beratung: 'Arbeitsweise', klima: 'Arbeitsklima', weg: 'Nicht mehr offen', doppelt: 'Doppelt', gegenlesen: 'Beim Gegenlesen', recherche: 'Bei der Recherche'};
 document.addEventListener('toggle', e => { if (e.target?.id === 'aussortiert') state.rausOffen = e.target.open; }, true);
@@ -4880,8 +4886,42 @@ function onApps(snap) {
   else if (state.openId) renderDrawerHead();
   if (state.loaded && postausgang().length) postausgangPlanen();
 }
+/* Ansicht merken (Tobi, 28.11.2026: „lädt die app wenn ich einmal draußen war und wieder rein geh so neu … die Filter … nicht mehr gespeichert“).
+   Android beendet die App im Hintergrund, beim Zurückkommen startet sie neu. Darum beim Verlassen merken, wo man war (nur auf dem Gerät,
+   geht ohne Netz), und beim Start wiederherstellen: Ansicht, Suche und Filter 12 Stunden lang, offene Akte und Scrollstand 30 Minuten.
+   Ein gezielter Einstieg (Link, Mitteilung mit eigener Adresse) geht vor. */
+const ANSICHT = 'bz-ansicht-v1', ANSICHT_STD = 12, ANSICHT_ORT_MIN = 30;
+function ansichtMerken() {
+  if (!state.view_vorher) return; // noch nicht gestartet
+  try {
+    localStorage.setItem(ANSICHT, JSON.stringify({zeit: Date.now(), hash: location.hash, view: state.view, y: Math.round(window.scrollY || 0), offen: state.openId || null, tab: state.drawerTab,
+      search: state.search || '', dashSuche: state.dashSuche || '', listFilter: [...state.listFilter], listBereit: !!state.listBereit, hideClosed: !!state.hideClosed, listArt: state.listArt || '', listWeg: state.listWeg || '',
+      filterLinks: document.querySelector('#v-liste .filters.scroll')?.scrollLeft || 0}));
+  } catch { /* privat: dann eben nicht */ }
+}
+function ansichtHolen() {
+  let m; try { m = JSON.parse(localStorage.getItem(ANSICHT) || 'null'); } catch { return; }
+  if (!m || !(Date.now() - m.zeit < ANSICHT_STD * 3600e3)) return;
+  const h = location.hash || '';
+  if (h && h !== '#' && h !== m.hash) return; // gezielter Einstieg
+  state.search = String(m.search || ''); state.dashSuche = String(m.dashSuche || '');
+  state.listFilter = new Set((m.listFilter || []).filter(k => typeof k === 'string')); state.listBereit = !!m.listBereit; state.hideClosed = !!m.hideClosed;
+  state.listArt = String(m.listArt || ''); state.listWeg = String(m.listWeg || ''); state.listFilterLinks = Number(m.filterLinks) || 0;
+  const q = $('#q'); if (q) q.value = state.search;
+  if (VIEWS.includes(m.view)) try { history.replaceState(history.state, '', `${location.pathname}${location.search}#${m.view}`); } catch {} // ohne Zusatz wie /absage: der würde die Filter neu setzen
+  if (!(Date.now() - m.zeit < ANSICHT_ORT_MIN * 60e3)) return;
+  const zurueck = n => {
+    if (!state.loaded) { if (n > 0) setTimeout(() => zurueck(n - 1), 250); return; }
+    if (m.offen && state.apps[m.offen] && !state.openId) openDrawer(m.offen, m.tab || undefined);
+    if (m.y > 0) requestAnimationFrame(() => window.scrollTo(0, m.y));
+  };
+  setTimeout(() => zurueck(80), 0);
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') ansichtMerken(); });
+window.addEventListener('pagehide', ansichtMerken);
 let loadTimer = null;
 async function init() {
+  ansichtHolen();
   route();
   const C = window.claude;
   if (!C?.use) { state.mode = 'local'; state.loaded = true; kiState = 'aus'; renderAll(); return; }

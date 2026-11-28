@@ -17,6 +17,12 @@ App fürs Handy, für Tobi.
   Neuheit, die Sortierung bleibt gemerkt. Darunter die Bereiche nach Stand, in jedem der höchste
   Score oben (bei Gleichstand Vorbereitete nach Frist, sonst das Neueste zuerst); Suchtreffer, die in
   keinem Bereich stehen, verlinkt ein Hinweis auf „Alle“.
+- **Ansicht merken** (seit v100, 28.11.2026): Android beendet die App im Hintergrund, beim Zurückkommen startet sie neu. Beim Verlassen
+  (`visibilitychange`, `pagehide`) merkt sie sich deshalb in `localStorage` (`bz-ansicht-v1`) Ansicht, Suche und Listenfilter und holt sie
+  beim Start zurück (`ansichtHolen`): Filter 12 Stunden lang, offene Akte und Scrollstand 30 Minuten. Ein gezielter Einstieg mit eigener
+  Adresse geht vor. Die seitlich verschiebbare Statuszeile der Liste bleibt beim Neuzeichnen stehen. Geprüft von `ansicht-merken`.
+- **Wartet auf die Firma:** Hat eine fertige Bewerbung `wartetAufFirma` {seit, grund} (setzt Claude im Daten-Repo, etwa bei einem
+  gesperrten Portal-Konto), steht sie im Dashboard unter „Warten auf deren Rückmeldung“ statt unter „Vorbereitet“. Geprüft von `wartet-auf-firma`.
 - **Score** (seit 26.11.2026, „Es gibt nur Eignung und Reiz“): 30 % Eignung + 70 % Reiz. Reiz =
   40 % Stelle + 40 % Stundenlohn + 20 % Firma (ohne Firmenwert, bei Personalvermittlern, je 50 %
   Stelle und Stundenlohn, dann minus 5). Firma = 50 % Größe (nach Beschäftigten, je größer desto
