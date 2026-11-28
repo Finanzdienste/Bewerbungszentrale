@@ -27,8 +27,9 @@ App fürs Handy, für Tobi.
   dieselbe Rechnung steht in `werkzeug/wertung.py`. Akten und Radar-Einträge mit alter Bewertung
   (ohne `stelle`) rechnen weiter wie früher. Das erwartete Gehalt rechnet der Lauf im Daten-Repo
   (seit 27.11.2026 genau): Tarifstellen nach Tabelle mit Entgeltgruppe, Stufe beim Einstieg und
-  Sonderzahlungen, Spannen nach der eingeschätzten Lage. Die Akte zeigt dazu `gehaltErwartet.kurz`
-  (etwa „TV-AVH E 13, Stufe 2“) und darunter die Rechnung (`#gehaltRechnung`).
+  Sonderzahlungen, Spannen nach der eingeschätzten Lage. Die Akte zeigt davon nur Betrag und Quelle
+  („nach Tarif“, „laut Anzeige“), die Rechnung selbst nicht (Tobi, 28.11.2026: „Solche ganzen Berechnungen zur
+  Entgeltgruppe usw will ich in der App nicht sehen“); sie steht in `gehaltErwartet.grund` im Daten-Repo.
 - **Anrufe:** Ist die App mit Tobis Bildschirmzeit-App verbunden und hat er dort die Anrufliste
   freigegeben, holt sie beim Start und bei „online“ (höchstens alle 5 Minuten) die Anrufe der
   letzten 14 Tage aus Supabase (`bildschirmzeit_anrufe_lesen`, Repo Bildschirmzeit) und ordnet sie

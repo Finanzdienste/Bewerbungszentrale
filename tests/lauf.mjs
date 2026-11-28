@@ -1551,8 +1551,8 @@ test('score-stundenlohn', async () => {
 });
 
 test('gehalt-tarif', async () => {
-  // Tarifstellen genau (Tobi, 27.11.2026: „einfach den unteren Bereich zu nehmen greift doch viel zu kurz“): Die Akte zeigt Tarif,
-  // Entgeltgruppe und Stufe und darunter die Rechnung; bei einer Spanne die eingeschätzte Lage. Erfundene Werte.
+  // Tarifstellen rechnet der Lauf genau (Daten-Repo). Die Akte zeigt davon nur Betrag und Quelle, nie die Rechnung zu Entgeltgruppe und
+  // Stufe (Tobi, 28.11.2026: „Solche ganzen Berechnungen zur entgeldgruppe usw will ich in der app nicht sehen“). Erfundene Werte.
   const { seite, ctx, gh, fehler } = await appStarten();
   const setze = (f) => gh.dateien.set('apps/test-mail.json', Buffer.from(JSON.stringify({ ...json(gh, 'apps/test-mail.json'), ...f }, null, 1) + '\n'));
   setze({ analyse: { formel: 2, score: 60, stelle: 70, arbeitgeber: 60, beschaeftigte: 2000, vermittler: false, bonus: 0, reiz: 0, gesamt: 0 },
@@ -1562,32 +1562,29 @@ test('gehalt-tarif', async () => {
   await seite.waitForSelector('#v-uebersicht', { timeout: 20000 });
   await seite.evaluate(() => window.bzPlattform.abgleichen());
   await zuAkte(seite, 'test-mail');
-  await seite.waitForSelector('#gehaltRechnung', { timeout: 10000 });
+  await seite.waitForSelector('#lohnText', { timeout: 10000 });
   // 60.008 € / 52 / (39,5 + 5 Std.) = 25,93 €
-  assert.match(await seite.textContent('#lohnText'), /25,93 € pro Stunde: 60\.008\s€ im Jahr \(nach Tarif: TV-AVH E 11, Stufe 2\), 39,5 Std\. plus 5 Std\. Fahrt/);
-  assert.match(await seite.textContent('#gehaltRechnung'), /4\.669,92 € im Monat × 12 \+ 85 % Jahressonderzahlung = 60\.008 € im Jahr\. Stufe 3 nach 2 Jahren/);
-  // Spanne ohne Tarif: die eingeschätzte Lage statt der Mitte
+  assert.match(await seite.textContent('#lohnText'), /25,93 € pro Stunde: 60\.008\s€ im Jahr \(nach Tarif\), 39,5 Std\. plus 5 Std\. Fahrt/);
+  const keineRechnung = async () => {
+    assert.equal(await seite.locator('#gehaltRechnung').count(), 0, 'keine Rechnungszeile');
+    assert.doesNotMatch(await seite.textContent('.fakten'), /Entgeltgruppe|Stufe \d|Jahressonderzahlung|bei 20 %|Spanne/, 'keine Rechnung in der Akte');
+  };
+  await keineRechnung();
+  // Spanne ohne Tarif: nur der Betrag „laut Anzeige“
   setze({ gehaltErwartet: { wert: 62000, quelle: 'anzeige', lage: 0.2, kurz: 'Spanne 60.000 € bis 70.000 €, bei 20 %',
     grund: 'Spanne laut Anzeige 60.000 € bis 70.000 €, eingeschätzt bei 20 % der Spanne: gefordert sind 5 Jahre, erfunden.' } });
   await seite.evaluate(() => window.bzPlattform.abgleichen());
   await seite.goto('http://app.test/Bewerbungszentrale/#akte/test-mail');
-  await seite.waitForFunction(() => /bei 20 %/.test(document.querySelector('#lohnText')?.textContent || ''), null, { timeout: 10000 });
-  assert.match(await seite.textContent('#lohnText'), /62\.000\s€ im Jahr \(laut Anzeige: Spanne 60\.000 € bis 70\.000 €, bei 20 %\)/);
-  assert.match(await seite.textContent('#gehaltRechnung'), /gefordert sind 5 Jahre/);
-  // Eine Schätzung ohne kurz bleibt wie bisher: Grund in Klammern, keine eigene Rechnungszeile
-  setze({ gehaltErwartet: { wert: 60000, quelle: 'schaetzung', grund: 'Mitte von 5 vergleichbaren Anzeigen' } });
-  await seite.evaluate(() => window.bzPlattform.abgleichen());
-  await seite.goto('http://app.test/Bewerbungszentrale/#akte/test-mail');
-  await seite.waitForFunction(() => /geschätzt: Mitte von 5/.test(document.querySelector('#lohnText')?.textContent || ''), null, { timeout: 10000 });
-  assert.equal(await seite.locator('#gehaltRechnung').count(), 0);
+  await seite.waitForFunction(() => /62\.000/.test(document.querySelector('#lohnText')?.textContent || ''), null, { timeout: 10000 });
+  assert.match(await seite.textContent('#lohnText'), /62\.000\s€ im Jahr \(laut Anzeige\)/);
+  await keineRechnung();
   // Ohne Netz dieselbe Anzeige aus dem Vorrat
-  setze({ gehaltErwartet: { wert: 60008, quelle: 'tarif', kurz: 'TV-AVH E 11, Stufe 2', grund: 'TV-AVH Entgeltgruppe 11, Stufe 2: erfunden.' } });
-  await seite.evaluate(() => window.bzPlattform.abgleichen());
   await ctx.route('**/*', (r) => (new URL(r.request().url()).hostname === 'app.test' ? r.fallback() : r.abort('internetdisconnected')));
   await seite.reload();
   await seite.goto('http://app.test/Bewerbungszentrale/#akte/test-mail');
-  await seite.waitForSelector('#gehaltRechnung', { timeout: 10000 });
-  assert.match(await seite.textContent('#lohnText'), /nach Tarif: TV-AVH E 11, Stufe 2/, 'ohne Netz dieselbe Rechnung');
+  await seite.waitForSelector('#lohnText', { timeout: 10000 });
+  assert.match(await seite.textContent('#lohnText'), /62\.000\s€ im Jahr \(laut Anzeige\)/, 'ohne Netz derselbe Satz');
+  await keineRechnung();
   assert.deepEqual(fehler.filter((f) => !/Failed to fetch|NetworkError|internetdisconnected|ERR_INTERNET/i.test(f)), []);
 });
 
