@@ -31,7 +31,7 @@
  * und schreiben darf, nur im localStorage dieses Handys. Darf ein Token nur
  * lesen (z. B. für Familie zum Gegenlesen), läuft die App im Lesemodus:
  * alles ansehen und als PDF laden, aber nichts wird gespeichert. Kommt per Link
- * …/#zugang=<Token>&ki=<Schlüssel> oder über das Einrichten-Fenster.
+ * …/#zugang=<Token>&ki=<Schlüssel> (dazu google=<Client-ID> und ff=1 für „Anzeigen in Firefox“) oder über das Einrichten-Fenster.
  * Tokens und Schlüssel stehen nie im Code, im Repo oder in Logs.
  */
 (() => {
@@ -66,8 +66,14 @@
     if (TOKEN_MUSTER.test(t)) schreib(ZUGANG, { token: t, stand: new Date().toISOString() });
     if (KI_MUSTER.test(k)) schreib(KI, { schluessel: k, stand: new Date().toISOString() });
     if (googleId(wert('google'))) schreib(GOOGLE, { clientId: googleId(wert('google')), stand: new Date().toISOString() });
+    if (wert('ff') === '1') firefoxTabMerken();
     try { history.replaceState(null, '', location.pathname + location.search); } catch { /* egal */ }
   }
+  /* Geräte-Einstellung „Anzeigen in Firefox“ (index.html, FF_TAB): reist im Sicherungs-Link mit, damit sie nach einem Datenverlust
+     zusammen mit den Schlüsseln zurückkommt (Tobi, 28.11.2026). */
+  const FF_TAB = 'bz-firefox-tab';
+  function firefoxTabMerken() { try { localStorage.setItem(FF_TAB, '1'); } catch { /* egal */ } }
+  const firefoxTabAn = () => { try { return localStorage.getItem(FF_TAB) === '1'; } catch { return false; } };
   linkAusAdresse();
   const eigenerToken = () => { const z = lies(ZUGANG); return z && TOKEN_MUSTER.test(z.token || '') ? z.token : ''; };
   const boxToken = () => { const z = lies(BOX_ZUGANG); return z && TOKEN_MUSTER.test(z.token || '') ? z.token : ''; };
@@ -83,7 +89,7 @@
   function uebergabeLink() {
     const t = eigenerToken() || boxToken(); if (!t) return '';
     const k = kiSchluessel(), g = (lies(GOOGLE) || {}).clientId || '';
-    const teile = [`zugang=${encodeURIComponent(t)}`, k ? `ki=${encodeURIComponent(k)}` : '', GOOGLE_MUSTER.test(g) ? `google=${encodeURIComponent(g)}` : ''].filter(Boolean);
+    const teile = [`zugang=${encodeURIComponent(t)}`, k ? `ki=${encodeURIComponent(k)}` : '', GOOGLE_MUSTER.test(g) ? `google=${encodeURIComponent(g)}` : '', firefoxTabAn() ? 'ff=1' : ''].filter(Boolean);
     return `${location.origin}${location.pathname}#${teile.join('&')}`;
   }
   const anbieterVon = (s) => (s.startsWith('sk-ant-') ? 'anthropic' : s ? 'gemini' : '');
@@ -168,6 +174,7 @@
       const roh = tIn.value.trim(), aus = (n) => { const m = new RegExp(`[#&]${n}=([^&\\s]+)`).exec(roh); try { return m ? decodeURIComponent(m[1]).trim() : ''; } catch { return ''; } };
       const t = aus('zugang') || roh, k = kIn.value.trim() || (KI_MUSTER.test(aus('ki')) ? aus('ki') : ''); // ganzer Übergabe-Link eingefügt: alles daraus übernehmen
       if (googleId(aus('google'))) schreib(GOOGLE, { clientId: googleId(aus('google')), stand: new Date().toISOString() });
+      if (aus('ff') === '1') firefoxTabMerken();
       if (k && !KI_MUSTER.test(k)) { f.textContent = 'Der KI-Schlüssel sieht nicht richtig aus.'; return; }
       if (!TOKEN_MUSTER.test(t)) { f.textContent = 'Der GitHub-Schlüssel sieht nicht richtig aus.'; return; }
       f.textContent = 'Prüfe …';

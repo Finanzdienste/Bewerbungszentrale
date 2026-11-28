@@ -122,7 +122,8 @@ Startbildschirm-Symbol gelöscht hatte): Profil → „Zugang sichern“ → „
 Übergabe-Link (`#zugang=…&ki=…&google=…`, nur im Anker, geht an keinen Server) in die
 Zwischenablage, auch ohne Netz. Tobi speichert ihn im Google-Passwortmanager als Notiz. Fragt die
 App wieder nach dem Schlüssel, kommt der ganze Link ins Schlüsselfeld, und GitHub-Schlüssel,
-KI-Schlüssel und Google-Client-ID sind auf einmal zurück. Dazu bittet die App den Browser, ihre
+KI-Schlüssel und Google-Client-ID sind auf einmal zurück. Seit 28.11.2026 reist auch die
+Geräte-Einstellung „Anzeigen in Firefox“ mit (`&ff=1`, wenn sie beim Kopieren eingeschaltet ist). Dazu bittet die App den Browser, ihre
 Daten dauerhaft aufzuheben (`navigator.storage.persist()`): beim ersten Start je Gerät, nach
 „Verbinden“ und beim Kopieren. Gegen Löschen von Hand oder „Browserdaten beim Beenden löschen“
 hilft das nicht, gegen Aufräumen bei Platzmangel schon. Geprüft von `node tests/lauf.mjs zugang-sichern`.

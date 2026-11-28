@@ -62,11 +62,13 @@ test('zugang-sichern', async () => {
   await seite.waitForFunction(() => /dauerhaft auf/.test(document.querySelector('#zugangDauer')?.textContent || ''), null, { timeout: 5000 });
   const ohneNetz = (r) => (new URL(r.request().url()).hostname === 'app.test' ? r.fallback() : r.abort('internetdisconnected'));
   await ctx.route('**/*', ohneNetz); // Kopieren geht ohne Netz
+  await seite.evaluate(() => localStorage.setItem('bz-firefox-tab', '1')); // Geräte-Einstellung „Anzeigen in Firefox“ reist im Link mit (Tobi, 28.11.2026)
   await seite.click('#zugangPanel [data-act="zugang-sichern"]');
   await seite.waitForFunction(() => /Kopiert/.test(document.querySelector('#zugangSt')?.textContent || ''), null, { timeout: 5000 });
   const link = await seite.evaluate(() => navigator.clipboard.readText());
   assert.match(link, /^http:\/\/app\.test\/Bewerbungszentrale\/#zugang=/);
   assert.ok(link.includes(encodeURIComponent(gh.token)) && /google=/.test(link), 'Schlüssel und Google-Client-ID stecken im Link');
+  assert.match(link, /[&#]ff=1(?:&|$)/, 'die Firefox-Einstellung steckt im Link');
   await ctx.unroute('**/*', ohneNetz);
   // Browser hat die Daten gelöscht: der eingefügte Link stellt alles wieder her
   await seite.evaluate(() => localStorage.clear());
@@ -80,6 +82,7 @@ test('zugang-sichern', async () => {
   const z = await seite.evaluate(() => [JSON.parse(localStorage.getItem('bewerbungszentrale.zugang.v1') || '{}').token, Object.keys(localStorage).some((k) => /google/i.test(k) && /apps\.googleusercontent\.com/.test(localStorage.getItem(k)))]);
   assert.equal(z[0], gh.token, 'Schlüssel wieder da');
   assert.ok(z[1], 'Google-Client-ID wieder da');
+  assert.equal(await seite.evaluate(() => localStorage.getItem('bz-firefox-tab')), '1', '„Anzeigen in Firefox“ ist wieder eingeschaltet');
   assert.deepEqual(fehler.filter((f) => !/Failed to fetch|NetworkError|internetdisconnected|ERR_INTERNET/i.test(f)), []);
 });
 
