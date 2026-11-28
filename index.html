@@ -748,8 +748,10 @@ function mitIntent(ua) { return /Android/i.test(ua) && !/Firefox\//i.test(ua); }
 function widgetLink(url) { return /^https?:\/\//i.test(url || '') ? `bildschirmzeit://firefox?url=${encodeURIComponent(url)}` : url; }
 const FF_TAB = 'bz-firefox-tab';
 const firefoxTabAn = () => { try { return localStorage.getItem(FF_TAB) === '1'; } catch { return false; } };
-/** Läuft die App als installierte App in Firefox auf Android? (Im Browser-Tab dort braucht es den Umweg nicht.) */
-const firefoxApp = () => { const ua = navigator.userAgent; try { return /Android/i.test(ua) && /Firefox\//i.test(ua) && !matchMedia('(display-mode: browser)').matches; } catch { return false; } };
+/** Läuft die App in Firefox auf Android? Früher zählte nur die installierte App (display-mode). Die Erkennung war aber nicht verlässlich:
+    Der Abschnitt im Profil verschwand zeitweise, und Anzeigen gingen trotz Einstellung im kleinen Fenster auf (Tobi, 28.11.2026:
+    „Jetzt ist der in Firefox ansehen Button in Profil … wieder weg“). Der Umweg über die Widget-App klappt auch aus einem Browser-Tab. */
+const firefoxApp = () => { const ua = navigator.userAgent; return /Android/i.test(ua) && /Firefox\//i.test(ua); };
 /** Gibt die Adresse an die Widget-App. Tut sich danach nichts (die Widget-App fehlt oder kann es noch nicht, oder Firefox nimmt den Link
     gerade nicht an), bleibt der bisherige Weg einen Tipp entfernt. Fragt Firefox nach oder wechselt die App, kommt der Hinweis nicht. */
 function anWidget(url) {

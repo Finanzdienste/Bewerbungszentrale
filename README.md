@@ -231,7 +231,7 @@ die öffnet ihn in Firefox.
   Intent-Filter braucht `VIEW`, `DEFAULT` und `BROWSABLE` (Firefox hängt
   `BROWSABLE` an jeden Link, den es an eine App gibt).
 - In der App: `widgetLink`, `anWidget`, `firefoxApp` in `index.html`, für alle
-  Links mit `data-ff`. Nur in der installierten App in Firefox auf Android, und
+  Links mit `data-ff`. In Firefox auf Android (seit v101 unabhängig davon, ob Firefox die App als installiert meldet; die Erkennung war nicht verlässlich), und
   nur eingeschaltet: Profil → „Anzeigen in Firefox“ (je Gerät,
   `localStorage` `bz-firefox-tab`, von Haus aus aus). Tut sich 1,5 Sekunden
   nach dem Tipp nichts (kein Wechsel, keine Nachfrage), bietet ein Hinweis

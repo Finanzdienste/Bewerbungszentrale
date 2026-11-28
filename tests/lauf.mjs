@@ -828,12 +828,15 @@ test('firefox', async () => {
   await warte(2200);
   assert.equal(await seite.locator('#toasts .toast').count(), 0, 'kein Hinweis, wenn Firefox übernimmt');
   assert.equal(await seite.evaluate(() => window.__ziel.length), 2);
-  // Firefox im Browser-Tab: Dort geht der Link von selbst als Tab auf, also kein Umweg und kein Abschnitt im Profil
+  // Meldet Firefox die App als Browser-Tab (die Erkennung war nicht verlässlich, Tobi 28.11.2026: der Abschnitt war „wieder weg“):
+  // Schalter und Umweg bleiben, denn die Widget-App öffnet den Link von überall als richtigen Tab
   await seite.evaluate(() => { window.__modus = 'browser'; });
-  assert.equal(await auf(), true, 'im Browser-Tab normal');
-  assert.equal(await seite.evaluate(() => window.__ziel.length), 2);
+  assert.equal(await auf(), false, 'auch dann über die Widget-App');
+  assert.equal(await seite.evaluate(() => window.__ziel.length), 3);
+  await seite.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await warte(2200);
   await profil();
-  assert.equal(await seite.locator('#firefoxTabPanel').count(), 0);
+  assert.equal(await seite.locator('#firefoxTabPanel').count(), 1, 'der Abschnitt im Profil bleibt sichtbar');
   // wieder aus: wie vorher im kleinen Fenster
   await seite.evaluate(() => { window.__modus = 'standalone'; });
   await seite.goto('http://app.test/Bewerbungszentrale/#uebersicht'); await profil();
@@ -844,7 +847,7 @@ test('firefox', async () => {
   await zuAkte(seite, 'test-portal');
   await seite.waitForSelector('#anzeigeOben a[data-ff]', { timeout: 10000 });
   assert.equal(await auf(), true, 'ausgeschaltet: wieder ein neues Fenster');
-  assert.equal(await seite.evaluate(() => window.__ziel.length), 2);
+  assert.equal(await seite.evaluate(() => window.__ziel.length), 3);
   assert.deepEqual(sprung, []);
   assert.deepEqual(fehler.filter((f) => !/internetdisconnected|Failed to fetch|NetworkError/i.test(f)), []);
 });
